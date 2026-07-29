@@ -1,0 +1,583 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Conventions
+//
+// Soft deletes  — `deleted_at` marks a row as removed rather than destroying
+//                 it. Repositories filter on `deleted_at: null`, so the rest of
+//                 the codebase is unaware. Audit history and foreign keys stay
+//                 intact, which a hard DELETE would sever.
+//
+// Audit fields  — `created_by` / `updated_by` record which user made a change.
+//                 Deliberately plain Int rather than a relation: a foreign key
+//                 to User would block deleting any user who had ever touched a
+//                 record, and the AuditLog is the durable history anyway.
+//
+// Indexes       — every column used in a WHERE, ORDER BY, or JOIN is indexed.
+//                 MySQL creates indexes for foreign keys automatically; the
+//                 explicit ones below cover filtering and sorting paths that
+//                 would otherwise scan the table.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Role {
+  id              Int              @id @default(autoincrement())
+  name            String           @unique
+  slug            String           @unique
+  description     String?
+  is_system       Boolean          @default(false)
+
+  created_at      DateTime         @default(now())
+  updated_at      DateTime         @updatedAt
+  deleted_at      DateTime?
+  created_by      Int?
+  updated_by      Int?
+
+  users           User[]
+  rolePermissions RolePermission[]
+  workflowSteps   WorkflowStep[]   @relation("StepAssigneeRole")
+
+  @@index([deleted_at])
+  @@index([is_system])
+}
+
+model User {
+  id                  Int                  @id @default(autoincrement())
+  name                String
+  email               String               @unique
+  phone               String?              @unique
+  password            String
+  role                Role                 @relation(fields: [role_id], references: [id])
+  role_id             Int
+  status              UserStatus           @default(ACTIVE)
+  is_verified         Boolean              @default(false)
+
+  // Organisation placement. `department` is a real relation so a user's
+  // department name can be shown without a manual lookup; `designation` is
+  // free text (e.g. "Senior Engineer"). Both optional.
+  department          Department?          @relation("DepartmentMembers", fields: [department_id], references: [id])
+  department_id       Int?
+  designation         String?
+
+  created_at          DateTime             @default(now())
+  updated_at          DateTime             @updatedAt
+  deleted_at          DateTime?
+  created_by          Int?
+  updated_by          Int?
+
+  passwordResetTokens PasswordResetToken[]
+  // Departments this user is the head of, and workflow steps assigned to them.
+  headedDepartments   Department[]         @relation("DepartmentHead")
+  workflowSteps       WorkflowStep[]       @relation("StepAssigneeUser")
+
+  // `email` and `phone` remain globally unique, including across soft-deleted
+  // rows. That is intentional: reusing a departed user's address would make
+  // audit history ambiguous about which person an entry refers to.
+  // No explicit index on `role_id`: MySQL creates one automatically for the
+  // foreign key, and declaring it again collides with that generated index.
+  @@index([status])
+  @@index([deleted_at])
+  @@index([created_at])
+  // Supports the common "active users, newest first" listing in one index.
+  @@index([status, deleted_at, created_at])
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+/// Organisational department. Users optionally belong to one.
+model Department {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  description String?    @db.Text
+
+  // The functional lead of the department. Used by workflows that route to
+  // "the head of a department" (e.g. the originating department's lead).
+  head        User?     @relation("DepartmentHead", fields: [head_user_id], references: [id])
+  head_user_id Int?
+
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+  deleted_at  DateTime?
+  created_by  Int?
+  updated_by  Int?
+
+  users       User[]         @relation("DepartmentMembers")
+  workflowSteps WorkflowStep[] @relation("StepAssigneeDepartment")
+  originatingTickets ServiceTicket[] @relation("OriginatingTickets")
+
+  @@index([deleted_at])
+  @@index([created_at])
+}
+
+/// A workflow definition — an ordered set of stages a record moves through.
+/// Module-scoped (e.g. "service"); one workflow can be marked active per module.
+model Workflow {
+  id          Int            @id @default(autoincrement())
+  name        String
+  module      String         @default("service")
+  description String?        @db.Text
+  is_active   Boolean        @default(false)
+
+  steps       WorkflowStep[]
+
+  created_at  DateTime       @default(now())
+  updated_at  DateTime       @updatedAt
+  deleted_at  DateTime?
+  created_by  Int?
+  updated_by  Int?
+
+  @@index([module])
+  @@index([deleted_at])
+}
+
+/// One stage of a workflow. The current assignee is resolved from
+/// `assignee_type`: USER / ROLE / DEPARTMENT point at a fixed target;
+/// DEPARTMENT_HEAD routes to a department's head; MANUAL is chosen by the
+/// previous stage's owner at runtime (so it carries no fixed target).
+model WorkflowStep {
+  id            Int                  @id @default(autoincrement())
+  workflow      Workflow             @relation(fields: [workflow_id], references: [id], onDelete: Cascade)
+  workflow_id   Int
+  name          String
+  step_order    Int
+  assignee_type WorkflowAssigneeType
+
+  assignee_user          User?       @relation("StepAssigneeUser", fields: [assignee_user_id], references: [id])
+  assignee_user_id       Int?
+  assignee_role          Role?       @relation("StepAssigneeRole", fields: [assignee_role_id], references: [id])
+  assignee_role_id       Int?
+  assignee_department    Department? @relation("StepAssigneeDepartment", fields: [assignee_department_id], references: [id])
+  assignee_department_id Int?
+
+  created_at    DateTime             @default(now())
+
+  @@index([workflow_id])
+}
+
+enum WorkflowAssigneeType {
+  USER
+  ROLE
+  DEPARTMENT
+  DEPARTMENT_HEAD
+  CREATOR
+  MANUAL
+}
+
+model Module {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  slug        String       @unique
+  description String?
+  created_at  DateTime     @default(now())
+  updated_at  DateTime     @updatedAt
+  permissions Permission[]
+}
+
+model Permission {
+  id              Int              @id @default(autoincrement())
+  module          Module           @relation(fields: [module_id], references: [id])
+  module_id       Int
+  action          PermissionAction
+  code            String           @unique
+  created_at      DateTime         @default(now())
+  rolePermissions RolePermission[]
+
+  @@unique([module_id, action])
+}
+
+enum PermissionAction {
+  CREATE
+  VIEW
+  EDIT
+  DELETE
+  APPROVE
+  FINANCE
+}
+
+model RolePermission {
+  id            Int        @id @default(autoincrement())
+  role          Role       @relation(fields: [role_id], references: [id])
+  role_id       Int
+  permission    Permission @relation(fields: [permission_id], references: [id])
+  permission_id Int
+  allowed       Boolean    @default(false)
+
+  @@unique([role_id, permission_id])
+  // Authorisation reads filter on `allowed` within a role.
+  @@index([role_id, allowed])
+}
+
+model CompanySettings {
+  id                   Int      @id @default(autoincrement())
+  company_name         String   @default("Effee Portal")
+  company_logo         String?
+  company_address      String?  @db.Text
+  company_phone        String?
+  company_email        String?
+  company_website      String?
+  company_gstin        String?
+
+  // Stored encrypted (AES-256-GCM) — see src/lib/crypto.js. Sized generously
+  // because ciphertext with its IV and auth tag is far longer than the secret.
+  smtp_host            String?
+  smtp_port            Int      @default(587)
+  smtp_user            String?
+  smtp_pass            String?  @db.Text
+  smtp_from_name       String?
+  smtp_from_email      String?
+  email_notifications  Boolean  @default(false)
+
+  login_max_attempts   Int      @default(5)
+  login_window_minutes Int      @default(15)
+  max_upload_mb        Int      @default(5)
+
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+  updated_by           Int?
+}
+
+model PasswordResetToken {
+  id         Int      @id @default(autoincrement())
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id    Int
+  token      String   @unique
+  expires_at DateTime
+  used       Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  // Supports both the "invalidate this user's live tokens" write and the
+  // periodic cleanup of expired rows.
+  @@index([user_id, used])
+  @@index([expires_at])
+}
+
+/// Append-only record of security- and data-significant actions.
+///
+/// Separate from the application log because it answers a different question:
+/// logs are for diagnosing behaviour and get rotated away, whereas this is
+/// evidence of who changed what and must survive. Nothing in the application
+/// updates or deletes rows here.
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+
+  /// Actor, denormalised. Kept as a plain Int with the email copied alongside
+  /// so an entry stays readable after the user record is gone — a foreign key
+  /// would either block that deletion or null the reference away.
+  actor_id    Int?
+  actor_email String?
+
+  /// Verb: CREATE, UPDATE, DELETE, LOGIN, LOGIN_FAILED, PASSWORD_RESET, ...
+  action      String
+
+  /// Target type and identifier, e.g. "User" / "42".
+  entity      String
+  entity_id   String?
+
+  /// JSON payload describing the change. Stored as text rather than a JSON
+  /// column because the deployment target is MariaDB, where Prisma's Json
+  /// support is less reliable than on MySQL 8.
+  changes     String?  @db.Text
+
+  ip          String?
+  user_agent  String?  @db.Text
+
+  /// Correlates an entry with the request that produced it, and therefore with
+  /// the application log lines carrying the same X-Request-Id.
+  request_id  String?
+
+  created_at  DateTime @default(now())
+
+  @@index([entity, entity_id])
+  @@index([actor_id])
+  @@index([action])
+  @@index([created_at])
+}
+
+/// A service-desk ticket. First entity of the Service module.
+///
+/// `ticket_id` is the human-facing reference (e.g. SRV-000042); the numeric
+/// `id` remains the primary key. Follows the project conventions: soft delete
+/// via `deleted_at`, audit columns, and an index on every filter/sort path.
+model ServiceTicket {
+  id                Int           @id @default(autoincrement())
+
+  /// Human-readable reference, generated on creation. Unique and stable.
+  ticket_id         String        @unique
+
+  ticket_type       TicketType
+  company_name      String
+  company_location  String?
+
+  /// Who reported the complaint, and how to reach them — captured by the
+  /// salesperson raising the ticket.
+  reported_by       String
+  reported_by_phone String?
+  reported_by_email String?
+
+  /// When the complaint was raised. Date and time are separate fields to match
+  /// the intake form; time is a plain "HH:MM" (24-hour) string.
+  complaint_date    DateTime?
+  complaint_time    String?
+
+  machine_project   String?
+  machine_serial_no String?
+
+  issue_title       String
+  issue_description  String        @db.Text
+  issue_severity    IssueSeverity
+
+  /// Internal classification — filled by the Project Manager at triage. Stored
+  /// as free text so the option lists can change without a migration; the UI
+  /// presents them as dropdowns.
+  technical_category String?
+
+  /// The department the complaint originates from. Drives routing to that
+  /// department's Head in later flow stages.
+  originating_department    Department? @relation("OriginatingTickets", fields: [originating_department_id], references: [id])
+  originating_department_id Int?
+
+  /// Impact flags — yes/no checkboxes, each with optional free-text details
+  /// captured only when the box is ticked.
+  production_impact         Boolean @default(false)
+  production_impact_details String? @db.Text
+  customer_impact           Boolean @default(false)
+  customer_impact_details   String? @db.Text
+  safety_impact             Boolean @default(false)
+  safety_impact_details     String? @db.Text
+
+  /// Resolution — how the issue is handled, and site findings when visited.
+  support_type      SupportType?
+  site_visit_notes  String?       @db.Text
+
+  /// SLA timeline, set as the ticket progresses.
+  acknowledged_at    DateTime?
+  first_response_at  DateTime?
+  machine_restore_at DateTime?
+
+  /// Customer confirmation of resolution. Null = pending, true = confirmed,
+  /// false = rejected (moves to observation / reopen).
+  customer_confirmed Boolean?
+  observation_until  DateTime?
+  reopened_count     Int           @default(0)
+
+  /// Workflow assignment. Set when the ticket enters a workflow on creation and
+  /// updated as it advances through stages. The assignee is stored as plain ids
+  /// (a user, a department, or a role) plus a denormalised `assigned_to_name`
+  /// label for display without a join — matching the audit-field convention.
+  workflow_id            Int?
+  current_step_id        Int?
+  assigned_user_id       Int?
+  assigned_department_id Int?
+  assigned_role_id       Int?
+  assigned_to_name       String?
+
+  /// Who put the ticket with its current assignee. On a decline this is who the
+  /// ticket bounces back to (the PM who routed it), so the decision can be
+  /// re-made. Null when the workflow assigned the stage automatically (create).
+  assigned_by_id         Int?
+  assigned_by_name       String?
+
+  /// Why the ticket came back — a department head's decline, or a customer
+  /// reopen. The plan (what was intended) and the report (what was done) now live
+  /// per department task, not on the ticket.
+  decline_reason         String? @db.Text
+
+  /// Everyone who has been on the ticket as it moved through the flow. They
+  /// retain VIEW access for the ticket's whole life (so the PM keeps tracking
+  /// it after routing it onward), while only the current assignee may act.
+  participants      TicketParticipant[]
+
+  /// Resolution plans authored on this ticket — kept for cascade delete and
+  /// scoping. Each plan is now attached to a specific department task (the ticket
+  /// link is retained so deleting a ticket removes its plans).
+  plans             ResolutionPlan[]
+
+  /// Per-department work items. A ticket can involve several departments; each
+  /// gets its own task (issue note + resolution), worked in parallel. The ticket
+  /// reaches customer confirmation once every task is RESOLVED.
+  department_tasks  TicketDepartmentTask[]
+
+  status            TicketStatus  @default(OPEN)
+
+  created_at        DateTime      @default(now())
+  updated_at        DateTime      @updatedAt
+  deleted_at        DateTime?
+  created_by        Int?
+
+  /// Creator's name at the time of creation, denormalised so "who raised this"
+  /// stays readable without a join and survives the user being removed — the
+  /// same approach AuditLog takes with actor_email.
+  created_by_name   String?
+
+  updated_by        Int?
+
+  @@index([status])
+  @@index([issue_severity])
+  @@index([ticket_type])
+  @@index([company_name])
+  @@index([deleted_at])
+  @@index([created_at])
+  // Serves the common "open tickets, newest first" listing from one index.
+  @@index([status, deleted_at, created_at])
+  // Inbox queries: "tickets assigned to me / my department".
+  @@index([assigned_user_id])
+  @@index([assigned_department_id])
+}
+
+/// A person who has been involved in a ticket via the workflow — the PM who
+/// triaged it, the lead it was routed to, the owner who resolved it. Recorded
+/// so they keep visibility after the ticket moves past their stage. `user_name`
+/// is denormalised for display without a join, like the other name fields.
+model TicketParticipant {
+  id          Int           @id @default(autoincrement())
+  ticket      ServiceTicket @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+  ticket_id   Int
+  user_id     Int
+  user_name   String?
+  stage_label String?
+  created_at  DateTime      @default(now())
+
+  @@unique([ticket_id, user_id])
+  @@index([user_id])
+}
+
+/// A resolution plan authored for a ticket — a rich document (block-editor
+/// JSON) that a department head writes when they accept the ticket. Plans are
+/// versioned and immutable once finalised: reopening a ticket clones the FINAL
+/// plan into a new DRAFT rather than editing it, so past resolutions stay
+/// intact for comparison and analysis. `content_text` mirrors the document as
+/// plain text for search and a no-editor fallback.
+model ResolutionPlan {
+  id              Int           @id @default(autoincrement())
+  ticket          ServiceTicket @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+  ticket_id       Int
+
+  /// The department task this plan belongs to. Plans are now scoped per issue:
+  /// each department's lead authors (and versions) their own plan.
+  dept_task       TicketDepartmentTask? @relation(fields: [dept_task_id], references: [id], onDelete: Cascade)
+  dept_task_id    Int?
+
+  title           String?
+  content_json    Json?
+  content_text    String?       @db.Text
+  status          PlanStatus    @default(DRAFT)
+  version         Int           @default(1)
+
+  /// Which plan this was cloned from (set when a reopen forks a new version).
+  parent_plan_id  Int?
+
+  created_by      Int?
+  created_by_name String?
+  finalized_at    DateTime?
+
+  created_at      DateTime      @default(now())
+  updated_at      DateTime      @updatedAt
+  deleted_at      DateTime?
+
+  @@index([ticket_id])
+  @@index([dept_task_id])
+  @@index([status])
+}
+
+enum PlanStatus {
+  DRAFT
+  FINAL
+  SUPERSEDED
+}
+
+/// A per-department work item on a ticket. The PM adds one per involved
+/// department at triage (each with its own issue note); on dispatch it is
+/// assigned to that department's lead, who may hand it to a resolver. The
+/// resolver submits their work back to the lead for validation, and only the
+/// lead finalises (RESOLVED). Department is stored as a plain id + denormalised
+/// name (no FK), matching the audit-field convention.
+model TicketDepartmentTask {
+  id              Int            @id @default(autoincrement())
+  ticket          ServiceTicket  @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+  ticket_id       Int
+  department_id   Int
+  department_name String?
+
+  /// Classification of this department's part of the issue (free text, matching
+  /// the ticket's category presets).
+  technical_category String?
+
+  /// What this department must check / solve (set by the PM).
+  issue_note      String         @db.Text
+  status          DeptTaskStatus @default(OPEN)
+
+  /// The department lead who owns validation/finalisation of this task.
+  lead_user_id    Int?
+  lead_name       String?
+  /// Current holder — the lead, or a resolver the lead handed it to.
+  assigned_user_id Int?
+  assigned_to_name String?
+  /// The resolver the lead assigned (so a returned task goes back to them).
+  resolver_user_id Int?
+  resolver_name    String?
+  /// A resolver has submitted their work and it awaits the lead's validation.
+  awaiting_validation Boolean     @default(false)
+
+  /// What was done — the resolver's/lead's report for this issue. `_json` holds
+  /// the rich block-editor document; the text column is its plain-text mirror for
+  /// search / a no-editor display. `decline_reason` is why it was sent back.
+  resolution_note      String? @db.Text
+  resolution_note_json Json?
+  decline_reason       String? @db.Text
+
+  /// Versioned resolution plans for this issue (DRAFT / FINAL / SUPERSEDED),
+  /// authored by this task's lead. Removed with the task.
+  plans           ResolutionPlan[]
+
+  created_by      Int?
+  created_at      DateTime       @default(now())
+  updated_at      DateTime       @updatedAt
+  resolved_at     DateTime?
+  deleted_at      DateTime?
+
+  @@index([ticket_id])
+  @@index([assigned_user_id])
+  @@index([status])
+}
+
+enum DeptTaskStatus {
+  OPEN
+  RESOLVED
+  DECLINED
+}
+
+enum TicketType {
+  CALL
+  EMAIL
+}
+
+enum IssueSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  CONTACTED
+  RESOLVED
+  ON_OBSERVATION
+  CLOSED
+  REOPENED
+}
+
+enum SupportType {
+  REMOTE
+  SITE_VISIT
+}

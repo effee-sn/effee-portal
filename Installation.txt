@@ -1,0 +1,100 @@
+Effee Portal — Installation Guide
+Prerequisites
+Make sure the following are installed on the machine before starting:
+
+Software	Version	Download
+Node.js	v18 or higher	nodejs.org
+MySQL	v8.0 or higher	mysql.com
+Git	Any	git-scm.com
+Step 1 — Get the project
+
+# Clone or copy the project folder to your machine
+# If you have a zip, extract it. If git:
+git clone <repo-url> ams
+cd ams
+Step 2 — Create the MySQL database
+Log into MySQL and create an empty database:
+
+
+CREATE DATABASE ams CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+Just create the database — leave it empty. The installer fills the tables.
+
+Step 3 — Install backend dependencies
+
+cd backend
+npm install
+Step 4 — Install frontend dependencies
+
+cd ../frontend
+npm install
+Step 5 — Create the frontend environment file
+Inside the frontend folder, create a file named .env.local:
+
+
+NEXT_PUBLIC_API_URL=http://localhost:4000/api
+Change localhost:4000 to your server's IP/domain if deploying on a remote server.
+
+Step 6 — Start the backend
+
+cd ../backend
+npm run dev
+You should see:
+
+
+Server running on port 4000
+Step 7 — Start the frontend
+Open a second terminal:
+
+
+cd frontend
+npm run dev
+You should see:
+
+
+Local: http://localhost:3000
+Step 8 — Run the installation wizard
+Open your browser and go to:
+
+
+http://localhost:3000
+You will be automatically redirected to the install page. Follow the 5 steps:
+
+Welcome — confirms system requirements pass (Node version, write permissions)
+Database — enter your MySQL details and click Test Connection to verify
+Configuration — click Generate for the JWT secret, set expiry and port
+Super Admin — enter the admin account name, email and password you want to use
+Review & Install — confirm everything looks correct, click Run Installation
+The installer will:
+
+Write your .env configuration file
+Create all database tables (prisma db push)
+Seed default roles, permissions, departments, categories
+Create your super admin account
+Step 9 — Restart the backend
+After the installer finishes it will say "Restart the backend server". Do that now:
+
+
+# Stop the backend (Ctrl+C), then start it again
+npm run dev
+This is required so the backend loads the new .env with your database URL and JWT secret.
+
+Step 10 — Log in
+Go to:
+
+
+http://localhost:3000/login
+Use the email and password you set in Step 8.
+
+Ports (defaults)
+Service	Port
+Backend API	4000
+Frontend	3000
+MySQL	3306
+Troubleshooting
+"Cannot connect to database" — Check MySQL is running and the database name/credentials are correct. Make sure the database exists (Step 2).
+
+"Application not configured" — The backend is running but the install hasn't been completed yet. Go to http://localhost:3000 to run the wizard.
+
+Page keeps redirecting to /install after restart — The .installed lock file is missing. The install may not have completed. Re-run the wizard.
+
+Backend crashes after restart — Check the .env file inside the backend folder was written correctly. It should contain DATABASE_URL, JWT_SECRET and PORT.

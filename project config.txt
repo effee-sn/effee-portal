@@ -1,0 +1,52 @@
+Based on the project structure (Next.js frontend, Express + Prisma + MySQL backend), here's the full init process another person would follow:
+
+Prerequisites
+
+Node.js (v18+)
+MySQL server running
+
+1. Clone & install dependencies
+# Install backend deps
+cd backend
+npm install
+
+# Install frontend deps
+cd ../frontend
+npm install
+
+2. Configure environment variables
+Create backend/.env:
+
+DATABASE_URL="mysql://USER:PASSWORD@localhost:3306/ams_db"
+JWT_SECRET="your-secret-key"
+JWT_EXPIRES_IN="7d"
+PORT=4000
+
+Create frontend/.env.local:
+NEXT_PUBLIC_API_URL=http://localhost:4000/api
+
+3. Set up the database
+cd backend
+
+# Create tables from Prisma schema
+npx prisma db push
+
+# Seed initial data (roles, departments, designations, modules, permissions)
+npm run seed
+npm run seed runs seed.sql which inserts all roles, departments, designations, modules, permissions, and role-permission assignments in one shot.
+
+4. Run the project
+# Terminal 1 — backend
+cd backend
+npm run dev
+
+# Terminal 2 — frontend
+cd frontend
+npm run dev
+Frontend: http://localhost:3000
+Backend: http://localhost:4000
+
+The only manual step is creating the MySQL database before running npx prisma db push. They can do that with:
+
+CREATE DATABASE ams_db;
+That's the full flow. If you want, I can add a root-level README.md documenting this, or a docker-compose.yml to make the MySQL setup automatic too.

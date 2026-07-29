@@ -1,0 +1,47 @@
+# ── Dependencies ─────────────────────────────────────────────────────────────
+node_modules/
+
+# ── Secrets / environment ────────────────────────────────────────────────────
+# Real env files hold secrets (JWT secret, DB creds) — never commit them.
+# The *.example templates ARE committed so setup is documented.
+.env
+.env.local
+.env.development.local
+.env.production.local
+!.env.example
+!.env.local.example
+
+# ── Next.js (Frontend) ───────────────────────────────────────────────────────
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# ── Build output ─────────────────────────────────────────────────────────────
+dist/
+build/
+
+# ── Prisma ───────────────────────────────────────────────────────────────────
+# The generated client lives under node_modules (already ignored).
+# prisma/migrations IS committed — it is the source of truth for the schema.
+
+# ── Runtime uploads (user-generated content) ─────────────────────────────────
+Backend/uploads/*
+!Backend/uploads/.gitkeep
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── OS / editor cruft ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+
+# ── Claude Code local settings ───────────────────────────────────────────────
+.claude/settings.local.json
