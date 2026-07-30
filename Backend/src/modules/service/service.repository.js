@@ -15,6 +15,7 @@ function createServiceRepository(db) {
     id: true,
     ticket_id: true,
     ticket_type: true,
+    dc_number: true,
     company_name: true,
     company_location: true,
     reported_by: true,

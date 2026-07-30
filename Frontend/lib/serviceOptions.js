@@ -14,6 +14,7 @@ export const TECHNICAL_CATEGORIES = [
 export const SUPPORT_TYPES = [
   { value: 'REMOTE',     label: 'Remote (On-call)' },
   { value: 'SITE_VISIT', label: 'Site Visit' },
+  { value: 'ON_SITE',    label: 'On-site' },
 ];
 
 export const SEVERITY_STYLE = {

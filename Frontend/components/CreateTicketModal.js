@@ -21,6 +21,7 @@ export default function CreateTicketModal({ onClose, onCreated }) {
     const p = (n) => String(n).padStart(2, '0');
     return {
       ticket_type: 'CALL',
+      dc_number: '',
       complaint_date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`,
       complaint_time: `${p(d.getHours())}:${p(d.getMinutes())}`,
       issue_title: '',
@@ -95,6 +96,7 @@ export default function CreateTicketModal({ onClose, onCreated }) {
               <select name="ticket_type" value={form.ticket_type} onChange={change} className="ams-input">
                 <option value="CALL">Call</option>
                 <option value="EMAIL">Email</option>
+                <option value="DC">DC</option>
               </select>
             </div>
             <div>
@@ -107,6 +109,15 @@ export default function CreateTicketModal({ onClose, onCreated }) {
               </select>
             </div>
           </div>
+
+          {/* DC number — shown and required only for a DC ticket. */}
+          {form.ticket_type === 'DC' && (
+            <div>
+              <label className={label}>DC Number</label>
+              <input name="dc_number" value={form.dc_number} onChange={change} required
+                placeholder="Delivery challan number" className="ams-input" />
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -163,6 +174,7 @@ export default function CreateTicketModal({ onClose, onCreated }) {
                 <option value="">— Select —</option>
                 <option value="REMOTE">Remote (On-call)</option>
                 <option value="SITE_VISIT">Site Visit</option>
+                <option value="ON_SITE">On-site</option>
               </select>
             </div>
           </div>

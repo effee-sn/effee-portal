@@ -314,6 +314,8 @@ model ServiceTicket {
   ticket_id         String        @unique
 
   ticket_type       TicketType
+  /// Delivery-challan number — captured only when ticket_type is DC.
+  dc_number         String?
   company_name      String
   company_location  String?
 
@@ -558,6 +560,7 @@ enum DeptTaskStatus {
 enum TicketType {
   CALL
   EMAIL
+  DC
 }
 
 enum IssueSeverity {
@@ -580,4 +583,5 @@ enum TicketStatus {
 enum SupportType {
   REMOTE
   SITE_VISIT
+  ON_SITE
 }

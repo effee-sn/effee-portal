@@ -429,6 +429,7 @@ function createServiceService(repository) {
     async create(dto, actor) {
       const ticket = await repository.create({
         ticket_type:       dto.ticket_type,
+        dc_number:         dto.ticket_type === 'DC' ? (dto.dc_number ?? null) : null,
         company_name:      dto.company_name,
         company_location:  dto.company_location ?? null,
         reported_by:       dto.reported_by,
@@ -528,7 +529,7 @@ function createServiceService(repository) {
       /** @type {Record<string, unknown>} */
       const data = {};
       for (const field of [
-        'ticket_type', 'company_name', 'company_location', 'reported_by',
+        'ticket_type', 'dc_number', 'company_name', 'company_location', 'reported_by',
         'complaint_date', 'complaint_time', 'machine_project', 'machine_serial_no',
         'issue_title', 'issue_description', 'issue_severity',
         // Classification

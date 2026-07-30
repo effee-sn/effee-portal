@@ -548,6 +548,7 @@ export default function TicketDetailPage() {
       <Section title="Complaint">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <Field label="Type">{ticket.ticket_type}</Field>
+          {ticket.ticket_type === 'DC' && <Field label="DC Number">{ticket.dc_number}</Field>}
           <Field label="Company">{ticket.company_name}</Field>
           <Field label="Location">{ticket.company_location}</Field>
           <Field label="Reported By">{ticket.reported_by}</Field>
@@ -586,7 +587,7 @@ export default function TicketDetailPage() {
       <EditableSection
         title="Status & Findings"
         active={editSection === 'findings'}
-        canAct={canAct && ticket.support_type === 'SITE_VISIT'}
+        canAct={canAct && ['SITE_VISIT', 'ON_SITE'].includes(ticket.support_type)}
         hasData
         onEdit={() => openEdit('findings')} onCancel={cancelEdit} onSave={saveFindings}
         saving={saving} msg={msg} error={error}
