@@ -8,14 +8,14 @@ const { schemas } = require('../../core');
  * at the boundary so an invalid value can never reach the database.
  */
 
-const ticketType  = z.enum(['CALL', 'EMAIL', 'DC']);
+const ticketType  = z.enum(['CALL', 'EMAIL', 'OTHERS']);
 const severity    = z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']);
 const status      = z.enum(['OPEN', 'IN_PROGRESS', 'CONTACTED', 'RESOLVED', 'ON_OBSERVATION', 'CLOSED', 'REOPENED']);
 
 /** Optional support type; a blank value is omitted. */
 const supportType = z.preprocess(
   (v) => (v === '' || v === null ? undefined : v),
-  z.enum(['REMOTE', 'SITE_VISIT', 'ON_SITE']).optional()
+  z.enum(['REMOTE', 'SITE_VISIT', 'AT_EFFEE']).optional()
 );
 
 const shortText = (max) => z.string().trim().min(1).max(max);
@@ -73,7 +73,7 @@ const ticketIdParam = schemas.idParam;
  */
 const createTicketBody = z.object({
   ticket_type:       ticketType,
-  dc_number:         optionalText(60),
+  source_details:    optionalText(60),
   company_name:      shortText(160),
   company_location:  optionalText(200),
   reported_by:       shortText(160),
@@ -93,15 +93,15 @@ const createTicketBody = z.object({
   customer_impact_details:   optionalText(2000),
   safety_impact:             schemas.flexibleBoolean.optional().default(false),
   safety_impact_details:     optionalText(2000),
-}).refine((d) => d.ticket_type !== 'DC' || (d.dc_number && d.dc_number.trim().length > 0), {
-  message: 'DC number is required for a DC ticket',
-  path: ['dc_number'],
+}).refine((d) => d.ticket_type !== 'OTHERS' || (d.source_details && d.source_details.trim().length > 0), {
+  message: 'Source details are required for an "Others" source',
+  path: ['source_details'],
 });
 
 /** `PUT /service/tickets/:id` — partial update. */
 const updateTicketBody = z.object({
   ticket_type:       ticketType.optional(),
-  dc_number:         optionalText(60),
+  source_details:    optionalText(60),
   company_name:      shortText(160).optional(),
   company_location:  optionalText(200),
   reported_by:       shortText(160).optional(),

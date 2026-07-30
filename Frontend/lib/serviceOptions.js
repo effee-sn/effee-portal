@@ -14,7 +14,7 @@ export const TECHNICAL_CATEGORIES = [
 export const SUPPORT_TYPES = [
   { value: 'REMOTE',     label: 'Remote (On-call)' },
   { value: 'SITE_VISIT', label: 'Site Visit' },
-  { value: 'ON_SITE',    label: 'At Effee' },
+  { value: 'AT_EFFEE',   label: 'At Effee' },
 ];
 
 /**
@@ -25,7 +25,7 @@ export const SUPPORT_TYPES = [
 export const TICKET_TYPES = [
   { value: 'CALL',  label: 'Call' },
   { value: 'EMAIL', label: 'Email' },
-  { value: 'DC',    label: 'Others' },
+  { value: 'OTHERS', label: 'Others' },
 ];
 
 export const SEVERITY_STYLE = {

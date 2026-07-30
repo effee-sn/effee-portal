@@ -539,7 +539,7 @@ export default function TicketDetailPage() {
       <Section title="Complaint">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <Field label="Source Type">{TICKET_TYPES.find((o) => o.value === ticket.ticket_type)?.label || ticket.ticket_type}</Field>
-          {ticket.ticket_type === 'DC' && <Field label="Others source details">{ticket.dc_number}</Field>}
+          {ticket.ticket_type === 'OTHERS' && <Field label="Others source details">{ticket.source_details}</Field>}
           <Field label="Company">{ticket.company_name}</Field>
           <Field label="Location">{ticket.company_location}</Field>
           <Field label="Reported By">{ticket.reported_by}</Field>
@@ -578,7 +578,7 @@ export default function TicketDetailPage() {
       <EditableSection
         title="Status & Findings"
         active={editSection === 'findings'}
-        canAct={canAct && ['SITE_VISIT', 'ON_SITE'].includes(ticket.support_type)}
+        canAct={canAct && ['SITE_VISIT', 'AT_EFFEE'].includes(ticket.support_type)}
         hasData
         onEdit={() => openEdit('findings')} onCancel={cancelEdit} onSave={saveFindings}
         saving={saving} msg={msg} error={error}

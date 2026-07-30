@@ -21,7 +21,7 @@ export default function CreateTicketModal({ onClose, onCreated }) {
     const p = (n) => String(n).padStart(2, '0');
     return {
       ticket_type: 'CALL',
-      dc_number: '',
+      source_details: '',
       complaint_date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`,
       complaint_time: `${p(d.getHours())}:${p(d.getMinutes())}`,
       issue_title: '',
@@ -96,7 +96,7 @@ export default function CreateTicketModal({ onClose, onCreated }) {
               <select name="ticket_type" value={form.ticket_type} onChange={change} className="ams-input">
                 <option value="CALL">Call</option>
                 <option value="EMAIL">Email</option>
-                <option value="DC">Others</option>
+                <option value="OTHERS">Others</option>
               </select>
             </div>
             <div>
@@ -111,10 +111,10 @@ export default function CreateTicketModal({ onClose, onCreated }) {
           </div>
 
           {/* Others source details — shown and required only for an "Others" source. */}
-          {form.ticket_type === 'DC' && (
+          {form.ticket_type === 'OTHERS' && (
             <div>
               <label className={label}>Others source details</label>
-              <input name="dc_number" value={form.dc_number} onChange={change} required
+              <input name="source_details" value={form.source_details} onChange={change} required
                 placeholder="Describe the source" className="ams-input" />
             </div>
           )}
@@ -174,7 +174,7 @@ export default function CreateTicketModal({ onClose, onCreated }) {
                 <option value="">— Select —</option>
                 <option value="REMOTE">Remote (On-call)</option>
                 <option value="SITE_VISIT">Site Visit</option>
-                <option value="ON_SITE">At Effee</option>
+                <option value="AT_EFFEE">At Effee</option>
               </select>
             </div>
           </div>
