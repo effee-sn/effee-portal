@@ -541,7 +541,6 @@ function createServiceService(repository) {
         // Findings (support_type is intake-only; the plan + report are per
         // department task, not on the ticket).
         'site_visit_notes',
-        'acknowledged_at', 'first_response_at', 'machine_restore_at',
         // NOTE: status, customer_confirmed and observation_until are NOT here —
         // they are driven by the workflow actions (advance/confirm/close/reopen),
         // never set by a manual update.

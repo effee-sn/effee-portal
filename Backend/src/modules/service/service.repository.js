@@ -39,12 +39,9 @@ function createServiceRepository(db) {
     customer_impact_details: true,
     safety_impact: true,
     safety_impact_details: true,
-    // Resolution + timeline
+    // Resolution
     support_type: true,
     site_visit_notes: true,
-    acknowledged_at: true,
-    first_response_at: true,
-    machine_restore_at: true,
     customer_confirmed: true,
     observation_until: true,
     reopened_count: true,

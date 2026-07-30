@@ -360,11 +360,6 @@ model ServiceTicket {
   support_type      SupportType?
   site_visit_notes  String?       @db.Text
 
-  /// SLA timeline, set as the ticket progresses.
-  acknowledged_at    DateTime?
-  first_response_at  DateTime?
-  machine_restore_at DateTime?
-
   /// Customer confirmation of resolution. Null = pending, true = confirmed,
   /// false = rejected (moves to observation / reopen).
   customer_confirmed Boolean?

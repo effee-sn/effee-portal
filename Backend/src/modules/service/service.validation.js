@@ -128,9 +128,6 @@ const updateTicketBody = z.object({
   // Findings (support_type is intake-only — set at creation; the plan + report
   // are authored per department task, not on the ticket)
   site_visit_notes:   optionalText(5000),
-  acknowledged_at:    optionalDate,
-  first_response_at:  optionalDate,
-  machine_restore_at: optionalDate,
 
   // status, customer_confirmed and observation_until are flow-driven only —
   // set by the workflow actions, never by a manual update.
