@@ -23,14 +23,17 @@ function createLookupRepository(db) {
      * Active users only — an inactive account should not be selectable as an
      * assignee anywhere in the UI.
      *
-     * @returns {Promise<Array<{ id: number, name: string, email: string }>>}
+     * `department_id` is included so assignee dropdowns can be scoped to a
+     * department (e.g. a lead assigns only within their own department).
+     *
+     * @returns {Promise<Array<{ id: number, name: string, email: string, department_id: number|null }>>}
      */
     findActiveUsers() {
       return db.user.findMany({
         // Exclude soft-deleted users so they never appear in assignee/head
         // dropdowns.
         where: { status: 'ACTIVE', deleted_at: null },
-        select: { id: true, name: true, email: true },
+        select: { id: true, name: true, email: true, department_id: true },
         orderBy: { name: 'asc' },
       });
     },

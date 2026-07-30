@@ -102,10 +102,14 @@ function TaskModal({ title, subtitle, fields, confirmLabel, tone, departments, u
                   {TECHNICAL_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               ) : f.type === 'user' ? (
-                <select value={vals[f.name] || ''} onChange={(e) => set(f.name, e.target.value)} className="ams-input" autoFocus>
-                  <option value="">— Choose who attends this —</option>
-                  {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                </select>
+                (users || []).length === 0 ? (
+                  <p className="text-sm text-amber-600">No users belong to this department yet — add members under Users, or resolve it yourself as the lead.</p>
+                ) : (
+                  <select value={vals[f.name] || ''} onChange={(e) => set(f.name, e.target.value)} className="ams-input" autoFocus>
+                    <option value="">— Choose who attends this —</option>
+                    {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
+                )
               ) : (
                 <textarea value={vals[f.name] || ''} onChange={(e) => set(f.name, e.target.value)} rows={3}
                   placeholder={f.placeholder} className="ams-input resize-none" autoFocus={f === fields[0]} />
@@ -329,8 +333,8 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
           onClose={() => setModal(null)} onSubmit={(v) => P(`/${modal.task.id}/redirect`, { department_id: v.department_id, issue_note: v.issue_note || undefined, technical_category: v.technical_category || undefined })} />
       )}
       {modal?.type === 'assign' && (
-        <TaskModal title="Assign to a person" subtitle="Hand this to someone in your department to work on."
-          users={users} confirmLabel="Assign"
+        <TaskModal title="Assign to a person" subtitle={`Hand this to someone in ${modal.task.department_name || 'this department'} to work on.`}
+          users={users.filter((u) => u.department_id === modal.task.department_id)} confirmLabel="Assign"
           fields={[{ name: 'assignee_user_id', label: 'Assign to', type: 'user', required: true }]}
           onClose={() => setModal(null)} onSubmit={(v) => P(`/${modal.task.id}/assign`, { assignee_user_id: v.assignee_user_id })} />
       )}

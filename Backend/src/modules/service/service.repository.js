@@ -138,7 +138,7 @@ function createServiceRepository(db) {
     findUserById(userId) {
       return db.user.findFirst({
         where: { id: userId, deleted_at: null, status: 'ACTIVE' },
-        select: { id: true, name: true },
+        select: { id: true, name: true, department_id: true },
       });
     },
 

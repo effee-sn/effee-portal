@@ -205,6 +205,15 @@ function createDeptTaskService(repository, tickets) {
       const target = await tickets.findUserById(assigneeUserId);
       if (!target) throw new ValidationError('Validation failed', [{ field: 'assignee_user_id', message: 'User does not exist' }]);
 
+      // A lead assigns only within their own department. Admins (SERVICE_EDIT /
+      // system) may cross departments if they ever need to.
+      if (task.department_id && target.department_id !== task.department_id && !hasPermission(user, 'SERVICE_EDIT')) {
+        throw new ValidationError('Validation failed', [{
+          field: 'assignee_user_id',
+          message: `${target.name} is not in ${task.department_name || 'this department'}`,
+        }]);
+      }
+
       await repository.update(taskId, {
         resolver_user_id: target.id, resolver_name: target.name,
         assigned_user_id: target.id, assigned_to_name: target.name, awaiting_validation: false,
