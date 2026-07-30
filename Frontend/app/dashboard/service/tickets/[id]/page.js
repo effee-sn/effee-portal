@@ -7,7 +7,7 @@ import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPut, apiPost } from '@/lib/api';
 import DepartmentTasks from '@/components/DepartmentTasks';
 import {
-  SUPPORT_TYPES,
+  SUPPORT_TYPES, TICKET_TYPES,
   SEVERITY_STYLE, STATUS_STYLE,
 } from '@/lib/serviceOptions';
 
@@ -547,8 +547,8 @@ export default function TicketDetailPage() {
       {/* Complaint (read-only) */}
       <Section title="Complaint">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <Field label="Type">{ticket.ticket_type}</Field>
-          {ticket.ticket_type === 'DC' && <Field label="DC Number">{ticket.dc_number}</Field>}
+          <Field label="Source Type">{TICKET_TYPES.find((o) => o.value === ticket.ticket_type)?.label || ticket.ticket_type}</Field>
+          {ticket.ticket_type === 'DC' && <Field label="Others source details">{ticket.dc_number}</Field>}
           <Field label="Company">{ticket.company_name}</Field>
           <Field label="Location">{ticket.company_location}</Field>
           <Field label="Reported By">{ticket.reported_by}</Field>

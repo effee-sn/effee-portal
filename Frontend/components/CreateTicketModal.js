@@ -92,11 +92,11 @@ export default function CreateTicketModal({ onClose, onCreated }) {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={label}>Ticket Type</label>
+              <label className={label}>Source Type</label>
               <select name="ticket_type" value={form.ticket_type} onChange={change} className="ams-input">
                 <option value="CALL">Call</option>
                 <option value="EMAIL">Email</option>
-                <option value="DC">DC</option>
+                <option value="DC">Others</option>
               </select>
             </div>
             <div>
@@ -110,12 +110,12 @@ export default function CreateTicketModal({ onClose, onCreated }) {
             </div>
           </div>
 
-          {/* DC number — shown and required only for a DC ticket. */}
+          {/* Others source details — shown and required only for an "Others" source. */}
           {form.ticket_type === 'DC' && (
             <div>
-              <label className={label}>DC Number</label>
+              <label className={label}>Others source details</label>
               <input name="dc_number" value={form.dc_number} onChange={change} required
-                placeholder="Delivery challan number" className="ams-input" />
+                placeholder="Describe the source" className="ams-input" />
             </div>
           )}
 
@@ -174,7 +174,7 @@ export default function CreateTicketModal({ onClose, onCreated }) {
                 <option value="">— Select —</option>
                 <option value="REMOTE">Remote (On-call)</option>
                 <option value="SITE_VISIT">Site Visit</option>
-                <option value="ON_SITE">On-site</option>
+                <option value="ON_SITE">At Effee</option>
               </select>
             </div>
           </div>

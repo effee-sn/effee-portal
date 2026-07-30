@@ -10,7 +10,7 @@ import { TableSkeleton } from '@/components/Skeleton';
 import CreateTicketModal from '@/components/CreateTicketModal';
 // Shared styles so every status (Reopened, On Observation, Contacted, …) renders
 // — the list must not fall behind the ticket's full status set.
-import { SEVERITY_STYLE, STATUS_STYLE } from '@/lib/serviceOptions';
+import { SEVERITY_STYLE, STATUS_STYLE, TICKET_TYPES } from '@/lib/serviceOptions';
 
 /** Formats an ISO timestamp as a short, locale-aware date. */
 const formatDate = (iso) => {
@@ -166,7 +166,7 @@ export default function ServiceTicketsPage() {
               <thead>
                 <tr className="border-b border-gray-200 text-left text-gray-500">
                   <th className="px-3 py-3 font-normal">Ticket ID</th>
-                  <th className="px-3 py-3 font-normal">Type</th>
+                  <th className="px-3 py-3 font-normal">Source Type</th>
                   <th className="px-3 py-3 font-normal">Company</th>
                   <th className="px-3 py-3 font-normal">Issue</th>
                   <th className="px-3 py-3 font-normal">Severity</th>
@@ -185,7 +185,7 @@ export default function ServiceTicketsPage() {
                     <tr key={t.id} onClick={() => nav(`/dashboard/service/tickets/${t.id}`)}
                       className="border-b border-gray-100 hover:bg-gray-50 group cursor-pointer">
                       <td className="px-3 py-3 font-medium text-gray-800">{t.ticket_id}</td>
-                      <td className="px-3 py-3 text-gray-600 capitalize">{t.ticket_type.toLowerCase()}</td>
+                      <td className="px-3 py-3 text-gray-600">{TICKET_TYPES.find((o) => o.value === t.ticket_type)?.label || t.ticket_type}</td>
                       <td className="px-3 py-3 text-gray-600">{t.company_name}</td>
                       <td className="px-3 py-3 text-gray-600 truncate max-w-[220px]">{t.issue_title}</td>
                       <td className="px-3 py-3">

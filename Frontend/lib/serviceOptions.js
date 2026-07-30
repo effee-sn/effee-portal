@@ -14,7 +14,18 @@ export const TECHNICAL_CATEGORIES = [
 export const SUPPORT_TYPES = [
   { value: 'REMOTE',     label: 'Remote (On-call)' },
   { value: 'SITE_VISIT', label: 'Site Visit' },
-  { value: 'ON_SITE',    label: 'On-site' },
+  { value: 'ON_SITE',    label: 'At Effee' },
+];
+
+/**
+ * Source (ticket) types — display labels for the stored `ticket_type` enum.
+ * The DB values stay CALL / EMAIL / DC; only the shown label differs (DC reads
+ * as "Others"). Kept as a map so the value never has to change to relabel it.
+ */
+export const TICKET_TYPES = [
+  { value: 'CALL',  label: 'Call' },
+  { value: 'EMAIL', label: 'Email' },
+  { value: 'DC',    label: 'Others' },
 ];
 
 export const SEVERITY_STYLE = {
