@@ -12,7 +12,6 @@ import {
 } from '@/lib/serviceOptions';
 
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
-const toDateInput = (iso) => (iso ? String(iso).slice(0, 10) : '');
 
 function Field({ label, children }) {
   return (
@@ -312,9 +311,6 @@ export default function TicketDetailPage() {
 
   const initWork = (t) => ({
     site_visit_notes: t.site_visit_notes || '',
-    acknowledged_at: toDateInput(t.acknowledged_at),
-    first_response_at: toDateInput(t.first_response_at),
-    machine_restore_at: toDateInput(t.machine_restore_at),
   });
 
   const applyTicket = (t) => { setTicket(t); setWork(initWork(t)); };
@@ -362,11 +358,6 @@ export default function TicketDetailPage() {
   };
 
   const saveFindings = () => persist({ site_visit_notes: work.site_visit_notes });
-  const saveTimeline = () => persist({
-    acknowledged_at: work.acknowledged_at,
-    first_response_at: work.first_response_at,
-    machine_restore_at: work.machine_restore_at,
-  });
 
   const doClose = async () => {
     if (!window.confirm('Close this ticket? Observation is complete.')) return;
@@ -610,35 +601,6 @@ export default function TicketDetailPage() {
           <label className={labelCls}>Site Visit Notes</label>
           <textarea name="site_visit_notes" value={work.site_visit_notes} onChange={changeWork} rows={3}
             placeholder="Findings recorded on site…" className={inputCls + ' resize-none'} />
-        </div>
-      </EditableSection>
-
-      {/* Timeline — display-first */}
-      <EditableSection
-        title="Timeline"
-        active={editSection === 'timeline'} canAct={canAct}
-        hasData={Boolean(ticket.acknowledged_at || ticket.first_response_at || ticket.machine_restore_at)}
-        onEdit={() => openEdit('timeline')} onCancel={cancelEdit} onSave={saveTimeline}
-        saving={saving} msg={msg} error={error}
-        read={
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            <Field label="Acknowledged">{fmtDate(ticket.acknowledged_at)}</Field>
-            <Field label="First Response">{fmtDate(ticket.first_response_at)}</Field>
-            <Field label="Machine Restore">{fmtDate(ticket.machine_restore_at)}</Field>
-          </div>
-        }
-      >
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {[
-            ['acknowledged_at', 'Acknowledged'],
-            ['first_response_at', 'First Response'],
-            ['machine_restore_at', 'Machine Restore'],
-          ].map(([name, lbl]) => (
-            <div key={name}>
-              <label className="block text-[11px] text-gray-400 mb-1">{lbl}</label>
-              <input type="date" name={name} value={work[name]} onChange={changeWork} className={inputCls} />
-            </div>
-          ))}
         </div>
       </EditableSection>
 
