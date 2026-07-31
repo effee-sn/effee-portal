@@ -200,6 +200,12 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
       : !hasReport(t)    ? 'Save a work report'
       : undefined;
 
+  // Group tasks by reopen round so each cycle reads as its own record. Headers
+  // only appear once the ticket has been reopened (more than one cycle present).
+  const cycles = [...new Set(tasks.map((t) => t.cycle ?? 0))].sort((a, b) => a - b);
+  const showRounds = cycles.length > 1;
+  const cycleLabel = (c) => (c === 0 ? 'Original' : `Reopen ${c}`);
+
   return (
     <div className="bg-white rounded-lg border border-gray-200">
       <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 flex-wrap gap-2">
@@ -225,7 +231,21 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
           <p className="text-sm text-gray-400">No departments added yet. Add a department and the issue for it, then dispatch.</p>
         )}
 
-        {tasks.map((t) => {
+        {cycles.map((cyc) => {
+          const items = tasks.filter((t) => (t.cycle ?? 0) === cyc);
+          const resolvedInCycle = items.filter((t) => t.status === 'RESOLVED').length;
+          return (
+            <div key={`cycle-${cyc}`} className="space-y-3">
+              {showRounds && (
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: cyc === 0 ? '#9CA3AF' : 'var(--ams-primary)' }}>
+                    {cyc === 0 ? '◦' : '↻'} {cycleLabel(cyc)}
+                  </span>
+                  <span className="text-[11px] text-gray-400">· {resolvedInCycle}/{items.length} resolved</span>
+                  <div className="flex-1 border-t border-gray-100" />
+                </div>
+              )}
+              {items.map((t) => {
           const s = STATUS[t.status] || {};
           return (
             <div key={t.id} className="border border-gray-200 rounded-md px-4 py-3">
@@ -316,6 +336,9 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
                   <TaskFlow task={t} />
                 </div>
               )}
+            </div>
+          );
+              })}
             </div>
           );
         })}

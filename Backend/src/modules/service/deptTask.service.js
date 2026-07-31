@@ -127,6 +127,8 @@ function createDeptTaskService(repository, tickets) {
         ticket_id: ticketId, department_id: dept.id, department_name: dept.name,
         technical_category: technical_category ?? null,
         issue_note, status: 'OPEN', created_by: user?.id ?? null,
+        // Which reopen round this belongs to (0 = original).
+        cycle: ticket.reopened_count ?? 0,
       };
       if (dispatched) {
         if (!dept.head_user_id) throw new BadRequestError(`${dept.name} has no head set — set one before dispatching to it`);

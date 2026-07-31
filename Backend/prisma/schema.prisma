@@ -506,6 +506,11 @@ model TicketDepartmentTask {
   issue_note      String         @db.Text
   status          DeptTaskStatus @default(OPEN)
 
+  /// Which reopen round this task belongs to: 0 = original, 1 = after the first
+  /// reopen, and so on (set from the ticket's reopened_count when created). Lets
+  /// the UI group each round's work as a separate, self-contained record.
+  cycle           Int            @default(0)
+
   /// The department lead who owns validation/finalisation of this task.
   lead_user_id    Int?
   lead_name       String?
