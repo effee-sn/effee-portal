@@ -36,7 +36,7 @@ function baseTemplate(companyName, content) {
   <div class="wrapper">
     <div class="header">
       <h1>${companyName}</h1>
-      <p>Expense Management System</p>
+      <p>Service Ticketing</p>
     </div>
     <div class="body">
       ${content}
