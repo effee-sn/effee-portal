@@ -202,6 +202,12 @@ function createDeptTaskService(repository, tickets) {
       assertHolds(user, task);
       if (task.status !== 'OPEN') throw new BadRequestError('This task is not open');
 
+      // The lead must finalise the resolution plan (the intended approach) before
+      // handing the work to a resolver.
+      if (!(Array.isArray(task.plans) && task.plans.length > 0)) {
+        throw new BadRequestError('Finalise this issue’s resolution plan before assigning it to someone');
+      }
+
       const target = await tickets.findUserById(assigneeUserId);
       if (!target) throw new ValidationError('Validation failed', [{ field: 'assignee_user_id', message: 'User does not exist' }]);
 

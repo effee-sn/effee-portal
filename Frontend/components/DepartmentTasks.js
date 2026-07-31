@@ -268,7 +268,7 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
                     </>
                   ) : (
                     <>
-                      <button onClick={() => setModal({ type: 'assign', task: t })} className="btn-secondary text-xs py-1.5">Assign to person</button>
+                      <button onClick={() => setModal({ type: 'assign', task: t })} disabled={!hasFinalPlan(t)} title={hasFinalPlan(t) ? undefined : 'Finalise the resolution plan first'} className="btn-secondary text-xs py-1.5 disabled:opacity-40 disabled:cursor-not-allowed">Assign to person</button>
                       <button onClick={() => setModal({ type: 'resolve', task: t })} disabled={!canResolve(t)} title={resolveBlocker(t) ? `${resolveBlocker(t)} first` : undefined} className="btn-primary text-xs py-1.5 disabled:opacity-40 disabled:cursor-not-allowed">Resolve</button>
                       <button onClick={() => setModal({ type: 'decline', task: t })} className="btn-danger text-xs py-1.5">Decline</button>
                     </>
@@ -284,9 +284,14 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
                 )}
               </div>
 
-              {/* Why the resolve button is disabled — plan and/or report missing. */}
+              {/* Why the assign/resolve buttons are disabled — plan not finalised
+                  blocks both; a missing report blocks only resolve. */}
               {t.status === 'OPEN' && amLead(t) && amHolder(t) && !canResolve(t) && (
-                <p className="text-[11px] text-amber-600 mt-1.5">{resolveBlocker(t)} (below) before you can resolve this issue.</p>
+                <p className="text-[11px] text-amber-600 mt-1.5">
+                  {!hasFinalPlan(t)
+                    ? 'Finalise this issue’s resolution plan (below) before you can assign or resolve it.'
+                    : 'Save a work report (below) before you can resolve this issue.'}
+                </p>
               )}
 
               {/* Per-issue documents — the plan (what's intended) and the report
