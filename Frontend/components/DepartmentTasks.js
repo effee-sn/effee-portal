@@ -179,12 +179,17 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
 
   const amHolder = (t) => t.assigned_user_id && me && t.assigned_user_id === me.id;
   const amLead   = (t) => t.lead_user_id && me && t.lead_user_id === me.id;
-  // An issue can only be resolved once it has BOTH a finalised plan and a report
-  // (mirrors the backend guard against fake-closing). The plan is a hard
-  // prerequisite (authored on the plan page); the report can be typed in the
-  // resolve modal, so only the plan gates the button.
+  // An issue can only be resolved once it has BOTH a finalised plan and a saved
+  // report (mirrors the backend guard against fake-closing). Both are authored on
+  // their own pages, so the Resolve button stays greyed until both exist.
   const hasFinalPlan = (t) => (t.plans?.length ?? 0) > 0;
   const hasReport    = (t) => Boolean(t.resolution_note || t.resolution_note_json);
+  const canResolve   = (t) => hasFinalPlan(t) && hasReport(t);
+  const resolveBlocker = (t) =>
+    !hasFinalPlan(t) && !hasReport(t) ? 'Finalise the plan and save a report'
+      : !hasFinalPlan(t) ? 'Finalise the resolution plan'
+      : !hasReport(t)    ? 'Save a work report'
+      : undefined;
 
   return (
     <div className="bg-white rounded-lg border border-gray-200">
@@ -248,14 +253,14 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
                 {t.status === 'OPEN' && amHolder(t) && (amLead(t) ? (
                   t.awaiting_validation ? (
                     <>
-                      <button onClick={() => setModal({ type: 'resolve', task: t })} disabled={!hasFinalPlan(t)} title={hasFinalPlan(t) ? undefined : 'Finalise the resolution plan first'} className="btn-primary text-xs py-1.5 disabled:opacity-40 disabled:cursor-not-allowed">Validate &amp; finalise</button>
+                      <button onClick={() => setModal({ type: 'resolve', task: t })} disabled={!canResolve(t)} title={resolveBlocker(t) ? `${resolveBlocker(t)} first` : undefined} className="btn-primary text-xs py-1.5 disabled:opacity-40 disabled:cursor-not-allowed">Validate &amp; finalise</button>
                       <button onClick={() => run(apiPost(`/service/tickets/${id}/dept-tasks/${t.id}/return`))} className="btn-secondary text-xs py-1.5">Return to resolver</button>
                       <button onClick={() => setModal({ type: 'decline', task: t })} className="btn-danger text-xs py-1.5">Decline</button>
                     </>
                   ) : (
                     <>
                       <button onClick={() => setModal({ type: 'assign', task: t })} className="btn-secondary text-xs py-1.5">Assign to person</button>
-                      <button onClick={() => setModal({ type: 'resolve', task: t })} disabled={!hasFinalPlan(t)} title={hasFinalPlan(t) ? undefined : 'Finalise the resolution plan first'} className="btn-primary text-xs py-1.5 disabled:opacity-40 disabled:cursor-not-allowed">Resolve</button>
+                      <button onClick={() => setModal({ type: 'resolve', task: t })} disabled={!canResolve(t)} title={resolveBlocker(t) ? `${resolveBlocker(t)} first` : undefined} className="btn-primary text-xs py-1.5 disabled:opacity-40 disabled:cursor-not-allowed">Resolve</button>
                       <button onClick={() => setModal({ type: 'decline', task: t })} className="btn-danger text-xs py-1.5">Decline</button>
                     </>
                   )
@@ -270,9 +275,9 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
                 )}
               </div>
 
-              {/* Why the resolve button is disabled — the plan isn't finalised. */}
-              {t.status === 'OPEN' && amLead(t) && amHolder(t) && !hasFinalPlan(t) && (
-                <p className="text-[11px] text-amber-600 mt-1.5">Finalise this issue’s resolution plan (below) before you can resolve it.</p>
+              {/* Why the resolve button is disabled — plan and/or report missing. */}
+              {t.status === 'OPEN' && amLead(t) && amHolder(t) && !canResolve(t) && (
+                <p className="text-[11px] text-amber-600 mt-1.5">{resolveBlocker(t)} (below) before you can resolve this issue.</p>
               )}
 
               {/* Per-issue documents — the plan (what's intended) and the report
@@ -346,12 +351,10 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
       )}
       {modal?.type === 'resolve' && (
         <TaskModal title="Resolve this department's part"
-          subtitle={hasReport(modal.task)
-            ? 'Confirm what was done — this marks the department’s task resolved.'
-            : 'Record what was done — a report is required before this issue can be resolved.'}
+          subtitle="The resolution plan and work report are recorded. Mark this department’s task resolved?"
           confirmLabel="Resolve"
-          fields={[{ name: 'resolution_note', label: 'What was done', type: 'text', required: !hasReport(modal.task), placeholder: 'Work performed, outcome…' }]}
-          onClose={() => setModal(null)} onSubmit={(v) => P(`/${modal.task.id}/resolve`, { resolution_note: v.resolution_note || undefined })} />
+          fields={[]}
+          onClose={() => setModal(null)} onSubmit={() => P(`/${modal.task.id}/resolve`, {})} />
       )}
       {modal?.type === 'decline' && (
         <TaskModal title="Decline this task" subtitle="It returns to the project manager to reassign." tone="danger"
