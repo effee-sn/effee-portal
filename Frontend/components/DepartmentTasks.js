@@ -154,6 +154,10 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
   const canManage = Boolean(me?.is_system || can('SERVICE_VIEW'));
   const atTriage  = ['OPEN', 'REOPENED'].includes(ticket.status);
   const pending   = atTriage && tasks.every((t) => !t.assigned_user_id);
+  // Departments can only be added while the ticket is still being worked. Once
+  // every issue is resolved it moves to customer confirmation (RESOLVED) — and
+  // once confirmed/closed — so adding is hidden there (reopen to work it again).
+  const activePhase = ['OPEN', 'REOPENED', 'IN_PROGRESS'].includes(ticket.status);
 
   const nav = useNav();
 
@@ -198,7 +202,7 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
           Departments {tasks.length > 0 && <span className="text-gray-400 font-normal">· {tasks.filter((t) => t.status === 'RESOLVED').length}/{tasks.length} resolved</span>}
         </h2>
         <div className="flex items-center gap-2">
-          {canManage && (
+          {canManage && activePhase && (
             <button onClick={() => setModal({ type: 'add' })} className="btn-secondary text-sm py-1.5">+ Add department</button>
           )}
           {canManage && pending && tasks.length > 0 && (
