@@ -3,6 +3,28 @@ import { topLoader } from './topLoader';
 
 const BASE_URL = API_URL;
 
+/** "assignee_user_id" → "Assignee user id" (last path segment, humanised). */
+function humaniseField(field) {
+  const leaf = String(field).split('.').pop();
+  const spaced = leaf.replace(/_/g, ' ').trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/**
+ * Builds a readable error string from an error response. Validation failures
+ * carry per-field details (`[{ field, message }]`); without this the UI only
+ * ever showed the generic top-level "Validation failed".
+ */
+function errorMessage(data) {
+  if (Array.isArray(data?.details) && data.details.length) {
+    return data.details
+      .map((d) => (d.field && d.field !== '_' ? `${humaniseField(d.field)}: ${d.message}` : d.message))
+      .filter(Boolean)
+      .join(' • ');
+  }
+  return data?.message || 'Something went wrong';
+}
+
 function authHeaders(extra = {}) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
   return {
@@ -26,7 +48,13 @@ async function request(endpoint, options = {}) {
   try {
     const res = await fetch(`${BASE_URL}${endpoint}`, options);
     const data = await res.json();
-    if (!res.ok) throw new Error(data.message || 'Something went wrong');
+    if (!res.ok) {
+      const err = new Error(errorMessage(data));
+      err.status = res.status;
+      err.code = data?.code;
+      err.details = data?.details;
+      throw err;
+    }
     return data;
   } finally {
     topLoader.done();

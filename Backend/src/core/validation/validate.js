@@ -16,6 +16,25 @@ const { ValidationError } = require('../errors/AppError');
  */
 
 /**
+ * Turns Zod's terse defaults into something a form user can act on. A missing
+ * required field otherwise reads "Invalid input: expected string, received
+ * undefined"; here it becomes "This field is required".
+ *
+ * @param {import('zod').ZodIssue} issue
+ * @returns {string}
+ */
+function friendlyMessage(issue) {
+  const msg = issue.message || 'Invalid value';
+  if (issue.code === 'invalid_type' && /received (undefined|null|nan)/i.test(msg)) {
+    return 'This field is required';
+  }
+  if (issue.code === 'too_small' && Number(issue.minimum) === 1) {
+    return 'This field is required';
+  }
+  return msg;
+}
+
+/**
  * Flattens a ZodError into a stable, client-friendly shape.
  *
  * @param {import('zod').ZodError} error
@@ -25,7 +44,7 @@ function formatZodIssues(error) {
   return error.issues.map((issue) => ({
     // Empty path means the failure is on the object itself rather than a field.
     field: issue.path.length > 0 ? issue.path.join('.') : '_',
-    message: issue.message,
+    message: friendlyMessage(issue),
   }));
 }
 
