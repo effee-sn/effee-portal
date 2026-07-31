@@ -43,7 +43,8 @@ function ResolutionPlanInner() {
   // The plan is authored by this issue's department lead. A resolver holds the
   // task but only reads the plan. The backend enforces this; we mirror it so the
   // authoring controls simply don't appear otherwise.
-  const canPlan = Boolean(task && me && (
+  // A closed (resolved/declined) issue's plan is frozen — read-only for everyone.
+  const canPlan = Boolean(task && me && task.status === 'OPEN' && (
     me.is_system || can('SERVICE_EDIT') || (task.lead_user_id && task.lead_user_id === me.id)
   ));
 

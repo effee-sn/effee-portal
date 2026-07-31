@@ -289,6 +289,10 @@ function createDeptTaskService(repository, tickets) {
     async saveReport(ticketId, taskId, { resolution_note, resolution_note_json }, user) {
       await ticketForView(ticketId, user);
       const task = await taskOfTicket(ticketId, taskId);
+      // A resolved/declined issue's report is frozen — it records what was done.
+      if (task.status !== 'OPEN') {
+        throw new BadRequestError('This issue is closed — its report can no longer be changed');
+      }
       assertHolds(user, task);
       await repository.update(taskId, {
         ...(resolution_note !== undefined ? { resolution_note } : {}),

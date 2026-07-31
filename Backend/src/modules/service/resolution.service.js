@@ -50,6 +50,11 @@ function createResolutionService(repository, tasks, tickets) {
   async function taskForAuthor(ticketId, taskId, user) {
     await ticketForView(ticketId, user);
     const task = await taskOfTicket(ticketId, taskId);
+    // Once the issue leaves OPEN (resolved or declined) its plan is frozen — no
+    // more saving, finalising, revising or restoring.
+    if (task.status !== 'OPEN') {
+      throw new BadRequestError('This issue is closed — its resolution plan can no longer be changed');
+    }
     const isLead = task.lead_user_id && task.lead_user_id === user?.id;
     if (!isLead && !hasPermission(user, 'SERVICE_EDIT')) {
       throw new ForbiddenError('Only the department lead authors this issue’s resolution plan');

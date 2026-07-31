@@ -36,7 +36,8 @@ function WorkReportInner() {
 
   // The report is written by whoever currently holds the task — the resolver
   // while they work it, the lead when it is back with them. Backend enforces it.
-  const canAct = Boolean(task && me && (
+  // A closed (resolved/declined) issue's report is frozen — read-only for everyone.
+  const canAct = Boolean(task && me && task.status === 'OPEN' && (
     me.is_system || can('SERVICE_EDIT') || (task.assigned_user_id && task.assigned_user_id === me.id)
   ));
 
