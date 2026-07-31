@@ -62,6 +62,7 @@ export default function CreateTicketModal({ onClose, onCreated }) {
   };
 
   const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
+  const req = <span className="text-red-500"> *</span>;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
@@ -101,7 +102,7 @@ export default function CreateTicketModal({ onClose, onCreated }) {
           {/* Others source details — shown and required only for an "Others" source. */}
           {form.ticket_type === 'OTHERS' && (
             <div>
-              <label className={label}>Others source details</label>
+              <label className={label}>Others source details{req}</label>
               <input name="source_details" value={form.source_details} onChange={change} required
                 placeholder="Describe the source" className="ams-input" />
             </div>
@@ -119,14 +120,14 @@ export default function CreateTicketModal({ onClose, onCreated }) {
           </div>
 
           <div>
-            <label className={label}>Issue Title</label>
+            <label className={label}>Issue Title{req}</label>
             <input name="issue_title" value={form.issue_title} onChange={change} required
               placeholder="Short summary of the issue" className="ams-input" />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={label}>Company Name</label>
+              <label className={label}>Company Name{req}</label>
               <input name="company_name" value={form.company_name} onChange={change} required
                 placeholder="Acme Corp" className="ams-input" />
             </div>
@@ -139,7 +140,7 @@ export default function CreateTicketModal({ onClose, onCreated }) {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={label}>Reported By</label>
+              <label className={label}>Reported By{req}</label>
               <input name="reported_by" value={form.reported_by} onChange={change} required
                 placeholder="Person who reported it" className="ams-input" />
             </div>
@@ -181,7 +182,7 @@ export default function CreateTicketModal({ onClose, onCreated }) {
           </div>
 
           <div>
-            <label className={label}>Issue Description</label>
+            <label className={label}>Issue Description{req}</label>
             <textarea name="issue_description" value={form.issue_description} onChange={change} required rows={4}
               placeholder="Full details of the issue…" className="ams-input resize-none" />
           </div>

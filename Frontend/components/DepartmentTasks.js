@@ -90,7 +90,7 @@ function TaskModal({ title, subtitle, fields, confirmLabel, tone, departments, u
         <div className="space-y-3">
           {fields.map((f) => (
             <div key={f.name}>
-              <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">{f.label}</label>
+              <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">{f.label}{f.required && <span className="text-red-500"> *</span>}</label>
               {f.type === 'dept' ? (
                 <select value={vals[f.name] || ''} onChange={(e) => set(f.name, e.target.value)} className="ams-input" autoFocus>
                   <option value="">— Choose a department —</option>

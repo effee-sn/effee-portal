@@ -200,7 +200,7 @@ function WorkflowModal({ workflow, onClose, onSaved }) {
 
           <div className="grid grid-cols-3 gap-4">
             <div className="col-span-2">
-              <label className={label}>Workflow Name</label>
+              <label className={label}>Workflow Name<span className="text-red-500"> *</span></label>
               <input name="name" value={form.name} onChange={changeForm} required placeholder="Service Complaint Flow" className="ams-input" />
             </div>
             <div>

@@ -84,7 +84,7 @@ function ResetPasswordForm() {
       ].map((f) => (
         <div key={f.key}>
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-            {f.label}
+            {f.label}<span className="text-red-500"> *</span>
           </label>
           <input
             type="password"

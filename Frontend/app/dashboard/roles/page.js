@@ -38,11 +38,11 @@ function CreateRoleModal({ onClose, onCreated }) {
         <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
           {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm">{error}</div>}
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Role Name</label>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Role Name<span className="text-red-500"> *</span></label>
             <input name="name" value={form.name} onChange={handleChange} required placeholder="e.g. Account Manager" className="ams-input" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Slug</label>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Slug<span className="text-red-500"> *</span></label>
             <input name="slug" value={form.slug} onChange={handleChange} required placeholder="e.g. account-manager" className="ams-input" />
           </div>
           <div>

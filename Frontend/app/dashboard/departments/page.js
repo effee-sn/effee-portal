@@ -47,7 +47,7 @@ function DepartmentModal({ dept, onClose, onSaved }) {
         <form onSubmit={submit} className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
           {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm">{error}</div>}
           <div>
-            <label className={label}>Name</label>
+            <label className={label}>Name<span className="text-red-500"> *</span></label>
             <input name="name" value={form.name} onChange={change} required placeholder="Engineering" className="ams-input" />
           </div>
           <div>

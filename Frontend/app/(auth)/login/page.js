@@ -39,7 +39,7 @@ function LoginForm() {
       )}
 
       <div>
-        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Email</label>
+        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Email<span className="text-red-500"> *</span></label>
         <input
           type="email"
           name="email"
@@ -54,7 +54,7 @@ function LoginForm() {
 
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Password</label>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Password<span className="text-red-500"> *</span></label>
           <Link href="/forgot-password" className="text-xs font-medium hover:underline" style={{ color: 'var(--ams-primary)' }}>
             Forgot password?
           </Link>

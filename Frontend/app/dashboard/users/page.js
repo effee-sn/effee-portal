@@ -57,27 +57,27 @@ function UserModal({ user, onClose, onSaved }) {
           {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm">{error}</div>}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Full Name</label>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Full Name<span className="text-red-500"> *</span></label>
               <input name="name" value={form.name} onChange={handleChange} required placeholder="John Doe" className="ams-input" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Phone</label>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Phone<span className="text-red-500"> *</span></label>
               <input name="phone" value={form.phone} onChange={handleChange} required placeholder="01XXXXXXXXX" className="ams-input" />
             </div>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Email</label>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Email<span className="text-red-500"> *</span></label>
             <input name="email" type="email" value={form.email} onChange={handleChange} required placeholder="you@example.com" className="ams-input" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-              Password {isEdit && <span className="text-gray-400 font-normal normal-case">(leave blank to keep)</span>}
+              Password{!isEdit && <span className="text-red-500"> *</span>} {isEdit && <span className="text-gray-400 font-normal normal-case">(leave blank to keep)</span>}
             </label>
             <input name="password" type="password" value={form.password} onChange={handleChange} required={!isEdit} placeholder="••••••••" className="ams-input" />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Role</label>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Role<span className="text-red-500"> *</span></label>
               <select name="role_id" value={form.role_id} onChange={handleChange} required className="ams-input">
                 <option value="">Select role</option>
                 {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}

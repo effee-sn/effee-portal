@@ -19,10 +19,10 @@ function Section({ title, description, children }) {
   );
 }
 
-function Field({ label, hint, children }) {
+function Field({ label, hint, children, required }) {
   return (
     <div>
-      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{label}</label>
+      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{label}{required && <span className="text-red-500"> *</span>}</label>
       {children}
       {hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
     </div>
@@ -161,7 +161,7 @@ function ProfileTab({ me }) {
         <Section title="Edit Profile" description="Update your name, email and phone number">
           <form onSubmit={handleSaveProfile} className="space-y-4">
             <Alert type={profMsg.type} message={profMsg.text} />
-            <Field label="Full Name">
+            <Field label="Full Name" required>
               <input type="text" value={profile.name}
                 onChange={(e) => setProfile({ ...profile, name: e.target.value })}
                 placeholder="Your full name" className="ams-input" />
@@ -217,18 +217,18 @@ function ProfileTab({ me }) {
       <Section title="Change Password" description="Keep your account secure with a strong password">
         <form onSubmit={handleChangePassword} className="space-y-4">
           <Alert type={passMsg.type} message={passMsg.text} />
-          <Field label="Current Password">
+          <Field label="Current Password" required>
             <input type="password" value={passwords.current_password}
               onChange={(e) => setPasswords({ ...passwords, current_password: e.target.value })}
               placeholder="Enter current password" className="ams-input" />
           </Field>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="New Password">
+            <Field label="New Password" required>
               <input type="password" value={passwords.new_password}
                 onChange={(e) => setPasswords({ ...passwords, new_password: e.target.value })}
                 placeholder="Min. 6 characters" className="ams-input" />
             </Field>
-            <Field label="Confirm New Password">
+            <Field label="Confirm New Password" required>
               <input type="password" value={passwords.confirm_password}
                 onChange={(e) => setPasswords({ ...passwords, confirm_password: e.target.value })}
                 placeholder="Repeat new password" className="ams-input" />
