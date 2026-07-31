@@ -153,7 +153,12 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
 
   const canManage = Boolean(me?.is_system || can('SERVICE_VIEW'));
   const atTriage  = ['OPEN', 'REOPENED'].includes(ticket.status);
-  const pending   = atTriage && tasks.every((t) => !t.assigned_user_id);
+  // A single task is "pending" until it's dispatched to a lead. Checked per task
+  // (not "every task") so a NEW task added after a reopen can still be dispatched
+  // even though older tasks from the first round are already resolved/assigned.
+  const isPending    = (t) => t.status === 'OPEN' && !t.assigned_user_id;
+  const pendingCount = tasks.filter(isPending).length;
+  const canDispatch  = atTriage && pendingCount > 0;
   // Departments can only be added while the ticket is still being worked. Once
   // every issue is resolved it moves to customer confirmation (RESOLVED) — and
   // once confirmed/closed — so adding is hidden there (reopen to work it again).
@@ -205,9 +210,9 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
           {canManage && activePhase && (
             <button onClick={() => setModal({ type: 'add' })} className="btn-secondary text-sm py-1.5">+ Add department</button>
           )}
-          {canManage && pending && tasks.length > 0 && (
+          {canManage && canDispatch && (
             <button onClick={() => run(apiPost(`/service/tickets/${id}/dept-tasks/dispatch`))} className="btn-primary text-sm py-1.5">
-              Dispatch to {tasks.length} department{tasks.length > 1 ? 's' : ''} →
+              Dispatch to {pendingCount} department{pendingCount > 1 ? 's' : ''} →
             </button>
           )}
         </div>
@@ -235,10 +240,10 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
                   <button onClick={() => setOpenFlow((v) => (v === t.id ? null : t.id))} className="text-xs text-gray-400 hover:text-gray-600">
                     {openFlow === t.id ? '− Flow' : '+ Flow'}
                   </button>
-                  {canManage && pending && (
+                  {canManage && isPending(t) && (
                     <button onClick={() => setModal({ type: 'edit', task: t })} className="text-xs text-gray-400 hover:text-gray-600">edit</button>
                   )}
-                  {canManage && (t.status === 'DECLINED' || pending) && (
+                  {canManage && (t.status === 'DECLINED' || isPending(t)) && (
                     <button onClick={() => apiDelete(`/service/tickets/${id}/dept-tasks/${t.id}`).then(async (r) => { applyTasks(r.data || []); await onChanged?.(); }).catch((e) => setError(e.message))} className="text-xs text-red-400 hover:text-red-600">remove</button>
                   )}
                 </div>
