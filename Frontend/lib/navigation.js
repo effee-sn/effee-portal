@@ -60,9 +60,7 @@ export const AREAS = [
       { label: 'Users',        href: '/dashboard/users',       perm: 'USER_VIEW' },
       { label: 'Roles',        href: '/dashboard/roles',       perm: 'ROLE_VIEW' },
       { label: 'Departments',  href: '/dashboard/departments', perm: 'DEPT_VIEW' },
-      // Flow Builder is hidden: ticket routing is handled by the parallel
-      // department-task model, so the workflow is a fixed backbone (triage →
-      // customer confirm) that must not be edited. The seeded flow stays intact.
+      { label: 'Flow Builder', href: '/dashboard/flows',       perm: 'FLOW_VIEW' },
       { label: 'Settings',     href: '/dashboard/settings',    perm: null },
     ],
   },
