@@ -35,12 +35,7 @@ export default function CreateTicketModal({ onClose, onCreated }) {
       machine_serial_no: '',
       issue_severity: 'MEDIUM',
       issue_description: '',
-      production_impact: false,
-      production_impact_details: '',
-      customer_impact: false,
-      customer_impact_details: '',
-      safety_impact: false,
-      safety_impact_details: '',
+      impact_details: '',
     };
   });
   const [error, setError]   = useState('');
@@ -48,14 +43,7 @@ export default function CreateTicketModal({ onClose, onCreated }) {
 
   const change = (e) => {
     const { name, value, type, checked } = e.target;
-    setForm((f) => {
-      const next = { ...f, [name]: type === 'checkbox' ? checked : value };
-      // Unchecking an impact clears its details, so a hidden note can't be sent.
-      if (type === 'checkbox' && !checked && `${name}_details` in next) {
-        next[`${name}_details`] = '';
-      }
-      return next;
-    });
+    setForm((f) => ({ ...f, [name]: type === 'checkbox' ? checked : value }));
     setError('');
   };
 
@@ -198,28 +186,10 @@ export default function CreateTicketModal({ onClose, onCreated }) {
               placeholder="Full details of the issue…" className="ams-input resize-none" />
           </div>
 
-          <div className="space-y-3 pt-1">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Impact</p>
-            {[
-              ['production_impact', 'Production impact'],
-              ['customer_impact', 'Customer impact'],
-              ['safety_impact', 'Safety impact'],
-            ].map(([name, lbl]) => (
-              <div key={name}>
-                <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                  <input type="checkbox" name={name} checked={form[name]} onChange={change}
-                    className="w-4 h-4 rounded" style={{ accentColor: 'var(--ams-primary)' }} />
-                  <span className="text-sm text-gray-700">{lbl}</span>
-                </label>
-
-                {/* Details reveal only when the box is ticked. Optional. */}
-                {form[name] && (
-                  <textarea name={`${name}_details`} value={form[`${name}_details`]} onChange={change} rows={2}
-                    placeholder={`Details about ${lbl.toLowerCase()} (optional)`}
-                    className="ams-input resize-none mt-2" />
-                )}
-              </div>
-            ))}
+          <div>
+            <label className={label}>Impact Details</label>
+            <textarea name="impact_details" value={form.impact_details} onChange={change} rows={3}
+              placeholder="Production, customer, safety or other impact (optional)…" className="ams-input resize-none" />
           </div>
 
           <div className="flex gap-3 pt-2 pb-1">

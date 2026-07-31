@@ -96,13 +96,12 @@ export default function ServiceDashboardPage() {
 
       {/* Stat cards — the lifecycle at a glance. "Active" = still needs work
           (open + in progress + contacted + reopened); On Observation is parked
-          awaiting the customer; Production Impact flags the urgent subset. */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-5">
+          awaiting the customer. */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
         <StatCard label="Total Tickets" value={data.total} />
         <StatCard label="Active" value={data.active} accent="#D97706" />
         <StatCard label="On Observation" value={data.on_observation} accent="#0891B2" />
         <StatCard label="Resolved" value={data.by_status.RESOLVED} accent="#059669" />
-        <StatCard label="Production Impact" value={data.production_impact} accent="#DC2626" />
       </div>
 
       {/* Breakdowns */}

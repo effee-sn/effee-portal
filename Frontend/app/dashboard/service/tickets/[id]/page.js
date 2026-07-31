@@ -400,8 +400,6 @@ export default function TicketDetailPage() {
         {ticket.reopened_count > 0 && (
           <span className="text-xs font-semibold text-red-600" title="Times reopened">↻ {ticket.reopened_count}×</span>
         )}
-        {ticket.production_impact && <span className="text-xs font-semibold text-red-600">Production</span>}
-        {ticket.safety_impact && <span className="text-xs font-semibold text-red-600">Safety</span>}
       </div>
 
       {/* Assignment / stage / people-chain */}
@@ -563,6 +561,7 @@ export default function TicketDetailPage() {
         <div className="mt-4 pt-4 border-t border-gray-100 space-y-3">
           <Field label="Issue Title">{ticket.issue_title}</Field>
           <Field label="Issue Description"><p className="whitespace-pre-wrap">{ticket.issue_description}</p></Field>
+          {ticket.impact_details && <Field label="Impact Details"><p className="whitespace-pre-wrap">{ticket.impact_details}</p></Field>}
         </div>
       </Section>
 

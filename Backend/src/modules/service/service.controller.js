@@ -29,10 +29,9 @@ const getTickets = async (req, res) => {
     defaultSort: 'created_at',
     defaultOrder: 'desc',
     filterable: {
-      status:            (v) => (['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].includes(v) ? v : undefined),
+      status:            (v) => (['OPEN', 'IN_PROGRESS', 'CONTACTED', 'RESOLVED', 'ON_OBSERVATION', 'CLOSED', 'REOPENED'].includes(v) ? v : undefined),
       issue_severity:    (v) => (['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].includes(v) ? v : undefined),
-      ticket_type:       (v) => (['CALL', 'EMAIL'].includes(v) ? v : undefined),
-      production_impact: (v) => (v === 'true' ? true : v === 'false' ? false : undefined),
+      ticket_type:       (v) => (['CALL', 'EMAIL', 'OTHERS'].includes(v) ? v : undefined),
     },
   });
 

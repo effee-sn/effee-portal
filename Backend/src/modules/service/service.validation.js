@@ -57,9 +57,6 @@ const listTicketsQuery = schemas.listQuery.extend({
   status:            status.optional(),
   issue_severity:    severity.optional(),
   ticket_type:       ticketType.optional(),
-  production_impact: schemas.flexibleBoolean.optional(),
-  customer_impact:   schemas.flexibleBoolean.optional(),
-  safety_impact:     schemas.flexibleBoolean.optional(),
 });
 
 /** `GET|PUT|DELETE /service/tickets/:id` */
@@ -87,12 +84,7 @@ const createTicketBody = z.object({
   issue_description: z.string().trim().min(1).max(5000),
   issue_severity:    severity,
   support_type:              supportType,
-  production_impact:         schemas.flexibleBoolean.optional().default(false),
-  production_impact_details: optionalText(2000),
-  customer_impact:           schemas.flexibleBoolean.optional().default(false),
-  customer_impact_details:   optionalText(2000),
-  safety_impact:             schemas.flexibleBoolean.optional().default(false),
-  safety_impact_details:     optionalText(2000),
+  impact_details:            optionalText(5000),
 }).refine((d) => d.ticket_type !== 'OTHERS' || (d.source_details && d.source_details.trim().length > 0), {
   message: 'Source details are required for an "Others" source',
   path: ['source_details'],
@@ -117,13 +109,8 @@ const updateTicketBody = z.object({
   technical_category:        optionalText(120),
   originating_department_id: optionalDeptId,
 
-  // Impacts
-  production_impact:         schemas.flexibleBoolean.optional(),
-  production_impact_details: optionalText(2000),
-  customer_impact:           schemas.flexibleBoolean.optional(),
-  customer_impact_details:   optionalText(2000),
-  safety_impact:             schemas.flexibleBoolean.optional(),
-  safety_impact_details:     optionalText(2000),
+  // Impact
+  impact_details:            optionalText(5000),
 
   // Findings (support_type is intake-only — set at creation; the plan + report
   // are authored per department task, not on the ticket)

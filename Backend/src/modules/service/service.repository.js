@@ -33,12 +33,7 @@ function createServiceRepository(db) {
     originating_department_id: true,
     originating_department: { select: { id: true, name: true } },
     // Impacts
-    production_impact: true,
-    production_impact_details: true,
-    customer_impact: true,
-    customer_impact_details: true,
-    safety_impact: true,
-    safety_impact_details: true,
+    impact_details: true,
     // Resolution
     support_type: true,
     site_visit_notes: true,
@@ -264,17 +259,15 @@ function createServiceRepository(db) {
      *   total: number,
      *   byStatus: Record<string, number>,
      *   bySeverity: Record<string, number>,
-     *   productionImpact: number,
      * }>}
      */
     async stats() {
       const where = active();
 
-      const [total, byStatus, bySeverity, productionImpact] = await Promise.all([
+      const [total, byStatus, bySeverity] = await Promise.all([
         db.serviceTicket.count({ where }),
         db.serviceTicket.groupBy({ by: ['status'], where, _count: { _all: true } }),
         db.serviceTicket.groupBy({ by: ['issue_severity'], where, _count: { _all: true } }),
-        db.serviceTicket.count({ where: active({ production_impact: true }) }),
       ]);
 
       const toMap = (rows, key) =>
@@ -284,7 +277,6 @@ function createServiceRepository(db) {
         total,
         byStatus: toMap(byStatus, 'status'),
         bySeverity: toMap(bySeverity, 'issue_severity'),
-        productionImpact,
       };
     },
 

@@ -170,7 +170,6 @@ export default function ServiceTicketsPage() {
                   <th className="px-3 py-3 font-normal">Company</th>
                   <th className="px-3 py-3 font-normal">Issue</th>
                   <th className="px-3 py-3 font-normal">Severity</th>
-                  <th className="px-3 py-3 font-normal">Prod.</th>
                   <th className="px-3 py-3 font-normal">Status</th>
                   <th className="px-3 py-3 font-normal">Created By</th>
                   <th className="px-3 py-3 font-normal">Created</th>
@@ -191,11 +190,6 @@ export default function ServiceTicketsPage() {
                       <td className="px-3 py-3">
                         <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium"
                           style={{ color: sev.color, backgroundColor: sev.bg }}>{sev.label}</span>
-                      </td>
-                      <td className="px-3 py-3">
-                        {t.production_impact
-                          ? <span className="text-xs font-semibold text-red-600">Yes</span>
-                          : <span className="text-xs text-gray-400">No</span>}
                       </td>
                       <td className="px-3 py-3">
                         <span className="text-xs font-medium" style={{ color: st.color }}>{st.label}</span>

@@ -347,14 +347,8 @@ model ServiceTicket {
   originating_department    Department? @relation("OriginatingTickets", fields: [originating_department_id], references: [id])
   originating_department_id Int?
 
-  /// Impact flags — yes/no checkboxes, each with optional free-text details
-  /// captured only when the box is ticked.
-  production_impact         Boolean @default(false)
-  production_impact_details String? @db.Text
-  customer_impact           Boolean @default(false)
-  customer_impact_details   String? @db.Text
-  safety_impact             Boolean @default(false)
-  safety_impact_details     String? @db.Text
+  /// Free-text description of the ticket's impact (production, customer, safety…).
+  impact_details            String? @db.Text
 
   /// Resolution — how the issue is handled, and site findings when visited.
   support_type      SupportType?

@@ -443,14 +443,7 @@ function createServiceService(repository) {
         issue_title:       dto.issue_title,
         issue_description: dto.issue_description,
         issue_severity:    dto.issue_severity,
-        // Details are stored only when the matching flag is set, so a note can
-        // never linger behind an unchecked impact box.
-        production_impact:         dto.production_impact ?? false,
-        production_impact_details: dto.production_impact ? (dto.production_impact_details ?? null) : null,
-        customer_impact:           dto.customer_impact ?? false,
-        customer_impact_details:   dto.customer_impact ? (dto.customer_impact_details ?? null) : null,
-        safety_impact:             dto.safety_impact ?? false,
-        safety_impact_details:     dto.safety_impact ? (dto.safety_impact_details ?? null) : null,
+        impact_details:    dto.impact_details ?? null,
         // Status is flow-driven, never set on intake.
         status:            'OPEN',
         created_by:        actor?.id ?? null,
@@ -534,10 +527,8 @@ function createServiceService(repository) {
         'issue_title', 'issue_description', 'issue_severity',
         // Classification
         'technical_category', 'originating_department_id',
-        // Impacts
-        'production_impact', 'production_impact_details',
-        'customer_impact', 'customer_impact_details',
-        'safety_impact', 'safety_impact_details',
+        // Impact
+        'impact_details',
         // Findings (support_type is intake-only; the plan + report are per
         // department task, not on the ticket).
         'site_visit_notes',
@@ -556,11 +547,6 @@ function createServiceService(repository) {
       const mayClassify = actor?.is_system || !caps.stage || caps.stage.can_classify;
       if (!mayClassify) {
         for (const f of ['technical_category', 'originating_department_id']) delete data[f];
-      }
-
-      // Clear a details field whenever its impact flag is explicitly turned off.
-      for (const flag of ['production_impact', 'customer_impact', 'safety_impact']) {
-        if (dto[flag] === false) data[`${flag}_details`] = null;
       }
 
       data.updated_by = actor?.id ?? null;
@@ -630,7 +616,6 @@ function createServiceService(repository) {
         total: stats.total,
         by_status,
         by_severity: fill(stats.bySeverity, severityOrder),
-        production_impact: stats.productionImpact,
         open: by_status.OPEN,
         active,
         on_observation: by_status.ON_OBSERVATION,
