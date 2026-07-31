@@ -16,6 +16,7 @@
  * @property {string} label
  * @property {string} href
  * @property {string|null} perm Permission code, or null for always-visible.
+ * @property {boolean} [system] Restrict to system (super-admin) users, regardless of `perm`.
  * @property {boolean} [exact] Match the path exactly (used for the dashboard root).
  */
 
@@ -61,6 +62,7 @@ export const AREAS = [
       { label: 'Roles',        href: '/dashboard/roles',       perm: 'ROLE_VIEW' },
       { label: 'Departments',  href: '/dashboard/departments', perm: 'DEPT_VIEW' },
       { label: 'Flow Builder', href: '/dashboard/flows',       perm: 'FLOW_VIEW' },
+      { label: 'Audit Log',    href: '/dashboard/audit',       perm: null, system: true },
       { label: 'Settings',     href: '/dashboard/settings',    perm: null },
     ],
   },
@@ -97,11 +99,11 @@ export function areaKeyForPath(pathname) {
 /**
  * Filters the model down to what a given user may see.
  *
- * @param {(perm: string|null) => boolean} isVisible
+ * @param {(item: NavItem) => boolean} isVisible
  * @returns {Area[]}
  */
 export function visibleAreasFor(isVisible) {
   return AREAS
-    .map((area) => ({ ...area, items: area.items.filter((item) => isVisible(item.perm)) }))
+    .map((area) => ({ ...area, items: area.items.filter((item) => isVisible(item)) }))
     .filter((area) => area.items.length > 0);
 }

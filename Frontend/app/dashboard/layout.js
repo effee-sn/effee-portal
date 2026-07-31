@@ -52,10 +52,13 @@ export default function DashboardLayout({ children }) {
   // Close the app drawer and mobile menu whenever the route changes.
   useEffect(() => { setAppsOpen(false); setAppsShown(false); setNavOpen(false); }, [pathname]);
 
-  const isVisible = (perm) => {
-    if (!perm) return true;
+  const isVisible = (item) => {
+    // System-only items (e.g. the audit log) are for super-admins regardless of
+    // any permission code.
+    if (item.system) return !!me?.is_system;
+    if (!item.perm) return true;
     if (me?.is_system) return true;
-    return can(perm);
+    return can(item.perm);
   };
 
   // Areas the user may see. Recomputed when their permissions resolve.
