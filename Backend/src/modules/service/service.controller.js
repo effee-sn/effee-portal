@@ -72,45 +72,6 @@ const getTicketById = async (req, res) => {
   ApiResponse.ok(res, await serviceService.getForUser(req.params.id, req.user));
 };
 
-/**
- * `POST /service/tickets/:id/advance` — the single hand-off action: move to the
- * next stage, assigning the owner when that stage needs one. If the holder has
- * an open resolution-plan draft, this also finalises it.
- *
- * @type {import('express').RequestHandler}
- */
-const advanceTicket = async (req, res) => {
-  const ticket = await serviceService.advance(
-    req.params.id, requestContext(req), req.body?.assignee_user_id ?? null
-  );
-  ApiResponse.ok(res, ticket);
-};
-
-/**
- * `POST /service/tickets/:id/decline` — reject the current stage with a reason;
- * the ticket returns to whoever assigned it.
- *
- * @type {import('express').RequestHandler}
- */
-const declineTicket = async (req, res) => {
-  const ticket = await serviceService.decline(req.params.id, requestContext(req), req.body.reason);
-  ApiResponse.ok(res, ticket);
-};
-
-/**
- * `POST /service/tickets/:id/reassign` — re-do the current stage's assignment,
- * to a department's head or to a specific person.
- *
- * @type {import('express').RequestHandler}
- */
-const reassignTicket = async (req, res) => {
-  const ticket = await serviceService.reassign(req.params.id, requestContext(req), {
-    departmentId: req.body.department_id ?? null,
-    assigneeUserId: req.body.assignee_user_id ?? null,
-  });
-  ApiResponse.ok(res, ticket);
-};
-
 /** `POST /service/tickets/:id/confirm` — customer confirmed → observation. */
 const confirmTicket = async (req, res) => {
   const ticket = await serviceService.confirm(req.params.id, requestContext(req), req.body?.observation_days);
@@ -164,9 +125,6 @@ module.exports = {
   getTicketById,
   createTicket,
   updateTicket,
-  advanceTicket,
-  declineTicket,
-  reassignTicket,
   confirmTicket,
   closeTicket,
   reopenTicket,

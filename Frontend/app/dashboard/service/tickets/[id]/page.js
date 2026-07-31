@@ -54,118 +54,6 @@ function ModalShell({ title, subtitle, error, children, onClose, onConfirm, conf
   );
 }
 
-// ── Advance / Assign ──────────────────────────────────────────────────────────
-// Moves the ticket to its next stage. When that stage assigns a specific person
-// (MANUAL) the owner is picked here; otherwise it auto-routes (e.g. to the
-// originating department's lead) and this is just a confirmation.
-function AdvanceModal({ ticketId, users, nextStage, onClose, onDone }) {
-  const [assignee, setAssignee] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError]   = useState('');
-
-  const needsOwner = nextStage?.assignee_type === 'MANUAL';
-  const stageName  = nextStage?.name || 'the next stage';
-
-  const go = async () => {
-    setSaving(true); setError('');
-    try {
-      const body = (needsOwner && assignee) ? { assignee_user_id: assignee } : {};
-      const res = await apiPost(`/service/tickets/${ticketId}/advance`, body);
-      onDone(res.data); onClose();
-    } catch (err) { setError(err.message); }
-    finally { setSaving(false); }
-  };
-
-  return (
-    <ModalShell
-      title={needsOwner ? 'Assign owner' : `Move to: ${stageName}`}
-      onClose={onClose} onConfirm={go} confirmBusy={saving}
-      confirmLabel={needsOwner ? 'Assign' : 'Confirm'} disabled={needsOwner && !assignee}
-      subtitle={needsOwner
-        ? 'Choose the person who will attend and resolve this issue.'
-        : `This moves the ticket to “${stageName}” and assigns it automatically.`}
-      error={error}
-    >
-      {needsOwner && (
-        <>
-          <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Assign to</label>
-          <select value={assignee} onChange={(e) => setAssignee(e.target.value)} className="ams-input" autoFocus>
-            <option value="">— Choose who attends this —</option>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
-        </>
-      )}
-    </ModalShell>
-  );
-}
-
-// ── Decline ───────────────────────────────────────────────────────────────────
-function DeclineModal({ ticketId, returnTo, onClose, onDone }) {
-  const [reason, setReason] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError]   = useState('');
-
-  const go = async () => {
-    setSaving(true); setError('');
-    try {
-      const res = await apiPost(`/service/tickets/${ticketId}/decline`, { reason: reason.trim() });
-      onDone(res.data); onClose();
-    } catch (err) { setError(err.message); }
-    finally { setSaving(false); }
-  };
-
-  return (
-    <ModalShell
-      title="Decline this ticket" onClose={onClose} onConfirm={go} confirmBusy={saving}
-      confirmLabel="Decline" confirmTone="danger" disabled={!reason.trim()}
-      subtitle={`It returns to ${returnTo || 'whoever routed it'} to be re-assigned. Give a clear reason.`}
-      error={error}
-    >
-      <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Reason</label>
-      <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} autoFocus
-        placeholder="Why you cannot take this on…" className="ams-input resize-none" />
-    </ModalShell>
-  );
-}
-
-// ── Reassign the current stage ────────────────────────────────────────────────
-// `mode` follows the returned-to stage: 'user' re-assigns a person (a lead
-// picking a different resolver after a decline), 'department' re-routes to a
-// department's head (the PM after a lead declined).
-function ReassignModal({ ticketId, mode, users, departments, onClose, onDone }) {
-  const [value, setValue]   = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError]   = useState('');
-  const isUser = mode === 'user';
-
-  const go = async () => {
-    setSaving(true); setError('');
-    try {
-      const body = isUser ? { assignee_user_id: value } : { department_id: value };
-      const res = await apiPost(`/service/tickets/${ticketId}/reassign`, body);
-      onDone(res.data); onClose();
-    } catch (err) { setError(err.message); }
-    finally { setSaving(false); }
-  };
-
-  return (
-    <ModalShell
-      title={isUser ? 'Re-assign owner' : 'Reassign to a department'} onClose={onClose} onConfirm={go}
-      confirmBusy={saving} confirmLabel="Reassign" disabled={!value}
-      subtitle={isUser
-        ? 'Assign this to a different person to attend it. The resolution plan is kept.'
-        : 'Route this to a department’s head — the same one again after discussion, or a different one. They then accept or decline.'}
-      error={error}
-    >
-      <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">{isUser ? 'Assign to' : 'Department'}</label>
-      <select value={value} onChange={(e) => setValue(e.target.value)} className="ams-input" autoFocus>
-        <option value="">{isUser ? '— Choose who attends this —' : '— Choose a department —'}</option>
-        {(isUser ? users : departments).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-      </select>
-    </ModalShell>
-  );
-}
-
 // ── Customer confirmed → observation ──────────────────────────────────────────
 function ConfirmModal({ ticketId, onClose, onDone }) {
   const [days, setDays]     = useState(7);
@@ -225,16 +113,6 @@ function ReopenModal({ ticketId, onClose, onDone }) {
 const inputCls = 'ams-input';
 const labelCls = 'block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1';
 
-// The forward action's label depends on who the next stage assigns to.
-const ADVANCE_LABEL = {
-  DEPARTMENT_HEAD: 'Assign to lead',
-  MANUAL:          'Assign owner',
-  CREATOR:         'Send for confirmation',
-  USER:            'Advance →',
-  ROLE:            'Advance →',
-  DEPARTMENT:      'Advance →',
-};
-
 // Display-first section: shows the entered data as a read view, with an Add /
 // Edit affordance for whoever can act. Only turns into a form while `active`.
 function EditableSection({ title, active, canAct, hasData, onEdit, onCancel, onSave, saving, msg, error, read, children }) {
@@ -285,9 +163,6 @@ export default function TicketDetailPage() {
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState('');
   const [msg, setMsg]           = useState('');
-  const [advanceOpen, setAdvanceOpen]   = useState(false);
-  const [declineOpen, setDeclineOpen]   = useState(false);
-  const [reassignOpen, setReassignOpen] = useState(false);
   const [confirmOpen, setConfirmOpen]   = useState(false);
   const [reopenOpen, setReopenOpen]     = useState(false);
   // Which detail section is currently in edit mode (display-first: read by
@@ -424,25 +299,9 @@ export default function TicketDetailPage() {
                   <button onClick={() => setReopenOpen(true)} className="btn-danger text-sm py-1.5">Customer not satisfied</button>
                   <button onClick={() => setConfirmOpen(true)} className="btn-primary text-sm py-1.5">Customer confirmed →</button>
                 </>
-              ) : (ticket.decline_reason && ticket.status !== 'REOPENED') ? (
-                // Returned after a decline. Re-do the current stage's assignment:
-                // a resolve stage (MANUAL) re-assigns a person; a routing stage
-                // re-routes to a department.
-                <button onClick={() => setReassignOpen(true)} className="btn-primary text-sm py-1.5">
-                  {ticket.stage?.assignee_type === 'MANUAL' ? 'Re-assign owner' : 'Reassign to department'}
-                </button>
               ) : ticket.next_stage?.assignee_type === 'DEPARTMENT_HEAD' ? (
-                // Routing to departments is done via the Departments panel below.
+                // Triage: routing is done by adding/dispatching departments below.
                 <span className="text-xs text-gray-400">Add &amp; dispatch departments below</span>
-              ) : ticket.next_stage ? (
-                <>
-                  <button onClick={() => setAdvanceOpen(true)} className="btn-primary text-sm py-1.5">
-                    {ADVANCE_LABEL[ticket.next_stage.assignee_type] || 'Advance →'}
-                  </button>
-                  {ticket.assigned_by_id && (
-                    <button onClick={() => setDeclineOpen(true)} className="btn-danger text-sm py-1.5">Decline</button>
-                  )}
-                </>
               ) : (
                 <span className="text-xs text-gray-400" />
               )}
@@ -605,20 +464,6 @@ export default function TicketDetailPage() {
 
       </div>{/* /content */}
 
-      {advanceOpen && (
-        <AdvanceModal ticketId={id} users={users} nextStage={ticket.next_stage}
-          onClose={() => setAdvanceOpen(false)} onDone={(t) => applyTicket(t)} />
-      )}
-      {declineOpen && (
-        <DeclineModal ticketId={id} returnTo={ticket.assigned_by_name}
-          onClose={() => setDeclineOpen(false)} onDone={(t) => applyTicket(t)} />
-      )}
-      {reassignOpen && (
-        <ReassignModal ticketId={id}
-          mode={ticket.stage?.assignee_type === 'MANUAL' ? 'user' : 'department'}
-          users={users} departments={departments}
-          onClose={() => setReassignOpen(false)} onDone={(t) => applyTicket(t)} />
-      )}
       {confirmOpen && (
         <ConfirmModal ticketId={id} onClose={() => setConfirmOpen(false)} onDone={(t) => applyTicket(t)} />
       )}

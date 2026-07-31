@@ -93,24 +93,8 @@ function createServiceRepository(db) {
     },
 
     /**
-     * Minimal fields the assignment engine needs to advance a ticket.
-     * @param {number} id
-     */
-    findAssignment(id) {
-      return db.serviceTicket.findFirst({
-        where: active({ id }),
-        select: {
-          id: true, workflow_id: true, current_step_id: true,
-          originating_department_id: true,
-          created_by: true, created_by_name: true,
-          assigned_user_id: true, assigned_department_id: true, assigned_role_id: true,
-          assigned_by_id: true, assigned_by_name: true,
-        },
-      });
-    },
-
-    /**
-     * A department with its configured head, for reassignment routing.
+     * A department with its configured head — used when dispatching / routing a
+     * department task to its lead.
      *
      * @param {number} departmentId
      * @returns {Promise<{ id: number, name: string, head_user_id: number|null, head: { name: string }|null }|null>}

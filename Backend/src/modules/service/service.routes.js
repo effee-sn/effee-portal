@@ -9,7 +9,7 @@ const {
 } = require('./service.validation');
 const {
   getDashboard, getTickets, getInbox, getTicketById,
-  createTicket, updateTicket, advanceTicket, declineTicket, reassignTicket,
+  createTicket, updateTicket,
   confirmTicket, closeTicket, reopenTicket, deleteTicket,
 } = require('./service.controller');
 const { taskPlansParam, planParams, saveDraftBody } = require('./resolution.validation');
@@ -75,45 +75,9 @@ router.put(
   asyncHandler(updateTicket)
 );
 
-// Advance to the next stage (also the head's "accept") — record tier; only the
-// current assignee may.
-router.post(
-  '/tickets/:id/advance',
-  validate({
-    params: ticketIdParam,
-    // A non-manual stage carries no body; normalise a missing body to {} so the
-    // object schema does not reject `undefined`.
-    body: z.preprocess(
-      (v) => (v == null ? {} : v),
-      z.object({ assignee_user_id: z.coerce.number().int().positive().optional() })
-    ),
-  }),
-  asyncHandler(advanceTicket)
-);
-
-// Decline the current stage — record tier; only the current assignee may.
-router.post(
-  '/tickets/:id/decline',
-  validate({
-    params: ticketIdParam,
-    body: z.object({ reason: z.string().trim().min(1, 'A reason is required').max(2000) }),
-  }),
-  asyncHandler(declineTicket)
-);
-
-// Reassign the current stage — to a department's head or a specific person.
-// Record tier; only the current holder may.
-router.post(
-  '/tickets/:id/reassign',
-  validate({
-    params: ticketIdParam,
-    body: z.object({
-      department_id:    z.coerce.number().int().positive().optional(),
-      assignee_user_id: z.coerce.number().int().positive().optional(),
-    }).refine((b) => b.department_id || b.assignee_user_id, { message: 'Choose a department or a person' }),
-  }),
-  asyncHandler(reassignTicket)
-);
+// Ticket progression is handled by the parallel department-task actions (add /
+// dispatch / assign / resolve, under /dept-tasks below) — there is no manual
+// per-stage advance/decline/reassign on the ticket itself.
 
 // Customer confirmation → observation. Record tier.
 router.post(

@@ -228,42 +228,6 @@ function createTicketAssignment(db) {
         is_final: false,
       };
     },
-
-    /**
-     * Computes the assignment for the next stage.
-     *
-     * @param {object} ticket Must carry workflow_id, current_step_id, originating_department_id.
-     * @param {number|null} manualUserId Assignee for a MANUAL next stage.
-     * @returns {Promise<{ assignment?: object, step?: object, error?: string }>}
-     */
-    async nextAssignment(ticket, manualUserId) {
-      if (!ticket.workflow_id) return { error: 'not_in_workflow' };
-
-      const workflow = await db.workflow.findFirst({
-        where: { id: ticket.workflow_id },
-        include: { steps: { orderBy: { step_order: 'asc' }, include: stepInclude } },
-      });
-      if (!workflow) return { error: 'not_in_workflow' };
-
-      const index = workflow.steps.findIndex((s) => s.id === ticket.current_step_id);
-      const next = workflow.steps[index + 1];
-      if (!next) return { error: 'final_stage' };
-
-      if (next.assignee_type === 'MANUAL' && !manualUserId) return { error: 'manual_required' };
-
-      // Routing to the ORIGINATING department's head needs that department set
-      // first (it is what the head is resolved from). Block the advance until
-      // triage has chosen it, rather than silently landing the ticket unassigned.
-      if (next.assignee_type === 'DEPARTMENT_HEAD' && !next.assignee_department_id && !ticket.originating_department_id) {
-        return { error: 'originating_required' };
-      }
-
-      const assignment = await resolveStep(next, ticket, manualUserId);
-      // Whether `next` is the last stage — drives the auto-status (RESOLVED at
-      // the final stage, IN_PROGRESS otherwise).
-      const isFinal = !workflow.steps[index + 2];
-      return { assignment, step: next, isFinal };
-    },
   };
 }
 
