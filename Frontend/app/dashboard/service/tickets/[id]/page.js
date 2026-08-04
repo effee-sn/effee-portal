@@ -268,7 +268,7 @@ export default function TicketDetailPage() {
     <div className="max-w-8xl p-4 sm:p-6 pb-10 space-y-4">
       {/* Header */}
       <div className="flex items-center gap-3 flex-wrap">
-        <button onClick={() => router.back()} className="text-gray-400 hover:text-gray-600 text-sm">← Back</button>
+        <button onClick={() => router.back()} className="cursor-pointer text-gray-400 hover:text-gray-600 text-sm">← Back</button>
         <h1 className="text-lg font-semibold text-gray-800">{ticket.ticket_id}</h1>
         <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium" style={{ color: sev.color, backgroundColor: sev.bg }}>{sev.label}</span>
         <span className="text-xs font-medium" style={{ color: st.color }}>● {st.label}</span>

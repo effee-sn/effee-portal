@@ -90,7 +90,7 @@ function WorkReportInner() {
   return (
     <div className="max-w-8xl p-4 sm:p-6 pb-10 space-y-4">
       <div className="flex items-center gap-3 flex-wrap">
-        <button onClick={() => router.push(`/dashboard/service/tickets/${id}`)} className="text-gray-400 hover:text-gray-600 text-sm">← Back to ticket</button>
+        <button onClick={() => router.push(`/dashboard/service/tickets/${id}`)} className="cursor-pointer text-gray-400 hover:text-gray-600 text-sm">← Back to ticket</button>
         <h1 className="text-lg font-semibold text-gray-800">Work Report</h1>
         <span className="inline-flex items-center gap-1.5 text-xs rounded-full px-2.5 py-1 border bg-gray-50 border-gray-200 text-gray-600">
           <span className="font-medium">{task.department_name}</span>
