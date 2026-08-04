@@ -191,7 +191,7 @@ export default function DashboardLayout({ children }) {
           <div className="relative">
             <button
               onClick={() => setUserMenuOpen((v) => !v)}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold hover:ring-2 hover:ring-white/30 transition"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold hover:ring-2 hover:ring-white/30 transition cursor-pointer"
               style={{ backgroundColor: '#875A7B' }}
               aria-label="Open user menu"
             >
@@ -203,7 +203,7 @@ export default function DashboardLayout({ children }) {
                   <p className="text-sm font-semibold text-gray-800 truncate">{me?.name}</p>
                   <p className="text-xs text-gray-400 truncate">{me?.email}</p>
                 </div>
-                <button onClick={handleLogout} className="w-full px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition text-left">Logout</button>
+                <button onClick={handleLogout} className="w-full px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition text-left cursor-pointer">Logout</button>
               </div>
             )}
           </div>
