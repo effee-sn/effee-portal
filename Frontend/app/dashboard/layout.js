@@ -249,7 +249,7 @@ export default function DashboardLayout({ children }) {
                     onClick={() => switchArea(area)}
                     className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left transition-colors ${
                       active ? 'bg-gray-100' : 'hover:bg-gray-50'
-                    }`}
+                    } cursor-pointer`}
                   >
                     <span
                       className="w-9 h-9 rounded-lg flex items-center justify-center text-white text-sm font-bold shrink-0"
