@@ -56,7 +56,7 @@ export default function ServiceInboxPage() {
         <div className="flex items-center gap-2 px-3 py-3 border-b border-gray-200 bg-white">
           {canCreate && (
             <button onClick={() => setCreating(true)}
-              className="shrink-0 px-3 py-1.5 text-sm font-medium text-white rounded-sm"
+              className="cursor-pointer shrink-0 px-3 py-1.5 text-sm font-medium text-white rounded-sm"
               style={{ backgroundColor: 'var(--ams-primary)' }}>
               New Ticket
             </button>
