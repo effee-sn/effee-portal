@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet } from '@/lib/api';
+import { UPLOADS_URL } from '@/lib/config';
 import { areaKeyForPath, visibleAreasFor } from '@/lib/navigation';
 
 /** Multi-colour apps grid, the Odoo-style "switch app" affordance. */
@@ -25,6 +26,7 @@ export default function DashboardLayout({ children }) {
   const { me, can, loading: permLoading } = usePermissions();
 
   const [companyName, setCompanyName] = useState('Effee Portal');
+  const [companyLogo, setCompanyLogo] = useState(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);     // mobile menu dropdown
   const [appsOpen, setAppsOpen] = useState(false);   // drawer mounted in the DOM
@@ -35,6 +37,7 @@ export default function DashboardLayout({ children }) {
   useEffect(() => {
     apiGet('/settings').then((s) => {
       if (s.company_name) setCompanyName(s.company_name);
+      if (s.company_logo) setCompanyLogo(`${UPLOADS_URL}${s.company_logo}`);
     }).catch(() => {});
   }, []);
 
@@ -114,6 +117,10 @@ export default function DashboardLayout({ children }) {
         </div>
 
         <div className="flex items-center gap-2 mx-2 min-w-0 shrink-0">
+          {/* Company logo (once uploaded) sits just before the company name. */}
+          {companyLogo && (
+            <img src={companyLogo} alt={companyName} className="h-6 w-auto max-w-[120px] object-contain shrink-0" />
+          )}
           <span className="text-white font-semibold text-sm truncate max-w-36">{companyName}</span>
         </div>
         <div className="w-px h-5 bg-white/20 mr-2 shrink-0" />
