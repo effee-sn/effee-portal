@@ -70,7 +70,7 @@ function WorkReportInner() {
 
   if (permLoading || loading) {
     return (
-      <div className="max-w-5xl p-4 sm:p-6 space-y-4 animate-pulse">
+      <div className="max-w-8xl p-4 sm:p-6 space-y-4 animate-pulse">
         <div className="h-7 w-56 bg-gray-200 rounded" />
         <div className="h-96 bg-gray-100 rounded-lg" />
       </div>
@@ -88,7 +88,7 @@ function WorkReportInner() {
   }
 
   return (
-    <div className="max-w-5xl p-4 sm:p-6 pb-10 space-y-4">
+    <div className="max-w-8xl p-4 sm:p-6 pb-10 space-y-4">
       <div className="flex items-center gap-3 flex-wrap">
         <button onClick={() => router.push(`/dashboard/service/tickets/${id}`)} className="text-gray-400 hover:text-gray-600 text-sm">← Back to ticket</button>
         <h1 className="text-lg font-semibold text-gray-800">Work Report</h1>
