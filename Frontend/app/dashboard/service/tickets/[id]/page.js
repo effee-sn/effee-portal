@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
-import { apiGet, apiPut, apiPost } from '@/lib/api';
+import { apiGet, apiPost } from '@/lib/api';
 import DepartmentTasks from '@/components/DepartmentTasks';
 import {
   SERVICE_LOCATIONS, TICKET_TYPES,
@@ -110,44 +110,6 @@ function ReopenModal({ ticketId, onClose, onDone }) {
   );
 }
 
-const inputCls = 'ams-input';
-const labelCls = 'block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1';
-
-// Display-first section: shows the entered data as a read view, with an Add /
-// Edit affordance for whoever can act. Only turns into a form while `active`.
-function EditableSection({ title, active, canAct, hasData, onEdit, onCancel, onSave, saving, msg, error, read, children }) {
-  const right = !canAct
-    ? <span className="text-xs text-gray-400">Read-only</span>
-    : active
-      ? (
-        <div className="flex items-center gap-2">
-          <button onClick={onCancel} className="btn-secondary text-sm py-1.5">Cancel</button>
-          <button onClick={onSave} disabled={saving} className="btn-primary text-sm py-1.5">{saving ? 'Saving…' : 'Save'}</button>
-        </div>
-      )
-      : (
-        <div className="flex items-center gap-2">
-          {msg && <span className="text-xs text-green-600">{msg}</span>}
-          <button onClick={onEdit} className="btn-secondary text-sm py-1.5">{hasData ? 'Edit' : '+ Add'}</button>
-        </div>
-      );
-
-  return (
-    <Section title={title} right={right}>
-      {active && error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm mb-4">{error}</div>}
-      {active
-        ? children
-        : hasData
-          ? read
-          : (
-            <button onClick={canAct ? onEdit : undefined} disabled={!canAct}
-              className="w-full text-left text-sm text-gray-400 hover:text-gray-600 disabled:hover:text-gray-400">
-              {canAct ? `+ Add ${title.toLowerCase()}` : 'Nothing added yet'}
-            </button>
-          )}
-    </Section>
-  );
-}
 
 export default function TicketDetailPage() {
   useAuth();
@@ -158,16 +120,10 @@ export default function TicketDetailPage() {
   const [ticket, setTicket]     = useState(null);
   const [departments, setDeps]  = useState([]);
   const [users, setUsers]       = useState([]);
-  const [work, setWork]         = useState(null);
   const [loading, setLoading]   = useState(true);
-  const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState('');
-  const [msg, setMsg]           = useState('');
   const [confirmOpen, setConfirmOpen]   = useState(false);
   const [reopenOpen, setReopenOpen]     = useState(false);
-  // Which detail section is currently in edit mode (display-first: read by
-  // default, one section editable at a time). null = everything read-only.
-  const [editSection, setEditSection]   = useState(null);
   // The parallel department tasks, reported up by DepartmentTasks so the People
   // section can render the department → lead → resolver tree and its active holder.
   const [deptTasks, setDeptTasks] = useState([]);
@@ -184,11 +140,7 @@ export default function TicketDetailPage() {
   ));
   const canAct = Boolean(ticket && (me?.is_system || can('SERVICE_EDIT') || isAssignee(ticket)));
 
-  const initWork = (t) => ({
-    site_visit_notes: t.site_visit_notes || '',
-  });
-
-  const applyTicket = (t) => { setTicket(t); setWork(initWork(t)); };
+  const applyTicket = (t) => { setTicket(t); };
 
   // Re-fetch the ticket — used after department-task changes, which can move the
   // ticket's status/holder (e.g. all resolved → the initiator).
@@ -213,30 +165,9 @@ export default function TicketDetailPage() {
     }).catch((e) => setError(e.message)).finally(() => setLoading(false));
   }, [permLoading, id]);
 
-  const changeWork = (e) => { setWork((w) => ({ ...w, [e.target.name]: e.target.value })); setMsg(''); setError(''); };
-
-  // Open a section for editing: reset the working copy from the ticket so an
-  // earlier cancelled edit never leaks in, then reveal that section's form.
-  const openEdit = (section) => { setWork(initWork(ticket)); setError(''); setMsg(''); setEditSection(section); };
-  const cancelEdit = () => { setWork(initWork(ticket)); setError(''); setEditSection(null); };
-
-  // Persist just the given fields (one section at a time).
-  const persist = async (payload) => {
-    setSaving(true); setError(''); setMsg('');
-    try {
-      const res = await apiPut(`/service/tickets/${id}`, payload);
-      applyTicket(res.data);
-      setEditSection(null);
-      setMsg('Saved');
-    } catch (e) { setError(e.message); }
-    finally { setSaving(false); }
-  };
-
-  const saveFindings = () => persist({ site_visit_notes: work.site_visit_notes });
-
   const doClose = async () => {
     if (!window.confirm('Close this ticket? Observation is complete.')) return;
-    setError(''); setMsg('');
+    setError('');
     try { const res = await apiPost(`/service/tickets/${id}/close`); applyTicket(res.data); }
     catch (e) { setError(e.message); }
   };
@@ -276,6 +207,8 @@ export default function TicketDetailPage() {
           <span className="text-xs font-semibold text-red-600" title="Times reopened">↻ {ticket.reopened_count}×</span>
         )}
       </div>
+
+      {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm">{error}</div>}
 
       {/* Assignment / stage / people-chain */}
       <div className="bg-white rounded-lg border border-gray-200 px-5 py-3 space-y-3">
@@ -431,36 +364,17 @@ export default function TicketDetailPage() {
         onTasksLoaded={handleTasksLoaded}
       />
 
-      {/* Status & Findings — status is flow-driven (read-only); the holder can
-          record ticket-level findings (e.g. from a site visit). */}
-      <EditableSection
-        title="Status & Findings"
-        active={editSection === 'findings'}
-        canAct={canAct}
-        hasData
-        onEdit={() => openEdit('findings')} onCancel={cancelEdit} onSave={saveFindings}
-        saving={saving} msg={msg} error={error}
-        read={
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <Field label="Status">{STATUS_STYLE[ticket.status]?.label || ticket.status}</Field>
-              <Field label="Customer Confirmed">
-                {ticket.customer_confirmed === true ? 'Yes' : ticket.customer_confirmed === false ? 'No' : 'Pending'}
-              </Field>
-            </div>
-            {ticket.site_visit_notes && (
-              <Field label="Site Visit Notes"><p className="whitespace-pre-wrap">{ticket.site_visit_notes}</p></Field>
-            )}
-            <p className="text-[11px] text-gray-400">Status updates automatically as the ticket moves through the flow.</p>
-          </div>
-        }
-      >
-        <div>
-          <label className={labelCls}>Site Visit Notes</label>
-          <textarea name="site_visit_notes" value={work.site_visit_notes} onChange={changeWork} rows={3}
-            placeholder="Findings recorded on site…" className={inputCls + ' resize-none'} />
+      {/* Status — flow-driven, read-only. Site findings are now captured per
+          department, in each department task's plan / report. */}
+      <Section title="Status">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <Field label="Status">{STATUS_STYLE[ticket.status]?.label || ticket.status}</Field>
+          <Field label="Customer Confirmed">
+            {ticket.customer_confirmed === true ? 'Yes' : ticket.customer_confirmed === false ? 'No' : 'Pending'}
+          </Field>
         </div>
-      </EditableSection>
+        <p className="text-[11px] text-gray-400 mt-3">Status updates automatically as the ticket moves through the flow.</p>
+      </Section>
 
       </div>{/* /content */}
 

@@ -113,11 +113,8 @@ const updateTicketBody = z.object({
   impact_details:            optionalText(5000),
 
   // Service location (where the machine is handled) is editable post-intake.
-  // The resolution METHOD lives per department task, not on the ticket.
+  // The resolution METHOD + findings live per department task, not on the ticket.
   service_location:          serviceLocation,
-
-  // Free-text findings recorded against the ticket (e.g. on a site visit).
-  site_visit_notes:   optionalText(5000),
 
   // status, customer_confirmed and observation_until are flow-driven only —
   // set by the workflow actions, never by a manual update.

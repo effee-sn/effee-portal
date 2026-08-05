@@ -327,10 +327,8 @@ function createServiceService(repository) {
         // Impact
         'impact_details',
         // Service location (where the machine is handled). The resolution method
-        // is per department task, not on the ticket.
+        // + findings are per department task, not on the ticket.
         'service_location',
-        // Free-text findings recorded against the ticket (e.g. on a site visit).
-        'site_visit_notes',
         // NOTE: status, customer_confirmed and observation_until are NOT here —
         // they are driven by the workflow actions (advance/confirm/close/reopen),
         // never set by a manual update.

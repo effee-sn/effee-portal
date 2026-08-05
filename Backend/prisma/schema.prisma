@@ -354,8 +354,6 @@ model ServiceTicket {
   /// resolution method (remote / site visit) is decided later, per department,
   /// on each TicketDepartmentTask.
   service_location ServiceLocation?
-  /// Free-text findings recorded against the ticket (e.g. on a site visit).
-  site_visit_notes String? @db.Text
 
   /// Customer confirmation of resolution. Null = pending, true = confirmed,
   /// false = rejected (moves to observation / reopen).
