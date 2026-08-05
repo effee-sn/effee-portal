@@ -35,7 +35,7 @@ function createServiceRepository(db) {
     // Impacts
     impact_details: true,
     // Resolution
-    support_type: true,
+    service_location: true,
     site_visit_notes: true,
     customer_confirmed: true,
     observation_until: true,

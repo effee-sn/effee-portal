@@ -49,7 +49,12 @@ const redirectBody = z.object({
   technical_category: optionalCategory,
 });
 
+/** `PUT …/dept-tasks/:taskId/method` — the department's resolution method. */
+const methodBody = z.object({
+  resolution_method: z.enum(['REMOTE', 'SITE_VISIT']),
+});
+
 module.exports = {
   ticketIdParam, taskParams, addTaskBody, updateTaskBody,
-  assignResolverBody, submitBody, resolveBody, declineBody, redirectBody, reportBody,
+  assignResolverBody, submitBody, resolveBody, declineBody, redirectBody, reportBody, methodBody,
 };

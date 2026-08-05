@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
+import { RESOLUTION_METHODS } from '@/lib/serviceOptions';
 
 // BlockNote is browser-only — never render it on the server.
 const PlanEditor = dynamic(() => import('@/components/BlockEditor'), {
@@ -76,6 +77,18 @@ function ResolutionPlanInner() {
   const hasOpenDraft = plans.some((p) => p.status === 'DRAFT');
 
   const selectPlan = (p) => { setSelectedId(p.id); setTitle(p.title ?? ''); setMsg(''); setError(''); };
+
+  // Save the department's resolution method (Remote / Site Visit) onto the task.
+  // Required before the lead can assign a resolver or resolve the issue.
+  const saveMethod = async (value) => {
+    setError(''); setMsg('');
+    try {
+      const res = await apiPut(`/service/tickets/${id}/dept-tasks/${taskId}/method`, { resolution_method: value });
+      const updated = (res.data || []).find((t) => String(t.id) === String(taskId));
+      if (updated) setTask(updated);
+      setMsg('Resolution method saved');
+    } catch (e) { setError(e.message); }
+  };
 
   // Start a fresh draft (or open the existing one).
   const startDraft = async () => {
@@ -192,6 +205,29 @@ function ResolutionPlanInner() {
       </div>
 
       {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm">{error}</div>}
+
+      {/* Resolution method — decided by the lead at this stage, per department.
+          Required before the issue can be assigned to a resolver or resolved. */}
+      {task && (
+        <div className="bg-white rounded-lg border border-gray-200 px-5 py-3 flex items-center gap-3 flex-wrap">
+          <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+            Resolution method <span className="text-red-500">*</span>
+          </label>
+          {canPlan ? (
+            <select value={task.resolution_method || ''} onChange={(e) => saveMethod(e.target.value)} className="ams-input max-w-xs">
+              <option value="" disabled>— Select —</option>
+              {RESOLUTION_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+          ) : (
+            <span className="text-sm text-gray-700">
+              {RESOLUTION_METHODS.find((m) => m.value === task.resolution_method)?.label || <span className="text-gray-400">Not set</span>}
+            </span>
+          )}
+          {canPlan && !task.resolution_method && (
+            <span className="text-xs text-amber-600">Required before assigning or resolving.</span>
+          )}
+        </div>
+      )}
 
       {plans.length === 0 ? (
         <div className="bg-white rounded-lg border border-gray-200 px-5 py-10 text-center">

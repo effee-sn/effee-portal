@@ -27,17 +27,17 @@ datasource db {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Role {
-  id              Int              @id @default(autoincrement())
-  name            String           @unique
-  slug            String           @unique
-  description     String?
-  is_system       Boolean          @default(false)
+  id          Int     @id @default(autoincrement())
+  name        String  @unique
+  slug        String  @unique
+  description String?
+  is_system   Boolean @default(false)
 
-  created_at      DateTime         @default(now())
-  updated_at      DateTime         @updatedAt
-  deleted_at      DateTime?
-  created_by      Int?
-  updated_by      Int?
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+  created_by Int?
+  updated_by Int?
 
   users           User[]
   rolePermissions RolePermission[]
@@ -48,28 +48,28 @@ model Role {
 }
 
 model User {
-  id                  Int                  @id @default(autoincrement())
-  name                String
-  email               String               @unique
-  phone               String?              @unique
-  password            String
-  role                Role                 @relation(fields: [role_id], references: [id])
-  role_id             Int
-  status              UserStatus           @default(ACTIVE)
-  is_verified         Boolean              @default(false)
+  id          Int        @id @default(autoincrement())
+  name        String
+  email       String     @unique
+  phone       String?    @unique
+  password    String
+  role        Role       @relation(fields: [role_id], references: [id])
+  role_id     Int
+  status      UserStatus @default(ACTIVE)
+  is_verified Boolean    @default(false)
 
   // Organisation placement. `department` is a real relation so a user's
   // department name can be shown without a manual lookup; `designation` is
   // free text (e.g. "Senior Engineer"). Both optional.
-  department          Department?          @relation("DepartmentMembers", fields: [department_id], references: [id])
-  department_id       Int?
-  designation         String?
+  department    Department? @relation("DepartmentMembers", fields: [department_id], references: [id])
+  department_id Int?
+  designation   String?
 
-  created_at          DateTime             @default(now())
-  updated_at          DateTime             @updatedAt
-  deleted_at          DateTime?
-  created_by          Int?
-  updated_by          Int?
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+  created_by Int?
+  updated_by Int?
 
   passwordResetTokens PasswordResetToken[]
   // Departments this user is the head of, and workflow steps assigned to them.
@@ -95,23 +95,23 @@ enum UserStatus {
 
 /// Organisational department. Users optionally belong to one.
 model Department {
-  id          Int       @id @default(autoincrement())
-  name        String    @unique
-  description String?    @db.Text
+  id          Int     @id @default(autoincrement())
+  name        String  @unique
+  description String? @db.Text
 
   // The functional lead of the department. Used by workflows that route to
   // "the head of a department" (e.g. the originating department's lead).
-  head        User?     @relation("DepartmentHead", fields: [head_user_id], references: [id])
+  head         User? @relation("DepartmentHead", fields: [head_user_id], references: [id])
   head_user_id Int?
 
-  created_at  DateTime  @default(now())
-  updated_at  DateTime  @updatedAt
-  deleted_at  DateTime?
-  created_by  Int?
-  updated_by  Int?
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+  created_by Int?
+  updated_by Int?
 
-  users       User[]         @relation("DepartmentMembers")
-  workflowSteps WorkflowStep[] @relation("StepAssigneeDepartment")
+  users              User[]          @relation("DepartmentMembers")
+  workflowSteps      WorkflowStep[]  @relation("StepAssigneeDepartment")
   originatingTickets ServiceTicket[] @relation("OriginatingTickets")
 
   @@index([deleted_at])
@@ -121,19 +121,19 @@ model Department {
 /// A workflow definition — an ordered set of stages a record moves through.
 /// Module-scoped (e.g. "service"); one workflow can be marked active per module.
 model Workflow {
-  id          Int            @id @default(autoincrement())
+  id          Int     @id @default(autoincrement())
   name        String
-  module      String         @default("service")
-  description String?        @db.Text
-  is_active   Boolean        @default(false)
+  module      String  @default("service")
+  description String? @db.Text
+  is_active   Boolean @default(false)
 
-  steps       WorkflowStep[]
+  steps WorkflowStep[]
 
-  created_at  DateTime       @default(now())
-  updated_at  DateTime       @updatedAt
-  deleted_at  DateTime?
-  created_by  Int?
-  updated_by  Int?
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+  created_by Int?
+  updated_by Int?
 
   @@index([module])
   @@index([deleted_at])
@@ -158,7 +158,7 @@ model WorkflowStep {
   assignee_department    Department? @relation("StepAssigneeDepartment", fields: [assignee_department_id], references: [id])
   assignee_department_id Int?
 
-  created_at    DateTime             @default(now())
+  created_at DateTime @default(now())
 
   @@index([workflow_id])
 }
@@ -217,32 +217,32 @@ model RolePermission {
 }
 
 model CompanySettings {
-  id                   Int      @id @default(autoincrement())
-  company_name         String   @default("Effee Portal")
-  company_logo         String?
-  company_address      String?  @db.Text
-  company_phone        String?
-  company_email        String?
-  company_website      String?
-  company_gstin        String?
+  id              Int     @id @default(autoincrement())
+  company_name    String  @default("Effee Portal")
+  company_logo    String?
+  company_address String? @db.Text
+  company_phone   String?
+  company_email   String?
+  company_website String?
+  company_gstin   String?
 
   // Stored encrypted (AES-256-GCM) — see src/lib/crypto.js. Sized generously
   // because ciphertext with its IV and auth tag is far longer than the secret.
-  smtp_host            String?
-  smtp_port            Int      @default(587)
-  smtp_user            String?
-  smtp_pass            String?  @db.Text
-  smtp_from_name       String?
-  smtp_from_email      String?
-  email_notifications  Boolean  @default(false)
+  smtp_host           String?
+  smtp_port           Int     @default(587)
+  smtp_user           String?
+  smtp_pass           String? @db.Text
+  smtp_from_name      String?
+  smtp_from_email     String?
+  email_notifications Boolean @default(false)
 
-  login_max_attempts   Int      @default(5)
-  login_window_minutes Int      @default(15)
-  max_upload_mb        Int      @default(5)
+  login_max_attempts   Int @default(5)
+  login_window_minutes Int @default(15)
+  max_upload_mb        Int @default(5)
 
-  created_at           DateTime @default(now())
-  updated_at           DateTime @updatedAt
-  updated_by           Int?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  updated_by Int?
 }
 
 model PasswordResetToken {
@@ -267,7 +267,7 @@ model PasswordResetToken {
 /// evidence of who changed what and must survive. Nothing in the application
 /// updates or deletes rows here.
 model AuditLog {
-  id          Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
   /// Actor, denormalised. Kept as a plain Int with the email copied alongside
   /// so an entry stays readable after the user record is gone — a foreign key
@@ -276,25 +276,25 @@ model AuditLog {
   actor_email String?
 
   /// Verb: CREATE, UPDATE, DELETE, LOGIN, LOGIN_FAILED, PASSWORD_RESET, ...
-  action      String
+  action String
 
   /// Target type and identifier, e.g. "User" / "42".
-  entity      String
-  entity_id   String?
+  entity    String
+  entity_id String?
 
   /// JSON payload describing the change. Stored as text rather than a JSON
   /// column because the deployment target is MariaDB, where Prisma's Json
   /// support is less reliable than on MySQL 8.
-  changes     String?  @db.Text
+  changes String? @db.Text
 
-  ip          String?
-  user_agent  String?  @db.Text
+  ip         String?
+  user_agent String? @db.Text
 
   /// Correlates an entry with the request that produced it, and therefore with
   /// the application log lines carrying the same X-Request-Id.
-  request_id  String?
+  request_id String?
 
-  created_at  DateTime @default(now())
+  created_at DateTime @default(now())
 
   @@index([entity, entity_id])
   @@index([actor_id])
@@ -308,16 +308,16 @@ model AuditLog {
 /// `id` remains the primary key. Follows the project conventions: soft delete
 /// via `deleted_at`, audit columns, and an index on every filter/sort path.
 model ServiceTicket {
-  id                Int           @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
   /// Human-readable reference, generated on creation. Unique and stable.
-  ticket_id         String        @unique
+  ticket_id String @unique
 
-  ticket_type       TicketType
+  ticket_type      TicketType
   /// Free-text source detail — captured only when ticket_type is OTHERS.
-  source_details    String?
-  company_name      String
-  company_location  String?
+  source_details   String?
+  company_name     String
+  company_location String?
 
   /// Who reported the complaint, and how to reach them — captured by the
   /// salesperson raising the ticket.
@@ -327,14 +327,14 @@ model ServiceTicket {
 
   /// When the complaint was raised. Date and time are separate fields to match
   /// the intake form; time is a plain "HH:MM" (24-hour) string.
-  complaint_date    DateTime?
-  complaint_time    String?
+  complaint_date DateTime?
+  complaint_time String?
 
   machine_project   String?
   machine_serial_no String?
 
   issue_title       String
-  issue_description  String        @db.Text
+  issue_description String        @db.Text
   issue_severity    IssueSeverity
 
   /// Internal classification — filled by the Project Manager at triage. Stored
@@ -348,17 +348,20 @@ model ServiceTicket {
   originating_department_id Int?
 
   /// Free-text description of the ticket's impact (production, customer, safety…).
-  impact_details            String? @db.Text
+  impact_details String? @db.Text
 
-  /// Resolution — how the issue is handled, and site findings when visited.
-  support_type      SupportType?
-  site_visit_notes  String?       @db.Text
+  /// Where the machine is handled — set at intake by the initiator. The actual
+  /// resolution method (remote / site visit) is decided later, per department,
+  /// on each TicketDepartmentTask.
+  service_location ServiceLocation?
+  /// Free-text findings recorded against the ticket (e.g. on a site visit).
+  site_visit_notes String? @db.Text
 
   /// Customer confirmation of resolution. Null = pending, true = confirmed,
   /// false = rejected (moves to observation / reopen).
   customer_confirmed Boolean?
   observation_until  DateTime?
-  reopened_count     Int           @default(0)
+  reopened_count     Int       @default(0)
 
   /// Workflow assignment. Set when the ticket enters a workflow on creation and
   /// updated as it advances through stages. The assignee is stored as plain ids
@@ -374,42 +377,42 @@ model ServiceTicket {
   /// Who put the ticket with its current assignee. On a decline this is who the
   /// ticket bounces back to (the PM who routed it), so the decision can be
   /// re-made. Null when the workflow assigned the stage automatically (create).
-  assigned_by_id         Int?
-  assigned_by_name       String?
+  assigned_by_id   Int?
+  assigned_by_name String?
 
   /// Why the ticket came back — a department head's decline, or a customer
   /// reopen. The plan (what was intended) and the report (what was done) now live
   /// per department task, not on the ticket.
-  decline_reason         String? @db.Text
+  decline_reason String? @db.Text
 
   /// Everyone who has been on the ticket as it moved through the flow. They
   /// retain VIEW access for the ticket's whole life (so the PM keeps tracking
   /// it after routing it onward), while only the current assignee may act.
-  participants      TicketParticipant[]
+  participants TicketParticipant[]
 
   /// Resolution plans authored on this ticket — kept for cascade delete and
   /// scoping. Each plan is now attached to a specific department task (the ticket
   /// link is retained so deleting a ticket removes its plans).
-  plans             ResolutionPlan[]
+  plans ResolutionPlan[]
 
   /// Per-department work items. A ticket can involve several departments; each
   /// gets its own task (issue note + resolution), worked in parallel. The ticket
   /// reaches customer confirmation once every task is RESOLVED.
-  department_tasks  TicketDepartmentTask[]
+  department_tasks TicketDepartmentTask[]
 
-  status            TicketStatus  @default(OPEN)
+  status TicketStatus @default(OPEN)
 
-  created_at        DateTime      @default(now())
-  updated_at        DateTime      @updatedAt
-  deleted_at        DateTime?
-  created_by        Int?
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+  created_by Int?
 
   /// Creator's name at the time of creation, denormalised so "who raised this"
   /// stays readable without a join and survives the user being removed — the
   /// same approach AuditLog takes with actor_email.
-  created_by_name   String?
+  created_by_name String?
 
-  updated_by        Int?
+  updated_by Int?
 
   @@index([status])
   @@index([issue_severity])
@@ -448,31 +451,31 @@ model TicketParticipant {
 /// intact for comparison and analysis. `content_text` mirrors the document as
 /// plain text for search and a no-editor fallback.
 model ResolutionPlan {
-  id              Int           @id @default(autoincrement())
-  ticket          ServiceTicket @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
-  ticket_id       Int
+  id        Int           @id @default(autoincrement())
+  ticket    ServiceTicket @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+  ticket_id Int
 
   /// The department task this plan belongs to. Plans are now scoped per issue:
   /// each department's lead authors (and versions) their own plan.
-  dept_task       TicketDepartmentTask? @relation(fields: [dept_task_id], references: [id], onDelete: Cascade)
-  dept_task_id    Int?
+  dept_task    TicketDepartmentTask? @relation(fields: [dept_task_id], references: [id], onDelete: Cascade)
+  dept_task_id Int?
 
-  title           String?
-  content_json    Json?
-  content_text    String?       @db.Text
-  status          PlanStatus    @default(DRAFT)
-  version         Int           @default(1)
+  title        String?
+  content_json Json?
+  content_text String?    @db.Text
+  status       PlanStatus @default(DRAFT)
+  version      Int        @default(1)
 
   /// Which plan this was cloned from (set when a reopen forks a new version).
-  parent_plan_id  Int?
+  parent_plan_id Int?
 
   created_by      Int?
   created_by_name String?
   finalized_at    DateTime?
 
-  created_at      DateTime      @default(now())
-  updated_at      DateTime      @updatedAt
-  deleted_at      DateTime?
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
 
   @@index([ticket_id])
   @@index([dept_task_id])
@@ -492,8 +495,8 @@ enum PlanStatus {
 /// lead finalises (RESOLVED). Department is stored as a plain id + denormalised
 /// name (no FK), matching the audit-field convention.
 model TicketDepartmentTask {
-  id              Int            @id @default(autoincrement())
-  ticket          ServiceTicket  @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+  id              Int           @id @default(autoincrement())
+  ticket          ServiceTicket @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
   ticket_id       Int
   department_id   Int
   department_name String?
@@ -503,25 +506,30 @@ model TicketDepartmentTask {
   technical_category String?
 
   /// What this department must check / solve (set by the PM).
-  issue_note      String         @db.Text
-  status          DeptTaskStatus @default(OPEN)
+  issue_note String         @db.Text
+  status     DeptTaskStatus @default(OPEN)
+
+  /// How this department will resolve its issue — remote or a site visit. Chosen
+  /// by the lead at the plan stage after coordinating with the customer. Required
+  /// (enforced in the service) before the task can be assigned or resolved.
+  resolution_method ResolutionMethod?
 
   /// Which reopen round this task belongs to: 0 = original, 1 = after the first
   /// reopen, and so on (set from the ticket's reopened_count when created). Lets
   /// the UI group each round's work as a separate, self-contained record.
-  cycle           Int            @default(0)
+  cycle Int @default(0)
 
   /// The department lead who owns validation/finalisation of this task.
-  lead_user_id    Int?
-  lead_name       String?
+  lead_user_id        Int?
+  lead_name           String?
   /// Current holder — the lead, or a resolver the lead handed it to.
-  assigned_user_id Int?
-  assigned_to_name String?
+  assigned_user_id    Int?
+  assigned_to_name    String?
   /// The resolver the lead assigned (so a returned task goes back to them).
-  resolver_user_id Int?
-  resolver_name    String?
+  resolver_user_id    Int?
+  resolver_name       String?
   /// A resolver has submitted their work and it awaits the lead's validation.
-  awaiting_validation Boolean     @default(false)
+  awaiting_validation Boolean @default(false)
 
   /// What was done — the resolver's/lead's report for this issue. `_json` holds
   /// the rich block-editor document; the text column is its plain-text mirror for
@@ -532,13 +540,13 @@ model TicketDepartmentTask {
 
   /// Versioned resolution plans for this issue (DRAFT / FINAL / SUPERSEDED),
   /// authored by this task's lead. Removed with the task.
-  plans           ResolutionPlan[]
+  plans ResolutionPlan[]
 
-  created_by      Int?
-  created_at      DateTime       @default(now())
-  updated_at      DateTime       @updatedAt
-  resolved_at     DateTime?
-  deleted_at      DateTime?
+  created_by  Int?
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+  resolved_at DateTime?
+  deleted_at  DateTime?
 
   @@index([ticket_id])
   @@index([assigned_user_id])
@@ -574,8 +582,16 @@ enum TicketStatus {
   REOPENED
 }
 
-enum SupportType {
+/// Where the machine is handled for a ticket — chosen at intake by the
+/// initiator. "At Effee" means the customer sends the machine in.
+enum ServiceLocation {
+  AT_CUSTOMER
+  AT_EFFEE
+}
+
+/// How a department resolves its issue — decided by the lead at the plan stage,
+/// per department task.
+enum ResolutionMethod {
   REMOTE
   SITE_VISIT
-  AT_EFFEE
 }

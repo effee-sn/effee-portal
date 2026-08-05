@@ -7,7 +7,7 @@ import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPut, apiPost } from '@/lib/api';
 import DepartmentTasks from '@/components/DepartmentTasks';
 import {
-  SUPPORT_TYPES, TICKET_TYPES,
+  SERVICE_LOCATIONS, TICKET_TYPES,
   SEVERITY_STYLE, STATUS_STYLE,
 } from '@/lib/serviceOptions';
 
@@ -410,7 +410,7 @@ export default function TicketDetailPage() {
               ? <a href={`mailto:${ticket.reported_by_email}`} className="hover:underline break-all" style={{ color: 'var(--ams-primary)' }}>{ticket.reported_by_email}</a>
               : null}
           </Field>
-          <Field label="Support Type">{SUPPORT_TYPES.find((o) => o.value === ticket.support_type)?.label}</Field>
+          <Field label="Service Location">{SERVICE_LOCATIONS.find((o) => o.value === ticket.service_location)?.label}</Field>
           <Field label="Complaint Date">{fmtDate(ticket.complaint_date)} {ticket.complaint_time}</Field>
           <Field label="Machine / Project">{ticket.machine_project}</Field>
           <Field label="Serial No">{ticket.machine_serial_no}</Field>
@@ -431,12 +431,12 @@ export default function TicketDetailPage() {
         onTasksLoaded={handleTasksLoaded}
       />
 
-      {/* Status & Findings — status is flow-driven (read-only); the holder adds
-          site-visit findings when it's a site visit. */}
+      {/* Status & Findings — status is flow-driven (read-only); the holder can
+          record ticket-level findings (e.g. from a site visit). */}
       <EditableSection
         title="Status & Findings"
         active={editSection === 'findings'}
-        canAct={canAct && ['SITE_VISIT', 'AT_EFFEE'].includes(ticket.support_type)}
+        canAct={canAct}
         hasData
         onEdit={() => openEdit('findings')} onCancel={cancelEdit} onSave={saveFindings}
         saving={saving} msg={msg} error={error}

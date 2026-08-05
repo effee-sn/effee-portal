@@ -30,7 +30,7 @@ export default function CreateTicketModal({ onClose, onCreated }) {
       reported_by: '',
       reported_by_phone: '',
       reported_by_email: '',
-      support_type: '',
+      service_location: '',
       machine_project: '',
       machine_serial_no: '',
       issue_severity: 'MEDIUM',
@@ -158,12 +158,11 @@ export default function CreateTicketModal({ onClose, onCreated }) {
                 placeholder="name@company.com" className="ams-input" />
             </div>
             <div>
-              <label className={label}>Support Type</label>
-              <select name="support_type" value={form.support_type} onChange={change} className="ams-input">
+              <label className={label}>Service Location</label>
+              <select name="service_location" value={form.service_location} onChange={change} className="ams-input">
                 <option value="">— Select —</option>
-                <option value="REMOTE">Remote (On-call)</option>
-                <option value="SITE_VISIT">Site Visit</option>
-                <option value="AT_EFFEE">At Effee</option>
+                <option value="AT_CUSTOMER">At Customer Site</option>
+                <option value="AT_EFFEE">Sent to Effee</option>
               </select>
             </div>
           </div>

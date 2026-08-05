@@ -11,10 +11,22 @@ export const TECHNICAL_CATEGORIES = [
   'Hydraulic', 'Pneumatic', 'Instrumentation', 'Other',
 ];
 
-export const SUPPORT_TYPES = [
+/**
+ * Where the machine is handled — set at intake by the initiator ("At Effee"
+ * means the customer sends the machine in). Ticket-level.
+ */
+export const SERVICE_LOCATIONS = [
+  { value: 'AT_CUSTOMER', label: 'At Customer Site' },
+  { value: 'AT_EFFEE',    label: 'Sent to Effee' },
+];
+
+/**
+ * How a department resolves its issue — chosen by the lead at the plan stage,
+ * per department task. Required before a task can be assigned or resolved.
+ */
+export const RESOLUTION_METHODS = [
   { value: 'REMOTE',     label: 'Remote (On-call)' },
   { value: 'SITE_VISIT', label: 'Site Visit' },
-  { value: 'AT_EFFEE',   label: 'At Effee' },
 ];
 
 /**

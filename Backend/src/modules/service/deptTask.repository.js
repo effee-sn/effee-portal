@@ -10,6 +10,7 @@ function createDeptTaskRepository(db) {
   const taskSelect = Object.freeze({
     id: true, ticket_id: true, department_id: true, department_name: true,
     technical_category: true, issue_note: true, status: true, cycle: true,
+    resolution_method: true,
     lead_user_id: true, lead_name: true,
     assigned_user_id: true, assigned_to_name: true,
     resolver_user_id: true, resolver_name: true,

@@ -12,10 +12,10 @@ const ticketType  = z.enum(['CALL', 'EMAIL', 'OTHERS']);
 const severity    = z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']);
 const status      = z.enum(['OPEN', 'IN_PROGRESS', 'CONTACTED', 'RESOLVED', 'ON_OBSERVATION', 'CLOSED', 'REOPENED']);
 
-/** Optional support type; a blank value is omitted. */
-const supportType = z.preprocess(
+/** Optional service location (where the machine is handled); blank is omitted. */
+const serviceLocation = z.preprocess(
   (v) => (v === '' || v === null ? undefined : v),
-  z.enum(['REMOTE', 'SITE_VISIT', 'AT_EFFEE']).optional()
+  z.enum(['AT_CUSTOMER', 'AT_EFFEE']).optional()
 );
 
 const shortText = (max) => z.string().trim().min(1).max(max);
@@ -83,7 +83,7 @@ const createTicketBody = z.object({
   issue_title:       shortText(200),
   issue_description: z.string().trim().min(1).max(5000),
   issue_severity:    severity,
-  support_type:              supportType,
+  service_location:          serviceLocation,
   impact_details:            optionalText(5000),
 }).refine((d) => d.ticket_type !== 'OTHERS' || (d.source_details && d.source_details.trim().length > 0), {
   message: 'Source details are required for an "Others" source',
@@ -112,8 +112,11 @@ const updateTicketBody = z.object({
   // Impact
   impact_details:            optionalText(5000),
 
-  // Findings (support_type is intake-only — set at creation; the plan + report
-  // are authored per department task, not on the ticket)
+  // Service location (where the machine is handled) is editable post-intake.
+  // The resolution METHOD lives per department task, not on the ticket.
+  service_location:          serviceLocation,
+
+  // Free-text findings recorded against the ticket (e.g. on a site visit).
   site_visit_notes:   optionalText(5000),
 
   // status, customer_confirmed and observation_until are flow-driven only —

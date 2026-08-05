@@ -16,8 +16,9 @@ const resolveTask   = async (req, res) => ApiResponse.ok(res, await deptTaskServ
 const declineTask   = async (req, res) => ApiResponse.ok(res, await deptTaskService.declineTask(req.params.id, req.params.taskId, req.body.reason, requestContext(req)));
 const redirectTask  = async (req, res) => ApiResponse.ok(res, await deptTaskService.redirectTask(req.params.id, req.params.taskId, req.body, requestContext(req)));
 const saveReport    = async (req, res) => ApiResponse.ok(res, await deptTaskService.saveReport(req.params.id, req.params.taskId, req.body, requestContext(req)));
+const setMethod     = async (req, res) => ApiResponse.ok(res, await deptTaskService.setMethod(req.params.id, req.params.taskId, req.body.resolution_method, requestContext(req)));
 
 module.exports = {
   listTasks, addTask, dispatchTasks, updateTask, removeTask,
-  assignResolver, submitTask, returnTask, resolveTask, declineTask, redirectTask, saveReport,
+  assignResolver, submitTask, returnTask, resolveTask, declineTask, redirectTask, saveReport, setMethod,
 };

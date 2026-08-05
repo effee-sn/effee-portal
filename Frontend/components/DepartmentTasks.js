@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
-import { TECHNICAL_CATEGORIES } from '@/lib/serviceOptions';
+import { TECHNICAL_CATEGORIES, RESOLUTION_METHODS } from '@/lib/serviceOptions';
 import useNav from '@/lib/useNav';
 
 const STATUS = {
@@ -192,12 +192,22 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
   // report (mirrors the backend guard against fake-closing). Both are authored on
   // their own pages, so the Resolve button stays greyed until both exist.
   const hasFinalPlan = (t) => (t.plans?.length ?? 0) > 0;
+  const hasMethod    = (t) => Boolean(t.resolution_method);
   const hasReport    = (t) => Boolean(t.resolution_note || t.resolution_note_json);
-  const canResolve   = (t) => hasFinalPlan(t) && hasReport(t);
+  // A resolver can be assigned once the plan is finalised AND a resolution method
+  // is chosen (both decided by the lead at the plan stage).
+  const canAssign    = (t) => hasFinalPlan(t) && hasMethod(t);
+  const assignBlocker = (t) =>
+    !hasFinalPlan(t) ? 'Finalise the resolution plan first'
+      : !hasMethod(t) ? 'Set the resolution method first'
+      : undefined;
+  // An issue can only be resolved once it has a finalised plan, a resolution
+  // method, and a saved report (mirrors the backend guard against fake-closing).
+  const canResolve   = (t) => hasFinalPlan(t) && hasMethod(t) && hasReport(t);
   const resolveBlocker = (t) =>
-    !hasFinalPlan(t) && !hasReport(t) ? 'Finalise the plan and save a report'
-      : !hasFinalPlan(t) ? 'Finalise the resolution plan'
-      : !hasReport(t)    ? 'Save a work report'
+    !hasFinalPlan(t) ? 'Finalise the resolution plan'
+      : !hasMethod(t) ? 'Set the resolution method'
+      : !hasReport(t) ? 'Save a work report'
       : undefined;
 
   // Group tasks by reopen round so each cycle reads as its own record. Headers
@@ -252,6 +262,11 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm font-medium text-gray-800">{t.department_name}</span>
                 {t.technical_category && <span className="text-xs text-gray-500 bg-gray-100 rounded px-1.5 py-0.5">{t.technical_category}</span>}
+                {t.resolution_method && (
+                  <span className="text-xs text-gray-600 bg-indigo-50 border border-indigo-100 rounded px-1.5 py-0.5">
+                    {RESOLUTION_METHODS.find((m) => m.value === t.resolution_method)?.label || t.resolution_method}
+                  </span>
+                )}
                 <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ color: s.color, backgroundColor: s.bg }}>{s.label}</span>
                 {t.assigned_to_name && t.status === 'OPEN' && (
                   <span className="text-xs text-gray-400">· with {t.assigned_to_name}{t.awaiting_validation ? ' (awaiting validation)' : ''}</span>
@@ -288,7 +303,7 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
                     </>
                   ) : (
                     <>
-                      <button onClick={() => setModal({ type: 'assign', task: t })} disabled={!hasFinalPlan(t)} title={hasFinalPlan(t) ? undefined : 'Finalise the resolution plan first'} className="btn-secondary text-xs py-1.5 disabled:opacity-40 disabled:cursor-not-allowed">Assign to person</button>
+                      <button onClick={() => setModal({ type: 'assign', task: t })} disabled={!canAssign(t)} title={assignBlocker(t)} className="btn-secondary text-xs py-1.5 disabled:opacity-40 disabled:cursor-not-allowed">Assign to person</button>
                       <button onClick={() => setModal({ type: 'resolve', task: t })} disabled={!canResolve(t)} title={resolveBlocker(t) ? `${resolveBlocker(t)} first` : undefined} className="btn-primary text-xs py-1.5 disabled:opacity-40 disabled:cursor-not-allowed">Resolve</button>
                       <button onClick={() => setModal({ type: 'decline', task: t })} className="btn-danger text-xs py-1.5">Decline</button>
                     </>
@@ -304,13 +319,15 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
                 )}
               </div>
 
-              {/* Why the assign/resolve buttons are disabled — plan not finalised
-                  blocks both; a missing report blocks only resolve. */}
+              {/* Why the assign/resolve buttons are disabled — a plan and a
+                  resolution method block both; a missing report blocks resolve. */}
               {t.status === 'OPEN' && amLead(t) && amHolder(t) && !canResolve(t) && (
                 <p className="text-[11px] text-amber-600 mt-1.5">
                   {!hasFinalPlan(t)
                     ? 'Finalise this issue’s resolution plan (below) before you can assign or resolve it.'
-                    : 'Save a work report (below) before you can resolve this issue.'}
+                    : !hasMethod(t)
+                      ? 'Set this issue’s resolution method (on the plan page) before you can assign or resolve it.'
+                      : 'Save a work report (below) before you can resolve this issue.'}
                 </p>
               )}
 
@@ -322,6 +339,10 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
                   <span className="text-[11px] font-semibold text-gray-300 uppercase tracking-wider">Docs</span>
                   <button onClick={() => nav(`/dashboard/service/tickets/${id}/plan?task=${t.id}`)} className="text-gray-500 hover:text-gray-700 font-medium">
                     Plan {hasFinalPlan(t) ? <span className="text-green-600">✓</span> : <span className="text-gray-300">→</span>}
+                  </button>
+                  {/* Resolution method is chosen on the plan page. */}
+                  <button onClick={() => nav(`/dashboard/service/tickets/${id}/plan?task=${t.id}`)} className="text-gray-500 hover:text-gray-700 font-medium">
+                    Method {hasMethod(t) ? <span className="text-green-600">✓</span> : <span className="text-gray-300">→</span>}
                   </button>
                   <button onClick={() => nav(`/dashboard/service/tickets/${id}/report?task=${t.id}`)} className="text-gray-500 hover:text-gray-700 font-medium">
                     Report {hasReport(t) ? <span className="text-green-600">✓</span> : <span className="text-gray-300">→</span>}

@@ -232,7 +232,7 @@ function createServiceService(repository) {
         reported_by:       dto.reported_by,
         reported_by_phone: dto.reported_by_phone ?? null,
         reported_by_email: dto.reported_by_email ?? null,
-        support_type:      dto.support_type ?? null,
+        service_location:  dto.service_location ?? null,
         complaint_date:    dto.complaint_date ?? null,
         complaint_time:    dto.complaint_time ?? null,
         machine_project:   dto.machine_project ?? null,
@@ -326,8 +326,10 @@ function createServiceService(repository) {
         'technical_category', 'originating_department_id',
         // Impact
         'impact_details',
-        // Findings (support_type is intake-only; the plan + report are per
-        // department task, not on the ticket).
+        // Service location (where the machine is handled). The resolution method
+        // is per department task, not on the ticket.
+        'service_location',
+        // Free-text findings recorded against the ticket (e.g. on a site visit).
         'site_visit_notes',
         // NOTE: status, customer_confirmed and observation_until are NOT here —
         // they are driven by the workflow actions (advance/confirm/close/reopen),
@@ -336,10 +338,10 @@ function createServiceService(repository) {
         if (dto[field] !== undefined) data[field] = dto[field];
       }
 
-      // Field-level ownership: classification (including support type) is a
-      // triage responsibility. Once the ticket has been routed onward the
-      // classification is frozen, so a later holder (the lead, the resolver)
-      // cannot rewrite it. Admins excepted.
+      // Field-level ownership: classification (technical category + originating
+      // department) is a triage responsibility. Once the ticket has been routed
+      // onward the classification is frozen, so a later holder (the lead, the
+      // resolver) cannot rewrite it. Admins excepted.
       const caps = await ticketAssignment.peekNext(existing);
       const mayClassify = actor?.is_system || !caps.stage || caps.stage.can_classify;
       if (!mayClassify) {

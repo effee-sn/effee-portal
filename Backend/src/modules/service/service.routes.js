@@ -120,6 +120,8 @@ router.post('/tickets/:id/dept-tasks/:taskId/decline', validate({ params: dt.tas
 router.post('/tickets/:id/dept-tasks/:taskId/redirect', validate({ params: dt.taskParams, body: dt.redirectBody }), asyncHandler(dtc.redirectTask));
 // The rich work report for one issue — authored by the task's current holder.
 router.put('/tickets/:id/dept-tasks/:taskId/report', validate({ params: dt.taskParams, body: dt.reportBody }), asyncHandler(dtc.saveReport));
+// The department's resolution method (Remote / Site Visit) — set by the lead.
+router.put('/tickets/:id/dept-tasks/:taskId/method', validate({ params: dt.taskParams, body: dt.methodBody }), asyncHandler(dtc.setMethod));
 
 // ── Resolution plans — scoped per department task (record tier) ───────────────
 // Viewing follows canView; authoring/finalising/cloning is the task LEAD only —

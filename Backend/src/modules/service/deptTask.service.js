@@ -209,6 +209,10 @@ function createDeptTaskService(repository, tickets) {
       if (!(Array.isArray(task.plans) && task.plans.length > 0)) {
         throw new BadRequestError('Finalise this issue’s resolution plan before assigning it to someone');
       }
+      // …and decide how it will be resolved (remote / site visit).
+      if (!task.resolution_method) {
+        throw new BadRequestError('Set this issue’s resolution method (Remote / Site Visit) before assigning it');
+      }
 
       const target = await tickets.findUserById(assigneeUserId);
       if (!target) throw new ValidationError('Validation failed', [{ field: 'assignee_user_id', message: 'User does not exist' }]);
@@ -273,6 +277,9 @@ function createDeptTaskService(repository, tickets) {
       if (!hasFinalPlan) {
         throw new BadRequestError('Finalise this issue’s resolution plan before resolving it');
       }
+      if (!task.resolution_method) {
+        throw new BadRequestError('Set this issue’s resolution method (Remote / Site Visit) before resolving it');
+      }
       const report = resolutionNote ?? task.resolution_note;
       const hasReport = Boolean((report && String(report).trim()) || task.resolution_note_json);
       if (!hasReport) {
@@ -307,6 +314,23 @@ function createDeptTaskService(repository, tickets) {
         ...(resolution_note_json !== undefined ? { resolution_note_json } : {}),
       });
       await rec('DEPT_TASK_REPORTED', taskId, user, { ticket_id: ticketId });
+      return repository.listForTicket(ticketId);
+    },
+
+    /**
+     * Sets how this department will resolve its issue (Remote / Site Visit).
+     * Decided by the lead at the plan stage; required before the task can be
+     * assigned or resolved. Frozen once the issue leaves OPEN.
+     */
+    async setMethod(ticketId, taskId, resolutionMethod, user) {
+      await ticketForView(ticketId, user);
+      const task = await taskOfTicket(ticketId, taskId);
+      if (task.status !== 'OPEN') {
+        throw new BadRequestError('This issue is closed — its resolution method can no longer be changed');
+      }
+      assertHolds(user, task);
+      await repository.update(taskId, { resolution_method: resolutionMethod });
+      await rec('DEPT_TASK_METHOD_SET', taskId, user, { ticket_id: ticketId, method: resolutionMethod });
       return repository.listForTicket(ticketId);
     },
 
