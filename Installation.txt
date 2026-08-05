@@ -1,100 +1,197 @@
-Effee Portal — Installation Guide
-Prerequisites
-Make sure the following are installed on the machine before starting:
+Effee Portal — Installation & Deployment Guide
+==============================================
 
-Software	Version	Download
-Node.js	v18 or higher	nodejs.org
-MySQL	v8.0 or higher	mysql.com
-Git	Any	git-scm.com
-Step 1 — Get the project
+Effee Portal is a service-ticketing platform with role-based access control.
+The frontend (Next.js) and backend (Express + Prisma) run as two separate apps
+that talk over REST.
 
-# Clone or copy the project folder to your machine
-# If you have a zip, extract it. If git:
-git clone <repo-url> ams
-cd ams
-Step 2 — Create the MySQL database
-Log into MySQL and create an empty database:
+There is NO web install wizard. Setup is: create an empty database, fill in an
+environment file, run the setup/seed script, then start the two apps.
 
 
-CREATE DATABASE ams CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-Just create the database — leave it empty. The installer fills the tables.
-
-Step 3 — Install backend dependencies
-
-cd backend
-npm install
-Step 4 — Install frontend dependencies
-
-cd ../frontend
-npm install
-Step 5 — Create the frontend environment file
-Inside the frontend folder, create a file named .env.local:
+1. Prerequisites
+----------------
+  Node.js      v18 or higher         https://nodejs.org
+  MySQL 8+  or MariaDB 10.4+          https://mysql.com  /  https://mariadb.org
+  Git          any                   https://git-scm.com
 
 
-NEXT_PUBLIC_API_URL=http://localhost:4000/api
-Change localhost:4000 to your server's IP/domain if deploying on a remote server.
+2. Get the project
+------------------
+  git clone <repo-url> effeeportal
+  cd effeeportal
 
-Step 6 — Start the backend
-
-cd ../backend
-npm run dev
-You should see:
-
-
-Server running on port 4000
-Step 7 — Start the frontend
-Open a second terminal:
+  Folder layout:
+    Backend/    the API      (Express + Prisma)
+    Frontend/   the web app  (Next.js)
 
 
-cd frontend
-npm run dev
-You should see:
+3. Create the database
+----------------------
+Create an EMPTY database — the setup step creates all the tables.
+
+  mysql -u root -e "CREATE DATABASE effeeportal CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
 
-Local: http://localhost:3000
-Step 8 — Run the installation wizard
-Open your browser and go to:
+4. Configure the backend
+------------------------
+  cd Backend
+  cp .env.example .env
+
+Then edit .env. Key values:
+
+  DATABASE_URL       mysql://user:password@localhost:3306/effeeportal   (required)
+  JWT_SECRET         a random string, at least 32 characters            (required)
+                     generate one with:
+                     node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+  NODE_ENV           development (local) or production (server)
+  PORT               4000 by default
+  ALLOWED_ORIGIN     comma-separated browser origins allowed to call the API
+                     (e.g. http://localhost:3000, or your site URL in production)
+  TRUST_PROXY_HOPS   number of reverse proxies in front (0 = direct, 1 = behind nginx)
+
+  Seeding — bootstrap Super Admin account:
+  SEED_ADMIN_EMAIL       the admin login email
+  SEED_ADMIN_PASSWORD    leave blank in development (a random password is printed
+                         once); REQUIRED when NODE_ENV=production
+  SEED_ADMIN_PHONE       optional
+
+  Browser push (optional — see section 8):
+  VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT
 
 
-http://localhost:3000
-You will be automatically redirected to the install page. Follow the 5 steps:
+5. Install and set up the backend
+---------------------------------
+  cd Backend
+  npm install
+  npm run setup        # prisma generate + db push + seed
 
-Welcome — confirms system requirements pass (Node version, write permissions)
-Database — enter your MySQL details and click Test Connection to verify
-Configuration — click Generate for the JWT secret, set expiry and port
-Super Admin — enter the admin account name, email and password you want to use
-Review & Install — confirm everything looks correct, click Run Installation
-The installer will:
+  IMPORTANT: npm may block package install scripts, so `npm install` on its own
+  does NOT generate the Prisma client. `npm run setup` runs `prisma generate`
+  explicitly, so use it. If you ever see "@prisma/client did not initialize yet",
+  run `npx prisma generate`.
 
-Write your .env configuration file
-Create all database tables (prisma db push)
-Seed default roles, permissions, departments, categories
-Create your super admin account
-Step 9 — Restart the backend
-After the installer finishes it will say "Restart the backend server". Do that now:
+  The seeder prints a randomly generated Super Admin password ONCE (when
+  SEED_ADMIN_PASSWORD is not set). Copy it now — it is stored nowhere else.
 
-
-# Stop the backend (Ctrl+C), then start it again
-npm run dev
-This is required so the backend loads the new .env with your database URL and JWT secret.
-
-Step 10 — Log in
-Go to:
+  Start the backend:
+    npm run dev          # development, auto-reload  → http://localhost:4000
+    # or
+    npm start            # plain start
 
 
-http://localhost:3000/login
-Use the email and password you set in Step 8.
+6. Configure and start the frontend
+------------------------------------
+  cd ../Frontend
+  npm install
+
+  Create a file named .env.local inside the Frontend folder:
+    NEXT_PUBLIC_API_URL=http://localhost:4000/api
+    NEXT_PUBLIC_UPLOADS_URL=http://localhost:4000
+  (Change localhost to your server's domain/IP when deploying remotely.)
+
+  Start the frontend:
+    npm run dev          # development  → http://localhost:3000
+    # or, for production:
+    npm run build
+    npm start
+
+
+7. Log in
+---------
+Open http://localhost:3000 and log in with SEED_ADMIN_EMAIL and the password the
+seeder printed (or the one you set in SEED_ADMIN_PASSWORD).
+
+
+8. Notifications & browser push (optional)
+------------------------------------------
+In-app notifications (the bell in the top bar) work out of the box — no setup.
+
+Browser push (desktop notifications, even when the portal tab is closed) is
+optional and needs three things:
+
+  a) The web-push package — already in package.json, installed by `npm install`.
+
+  b) VAPID keys in the backend .env. Generate a pair:
+       node -e "console.log(require('web-push').generateVAPIDKeys())"
+     then set and restart the backend:
+       VAPID_PUBLIC_KEY=<publicKey>
+       VAPID_PRIVATE_KEY=<privateKey>
+       VAPID_SUBJECT=mailto:you@yourdomain.com     (a real contact you own)
+
+  c) HTTPS. Browsers only allow push on a secure origin (HTTPS); the only
+     exception is localhost. Over plain HTTP the "Enable desktop notifications"
+     option does not appear — but in-app notifications still work.
+
+If the VAPID keys are absent, push is simply disabled; in-app notifications are
+unaffected.
+
+
+9. Production deployment
+------------------------
+On the server (Node, MySQL/MariaDB, a process manager such as PM2, and a reverse
+proxy such as nginx are assumed):
+
+  cd Backend
+  npm install                 # installs deps — run whenever a release adds one
+  # ensure .env has: NODE_ENV=production, a strong JWT_SECRET, DATABASE_URL,
+  # SEED_ADMIN_PASSWORD, and (optionally) the VAPID keys
+  npm run deploy              # prisma generate + prisma migrate deploy + seed
+  pm2 restart effee-api      # first time: pm2 start src/server.js --name effee-api
+
+  cd ../Frontend
+  npm install
+  npm run build
+  pm2 restart effee-web      # first time: pm2 start "npm start" --name effee-web
+
+  Notes:
+   - `npm run deploy` runs the SEEDER, which re-asserts the built-in roles'
+     permissions (super-admin / admin / manager / staff). If you customised a
+     built-in role's permissions in the UI and don't want them reset, run
+     migrations only instead:
+         npx prisma generate && npx prisma migrate deploy
+     Custom roles created in the UI are never touched by the seeder.
+   - `npm install` is NOT part of the deploy script. Run it whenever a release
+     adds a dependency (e.g. web-push), or the API fails to boot with
+     "Cannot find module".
+   - Always restart BOTH effee-api and effee-web after a deploy.
+   - Serve the site over HTTPS — required for secure logins and for browser push.
+
 
 Ports (defaults)
-Service	Port
-Backend API	4000
-Frontend	3000
-MySQL	3306
+----------------
+  Backend API      4000
+  Frontend         3000
+  MySQL / MariaDB  3306
+
+
 Troubleshooting
-"Cannot connect to database" — Check MySQL is running and the database name/credentials are correct. Make sure the database exists (Step 2).
+---------------
+"@prisma/client did not initialize yet" / Prisma client errors
+    `npm install` didn't run `prisma generate` (blocked install scripts).
+    Run: npx prisma generate      (or `npm run setup`).
 
-"Application not configured" — The backend is running but the install hasn't been completed yet. Go to http://localhost:3000 to run the wizard.
+"Cannot connect to database"
+    MySQL/MariaDB not running, wrong DATABASE_URL, or the database doesn't exist.
+    Create it (section 3) and check the credentials.
 
-Page keeps redirecting to /install after restart — The .installed lock file is missing. The install may not have completed. Re-run the wizard.
+"Cannot find module 'web-push'"  (backend won't start after a pull)
+    A dependency was added but not installed on this machine.
+    Run: npm install   in Backend, then restart.
 
-Backend crashes after restart — Check the .env file inside the backend folder was written correctly. It should contain DATABASE_URL, JWT_SECRET and PORT.
+Migration failed / P3009 "migrate found a failed migration"
+    One-time recovery, then re-deploy:
+      npx prisma migrate resolve --rolled-back <migration_name>
+      npx prisma migrate deploy
+
+500 errors right after a deploy (e.g. "unknown column")
+    The database migrated but the old backend process is still running.
+    Restart it: pm2 restart effee-api      (and effee-web).
+
+"Enable desktop notifications" does not appear
+    Browser push needs HTTPS (localhost excepted) AND the VAPID keys (section 8).
+    Over plain HTTP, only in-app notifications are available.
+
+Config error aborts startup in production
+    A required or weak value (e.g. JWT_SECRET under 32 characters). Fix the .env
+    value; production treats config problems as fatal (a warning only in dev).
