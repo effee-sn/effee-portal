@@ -7,6 +7,7 @@ import usePermissions from '@/lib/usePermissions';
 import { apiGet } from '@/lib/api';
 import { UPLOADS_URL } from '@/lib/config';
 import { areaKeyForPath, visibleAreasFor } from '@/lib/navigation';
+import NotificationBell from '@/components/NotificationBell';
 
 /** Multi-colour apps grid, the Odoo-style "switch app" affordance. */
 function WaffleIcon() {
@@ -185,8 +186,13 @@ export default function DashboardLayout({ children }) {
           </div>
         )}
 
+        {/* Notifications */}
+        <div className="ml-2 shrink-0">
+          <NotificationBell />
+        </div>
+
         {/* User menu */}
-        <div className="flex items-center gap-1 ml-2 shrink-0" ref={menuRef}>
+        <div className="flex items-center gap-1 ml-1 shrink-0" ref={menuRef}>
           <span className="text-white/60 text-xs hidden lg:block px-1 max-w-32 truncate">{me?.name}</span>
           <div className="relative">
             <button

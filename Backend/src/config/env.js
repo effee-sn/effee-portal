@@ -115,6 +115,18 @@ const config = Object.freeze({
    * raising it later is safe because the cost is embedded in each stored hash.
    */
   BCRYPT_ROUNDS: integer('BCRYPT_ROUNDS', 12),
+
+  /**
+   * Web Push (VAPID) credentials for browser notifications. All optional — when
+   * a key is absent, push is simply disabled (in-app notifications still work),
+   * so development and un-configured environments boot fine. Generate a pair
+   * with: `node -e "console.log(require('web-push').generateVAPIDKeys())"`.
+   */
+  WEB_PUSH: {
+    PUBLIC_KEY:  process.env.VAPID_PUBLIC_KEY || '',
+    PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY || '',
+    SUBJECT:     process.env.VAPID_SUBJECT || 'mailto:admin@example.com',
+  },
 });
 
 if (problems.length > 0) {

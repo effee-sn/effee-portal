@@ -302,6 +302,54 @@ model AuditLog {
   @@index([created_at])
 }
 
+/// An in-app notification for a single user.
+///
+/// One row per recipient (a hand-off that concerns three people writes three
+/// rows). `user_id` is a plain Int, matching AuditLog: recipients are only ever
+/// looked up, never joined for display, and users are soft-deleted so no row is
+/// ever orphaned by a hard delete.
+model Notification {
+  id      Int @id @default(autoincrement())
+  user_id Int
+
+  /// Event verb, e.g. TICKET_ASSIGNED, DEPT_TASK_ASSIGNED, DEPT_TASK_SUBMITTED.
+  type  String
+  title String
+  body  String? @db.Text
+
+  /// What the notification points at, and where clicking it should go.
+  entity_type String?
+  entity_id   String?
+  link        String?
+
+  /// Null until the recipient has seen it. Drives the unread badge.
+  read_at    DateTime?
+  created_at DateTime  @default(now())
+
+  // Covers "my unread, newest first" and "my recent, newest first".
+  @@index([user_id, read_at])
+  @@index([user_id, created_at])
+}
+
+/// A browser's Web Push subscription for a user. One per device/browser, keyed
+/// by its unique push `endpoint`. Dead subscriptions (the browser unsubscribed
+/// or expired) are pruned when a send returns 404/410.
+model PushSubscription {
+  id       Int    @id @default(autoincrement())
+  user_id  Int
+  /// The push service URL — unique per subscription; the natural upsert key.
+  /// Bounded so the unique index is valid on MySQL (within the 3072-byte limit).
+  endpoint String @unique @db.VarChar(500)
+  /// Encryption material returned by the browser at subscribe time.
+  p256dh   String @db.Text
+  auth     String @db.Text
+
+  user_agent String?  @db.Text
+  created_at DateTime @default(now())
+
+  @@index([user_id])
+}
+
 /// A service-desk ticket. First entity of the Service module.
 ///
 /// `ticket_id` is the human-facing reference (e.g. SRV-000042); the numeric

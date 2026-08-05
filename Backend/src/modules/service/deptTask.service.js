@@ -3,7 +3,16 @@ const { serviceRepository } = require('./service.repository');
 const { ticketAssignment } = require('./ticketAssignment');
 const { canView, hasPermission } = require('./ticketPolicy');
 const { auditService } = require('../audit/audit.service');
+const { notificationService } = require('../notification/notification.service');
 const { NotFoundError, ForbiddenError, BadRequestError, ValidationError } = require('../../core');
+
+/** Deep link to a ticket, for a notification's click target. */
+const ticketLink = (ticketId) => `/dashboard/service/tickets/${ticketId}`;
+/** Trims a free-text snippet for a notification body. */
+const snippet = (text, max = 80) => {
+  const t = String(text ?? '').trim();
+  return t.length > max ? `${t.slice(0, max)}…` : t;
+};
 
 /**
  * Multi-department task business logic.
@@ -97,6 +106,13 @@ function createDeptTaskService(repository, tickets) {
       assigned_to_name: ticket.created_by_name ? `${ticket.created_by_name} (initiator)` : null,
     });
     if (ticket.created_by) await tickets.addParticipant(ticketId, ticket.created_by, ticket.created_by_name, 'Customer confirmation');
+    await notificationService.notify({
+      userIds: [ticket.created_by],
+      type: notificationService.Type.TICKET_READY_CONFIRMATION,
+      title: 'Ready for customer confirmation',
+      body: `${ticket.ticket_id}: all departments have resolved their issues — confirm with the customer.`,
+      entityType: 'ServiceTicket', entityId: ticketId, link: ticketLink(ticketId),
+    });
   }
 
   const rec = (action, taskId, user, changes) =>
@@ -141,6 +157,13 @@ function createDeptTaskService(repository, tickets) {
       if (dispatched) {
         await tickets.addParticipant(ticketId, dept.head_user_id, dept.head?.name ?? null, `${dept.name} task`);
         await syncTicket(ticketId);
+        await notificationService.notify({
+          userIds: [dept.head_user_id],
+          type: notificationService.Type.DEPT_TASK_DISPATCHED,
+          title: `New issue for ${dept.name}`,
+          body: `${ticket.ticket_id}: “${snippet(issue_note)}” — write the resolution plan.`,
+          entityType: 'ServiceTicket', entityId: ticketId, link: ticketLink(ticketId), actorId: user?.id,
+        });
       }
       await rec('DEPT_TASK_ADDED', task.id, user, { ticket_id: ticketId, department: dept.name });
       return repository.listForTicket(ticketId);
@@ -190,6 +213,13 @@ function createDeptTaskService(repository, tickets) {
           assigned_user_id: dept.head_user_id, assigned_to_name: `${dept.head?.name ?? 'Head'} (${dept.name} lead)`,
         });
         await tickets.addParticipant(ticketId, dept.head_user_id, dept.head?.name ?? null, `${dept.name} task`);
+        await notificationService.notify({
+          userIds: [dept.head_user_id],
+          type: notificationService.Type.DEPT_TASK_DISPATCHED,
+          title: `New issue for ${dept.name}`,
+          body: `${ticket.ticket_id}: “${snippet(t.issue_note)}” — write the resolution plan.`,
+          entityType: 'ServiceTicket', entityId: ticketId, link: ticketLink(ticketId), actorId: user?.id,
+        });
       }
       await tickets.update(ticketId, { status: 'IN_PROGRESS', current_step_id: null });
       await syncTicket(ticketId);
@@ -199,7 +229,7 @@ function createDeptTaskService(repository, tickets) {
 
     /** Lead hands the task to a resolver in their department. */
     async assignResolver(ticketId, taskId, assigneeUserId, user) {
-      await ticketForView(ticketId, user);
+      const ticket = await ticketForView(ticketId, user);
       const task = await taskOfTicket(ticketId, taskId);
       assertHolds(user, task);
       if (task.status !== 'OPEN') throw new BadRequestError('This task is not open');
@@ -231,13 +261,20 @@ function createDeptTaskService(repository, tickets) {
         assigned_user_id: target.id, assigned_to_name: target.name, awaiting_validation: false,
       });
       await tickets.addParticipant(ticketId, target.id, target.name, `${task.department_name} resolver`);
+      await notificationService.notify({
+        userIds: [target.id],
+        type: notificationService.Type.DEPT_TASK_ASSIGNED,
+        title: `Assigned to you: ${task.department_name} issue`,
+        body: `${ticket.ticket_id}: resolve “${snippet(task.issue_note)}”.`,
+        entityType: 'ServiceTicket', entityId: ticketId, link: ticketLink(ticketId), actorId: user?.id,
+      });
       await rec('DEPT_TASK_ASSIGNED', taskId, user, { ticket_id: ticketId, to: target.name });
       return repository.listForTicket(ticketId);
     },
 
     /** Resolver submits their work back to the lead for validation. */
     async submit(ticketId, taskId, resolutionNote, user) {
-      await ticketForView(ticketId, user);
+      const ticket = await ticketForView(ticketId, user);
       const task = await taskOfTicket(ticketId, taskId);
       assertHolds(user, task);
       if (!task.lead_user_id || task.assigned_user_id === task.lead_user_id) {
@@ -247,18 +284,32 @@ function createDeptTaskService(repository, tickets) {
         awaiting_validation: true, resolution_note: resolutionNote,
         assigned_user_id: task.lead_user_id, assigned_to_name: task.lead_name,
       });
+      await notificationService.notify({
+        userIds: [task.lead_user_id],
+        type: notificationService.Type.DEPT_TASK_SUBMITTED,
+        title: `Work submitted for validation`,
+        body: `${ticket.ticket_id}: ${task.department_name} — review and validate the resolver’s work.`,
+        entityType: 'ServiceTicket', entityId: ticketId, link: ticketLink(ticketId), actorId: user?.id,
+      });
       await rec('DEPT_TASK_SUBMITTED', taskId, user, { ticket_id: ticketId });
       return repository.listForTicket(ticketId);
     },
 
     /** Lead sends a submitted task back to the resolver for more work. */
     async returnToResolver(ticketId, taskId, user) {
-      await ticketForView(ticketId, user);
+      const ticket = await ticketForView(ticketId, user);
       const task = await taskOfTicket(ticketId, taskId);
       assertLead(user, task);
       if (!task.resolver_user_id) throw new BadRequestError('No resolver to return this to');
       await repository.update(taskId, {
         assigned_user_id: task.resolver_user_id, assigned_to_name: task.resolver_name, awaiting_validation: false,
+      });
+      await notificationService.notify({
+        userIds: [task.resolver_user_id],
+        type: notificationService.Type.DEPT_TASK_RETURNED,
+        title: `Work returned for changes`,
+        body: `${ticket.ticket_id}: ${task.department_name} — the lead returned your work for changes.`,
+        entityType: 'ServiceTicket', entityId: ticketId, link: ticketLink(ticketId), actorId: user?.id,
       });
       await rec('DEPT_TASK_RETURNED', taskId, user, { ticket_id: ticketId });
       return repository.listForTicket(ticketId);
@@ -336,11 +387,20 @@ function createDeptTaskService(repository, tickets) {
 
     /** Current holder declines the task back to the PM. */
     async declineTask(ticketId, taskId, reason, user) {
-      await ticketForView(ticketId, user);
+      const ticket = await ticketForView(ticketId, user);
       const task = await taskOfTicket(ticketId, taskId);
       assertHolds(user, task);
       await repository.update(taskId, { status: 'DECLINED', decline_reason: reason, awaiting_validation: false });
       await syncTicket(ticketId);
+      // No single holder owns a declined task — notify whoever may redirect it.
+      const managers = await notificationService.recipientsWithPermission('SERVICE_VIEW');
+      await notificationService.notify({
+        userIds: managers,
+        type: notificationService.Type.DEPT_TASK_DECLINED,
+        title: `A department declined an issue`,
+        body: `${ticket.ticket_id}: ${task.department_name} declined — ${snippet(reason)}. Redirect it to a department.`,
+        entityType: 'ServiceTicket', entityId: ticketId, link: ticketLink(ticketId), actorId: user?.id,
+      });
       await rec('DEPT_TASK_DECLINED', taskId, user, { ticket_id: ticketId, reason });
       return repository.listForTicket(ticketId);
     },
@@ -368,6 +428,13 @@ function createDeptTaskService(repository, tickets) {
       });
       await tickets.addParticipant(ticketId, dept.head_user_id, dept.head?.name ?? null, `${dept.name} task`);
       await syncTicket(ticketId);
+      await notificationService.notify({
+        userIds: [dept.head_user_id],
+        type: notificationService.Type.DEPT_TASK_REDIRECTED,
+        title: `New issue for ${dept.name}`,
+        body: `${ticket.ticket_id}: “${snippet(issue_note ?? task.issue_note)}” — write the resolution plan.`,
+        entityType: 'ServiceTicket', entityId: ticketId, link: ticketLink(ticketId), actorId: user?.id,
+      });
       await rec('DEPT_TASK_REDIRECTED', taskId, user, { ticket_id: ticketId, department: dept.name });
       return repository.listForTicket(ticketId);
     },

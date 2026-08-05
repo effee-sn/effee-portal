@@ -1,7 +1,16 @@
 const { serviceRepository } = require('./service.repository');
 const { auditService } = require('../audit/audit.service');
+const { notificationService } = require('../notification/notification.service');
 const { ticketAssignment } = require('./ticketAssignment');
 const { canView, canAct } = require('./ticketPolicy');
+
+/** Deep link to a ticket, for a notification's click target. */
+const ticketLink = (ticketId) => `/dashboard/service/tickets/${ticketId}`;
+/** Trims a free-text snippet for a notification body. */
+const snippet = (text, max = 80) => {
+  const t = String(text ?? '').trim();
+  return t.length > max ? `${t.slice(0, max)}…` : t;
+};
 const {
   NotFoundError, ValidationError, ForbiddenError, BadRequestError, buildSearchClause, logger,
 } = require('../../core');
@@ -213,6 +222,17 @@ function createServiceService(repository) {
         action: 'REOPENED', entity: 'ServiceTicket', entityId: id,
         actor: user, changes: { reason, re_triaged_to: reentry.assignment.assigned_to_name },
       });
+
+      // Notify whoever the ticket re-triages to (the coordinator handling triage).
+      const recipients = await notificationService.recipientsForAssignment(reentry.assignment);
+      await notificationService.notify({
+        userIds: recipients,
+        type: notificationService.Type.TICKET_REOPENED,
+        title: `Ticket reopened — needs re-triage`,
+        body: `${ticket.ticket_id} was reopened${reason ? ` — ${snippet(reason)}` : ''}.`,
+        entityType: 'ServiceTicket', entityId: id, link: ticketLink(id), actorId: user?.id,
+      });
+
       return withNextStage(await repository.findById(id));
     },
 
@@ -282,6 +302,16 @@ function createServiceService(repository) {
           type: ticket.ticket_type,
           assigned_to: assigned.assigned_to_name || null,
         },
+      });
+
+      // Notify whoever the workflow routed the new ticket to (triage/coordinator).
+      const recipients = await notificationService.recipientsForAssignment(assigned);
+      await notificationService.notify({
+        userIds: recipients,
+        type: notificationService.Type.TICKET_ASSIGNED,
+        title: `New ticket assigned to you`,
+        body: `${assigned.ticket_id}: ${snippet(assigned.issue_title)} (${assigned.issue_severity}).`,
+        entityType: 'ServiceTicket', entityId: assigned.id, link: ticketLink(assigned.id), actorId: actor?.id,
       });
 
       return assigned;
