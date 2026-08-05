@@ -43,8 +43,10 @@ function authHeaders(extra = {}) {
  * @param {RequestInit} [options]
  * @returns {Promise<any>} Parsed JSON body.
  */
-async function request(endpoint, options = {}) {
-  topLoader.start();
+async function request(endpoint, options = {}, { silent = false } = {}) {
+  // Silent requests (e.g. the notification poll every few seconds) skip the top
+  // progress bar so it doesn't flash as if the page were loading.
+  if (!silent) topLoader.start();
   try {
     const res = await fetch(`${BASE_URL}${endpoint}`, options);
     const data = await res.json();
@@ -57,16 +59,16 @@ async function request(endpoint, options = {}) {
     }
     return data;
   } finally {
-    topLoader.done();
+    if (!silent) topLoader.done();
   }
 }
 
-export function apiGet(endpoint) {
-  return request(endpoint, { headers: authHeaders() });
+export function apiGet(endpoint, opts = {}) {
+  return request(endpoint, { headers: authHeaders() }, opts);
 }
 
-export function apiPost(endpoint, body) {
-  return request(endpoint, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) });
+export function apiPost(endpoint, body, opts = {}) {
+  return request(endpoint, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) }, opts);
 }
 
 export function apiPut(endpoint, body) {

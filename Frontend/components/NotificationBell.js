@@ -32,13 +32,13 @@ export default function NotificationBell() {
   const ref = useRef(null);
 
   const refreshCount = useCallback(async () => {
-    try { const r = await apiGet('/notifications/unread-count'); setUnread(r.data?.unread ?? 0); } catch { /* silent */ }
+    try { const r = await apiGet('/notifications/unread-count', { silent: true }); setUnread(r.data?.unread ?? 0); } catch { /* silent */ }
   }, []);
 
   const loadList = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await apiGet('/notifications?limit=12');
+      const r = await apiGet('/notifications?limit=12', { silent: true });
       setItems(r.data || []);
       setUnread(r.meta?.unread ?? 0);
     } catch { /* silent */ }
@@ -84,14 +84,14 @@ export default function NotificationBell() {
   const openItem = async (n) => {
     setOpen(false);
     if (!n.read_at) {
-      try { const r = await apiPost(`/notifications/${n.id}/read`); setUnread(r.data?.unread ?? 0); } catch { /* silent */ }
+      try { const r = await apiPost(`/notifications/${n.id}/read`, {}, { silent: true }); setUnread(r.data?.unread ?? 0); } catch { /* silent */ }
       setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)));
     }
     if (n.link) router.push(n.link);
   };
 
   const markAll = async () => {
-    try { await apiPost('/notifications/read-all'); } catch { /* silent */ }
+    try { await apiPost('/notifications/read-all', {}, { silent: true }); } catch { /* silent */ }
     setUnread(0);
     setItems((prev) => prev.map((x) => ({ ...x, read_at: x.read_at || new Date().toISOString() })));
   };
