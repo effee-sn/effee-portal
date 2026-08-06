@@ -64,28 +64,48 @@ const humanizeKey = (key) => {
 /** A lowercase snake_case identifier, e.g. an entity field name. */
 const isIdentifier = (v) => typeof v === 'string' && /^[a-z0-9]+(_[a-z0-9]+)+$/.test(v);
 
+/** Looks like an ISO 8601 date-time, e.g. "2026-08-20T18:30:00.000Z". */
+const isIsoDateTime = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v);
+
 /** Formats a single non-object value for display. */
 const formatScalar = (v) => {
   if (v === null || v === undefined || v === '') return '—';
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  if (isIsoDateTime(v)) {
+    const d = new Date(v);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleString(undefined, {
+        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      });
+    }
+  }
   if (isIdentifier(v)) return humanizeKey(v);
   return String(v);
 };
 
-function ChangeValue({ value }) {
+// Keys whose numeric array items are permission ids (older entries stored ids;
+// newer ones store codes directly). We resolve ids to codes when a map is given.
+const PERM_KEYS = new Set(['allowed', 'denied', 'permissions']);
+
+function ChangeValue({ value, keyName, permMap }) {
   if (Array.isArray(value)) {
     if (value.length === 0) return <span className="text-gray-400">—</span>;
     const allScalar = value.every((x) => x === null || typeof x !== 'object');
-    if (allScalar) return <span>{value.map(formatScalar).join(', ')}</span>;
-    return <div className="space-y-2">{value.map((item, i) => <ChangeRows key={i} data={item} />)}</div>;
+    if (allScalar) {
+      const format = (permMap && PERM_KEYS.has(keyName))
+        ? (x) => (typeof x === 'number' ? (permMap.get(x) || `#${x}`) : formatScalar(x))
+        : formatScalar;
+      return <span className="leading-relaxed">{value.map(format).join(', ')}</span>;
+    }
+    return <div className="space-y-2">{value.map((item, i) => <ChangeRows key={i} data={item} permMap={permMap} />)}</div>;
   }
   if (value && typeof value === 'object') {
-    return <div className="pl-3 border-l border-gray-200 mt-1"><ChangeRows data={value} /></div>;
+    return <div className="pl-3 border-l border-gray-200 mt-1"><ChangeRows data={value} permMap={permMap} /></div>;
   }
   return <span>{formatScalar(value)}</span>;
 }
 
-function ChangeRows({ data }) {
+function ChangeRows({ data, permMap }) {
   const entries = Object.entries(data || {});
   if (entries.length === 0) return <span className="text-gray-400">—</span>;
   return (
@@ -93,21 +113,21 @@ function ChangeRows({ data }) {
       {entries.map(([k, v]) => (
         <div key={k} className="flex gap-3 text-xs">
           <span className="text-gray-400 font-medium min-w-[130px] shrink-0">{humanizeKey(k)}</span>
-          <span className="text-gray-700 break-words min-w-0"><ChangeValue value={v} /></span>
+          <span className="text-gray-700 break-words min-w-0"><ChangeValue value={v} keyName={k} permMap={permMap} /></span>
         </div>
       ))}
     </div>
   );
 }
 
-function ChangeDetails({ changes }) {
+function ChangeDetails({ changes, permMap }) {
   if (changes == null) return null;
   // A truncated / non-JSON payload arrives as a string — show it as-is.
   if (typeof changes === 'string') {
     return <p className="text-xs text-gray-600 whitespace-pre-wrap break-words">{changes}</p>;
   }
-  if (Array.isArray(changes)) return <ChangeValue value={changes} />;
-  return <ChangeRows data={changes} />;
+  if (Array.isArray(changes)) return <ChangeValue value={changes} permMap={permMap} />;
+  return <ChangeRows data={changes} permMap={permMap} />;
 }
 
 // ── Page ────────────────────────────────────────────────────────────────────
@@ -124,6 +144,7 @@ export default function AuditLogPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo]   = useState('');
   const [users, setUsers]     = useState([]);
+  const [permMap, setPermMap] = useState(null); // permission id → code, for readable perm changes
   const [expanded, setExpanded] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -156,6 +177,10 @@ export default function AuditLogPage() {
       fetchLogs();
       // Populate the user filter (active users). Ignored if it fails.
       apiGet('/lookup/users').then((list) => setUsers(Array.isArray(list) ? list : [])).catch(() => {});
+      // Permission id → code, so permission-change entries read as codes, not ids.
+      apiGet('/lookup/permissions').then((list) => {
+        if (Array.isArray(list)) setPermMap(new Map(list.map((p) => [p.id, p.code])));
+      }).catch(() => {});
     } else if (!permLoading) setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [permLoading]);
@@ -308,7 +333,7 @@ export default function AuditLogPage() {
                         <tr className="border-b border-gray-100 bg-gray-50">
                           <td colSpan={5} className="px-3 py-3">
                             <div className="max-h-72 overflow-auto">
-                              <ChangeDetails changes={row.changes} />
+                              <ChangeDetails changes={row.changes} permMap={permMap} />
                             </div>
                           </td>
                         </tr>

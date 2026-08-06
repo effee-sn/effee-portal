@@ -211,6 +211,12 @@ function createRolesService(repository) {
 
       const role = await repository.replacePermissions(id, permissions);
 
+      const allPermissions = await repository.findAllPermissions();
+      // Record the human-readable permission codes (e.g. USER_VIEW), not the
+      // numeric ids — the trail must be legible on its own months later.
+      const codeById = new Map(allPermissions.map((p) => [p.id, p.code]));
+      const toCode = (pid) => codeById.get(pid) || `#${pid}`;
+
       // Permission changes are the highest-value entries in the trail: they are
       // how privilege escalation would be carried out, so the granted set is
       // recorded in full rather than as a count.
@@ -220,12 +226,11 @@ function createRolesService(repository) {
         entityId: id,
         actor,
         changes: {
-          allowed: permissions.filter((p) => p.allowed).map((p) => p.permission_id),
-          denied:  permissions.filter((p) => !p.allowed).map((p) => p.permission_id),
+          allowed: permissions.filter((p) => p.allowed).map((p) => toCode(p.permission_id)),
+          denied:  permissions.filter((p) => !p.allowed).map((p) => toCode(p.permission_id)),
         },
       });
 
-      const allPermissions = await repository.findAllPermissions();
       return withCompletePermissionMatrix(role, allPermissions);
     },
 
