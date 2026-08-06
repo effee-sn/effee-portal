@@ -28,6 +28,17 @@ const ACTIONS = [
   'PERMISSIONS_SET', 'SETTINGS_UPDATED',
 ];
 
+// Modules (audit `entity` values) with friendly labels for the filter dropdown.
+const MODULES = [
+  { value: 'ServiceTicket',        label: 'Service Tickets' },
+  { value: 'TicketDepartmentTask', label: 'Department Tasks' },
+  { value: 'ResolutionPlan',       label: 'Resolution Plans' },
+  { value: 'User',                 label: 'Users' },
+  { value: 'Role',                 label: 'Roles' },
+  { value: 'Department',           label: 'Departments' },
+  { value: 'Workflow',             label: 'Workflows' },
+];
+
 // Colour cue per action family: destructive/failed in red, auth in amber,
 // creates in green, everything else neutral. Purely presentational.
 const ACTION_COLOR = (action) => {
@@ -38,6 +49,67 @@ const ACTION_COLOR = (action) => {
   return { color: '#374151', bg: '#f3f4f6' };
 };
 
+// ── Human-readable change details ─────────────────────────────────────────────
+// The audit `changes` payload is arbitrary JSON. Rather than dump it raw, render
+// it as labelled rows: keys humanised ("ticket_id" → "Ticket id"), booleans as
+// Yes/No, snake_case values (e.g. field names) humanised, and nested objects
+// indented.
+
+/** "ticket_id" → "Ticket id". */
+const humanizeKey = (key) => {
+  const s = String(key).replace(/_/g, ' ').trim();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
+
+/** A lowercase snake_case identifier, e.g. an entity field name. */
+const isIdentifier = (v) => typeof v === 'string' && /^[a-z0-9]+(_[a-z0-9]+)+$/.test(v);
+
+/** Formats a single non-object value for display. */
+const formatScalar = (v) => {
+  if (v === null || v === undefined || v === '') return '—';
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  if (isIdentifier(v)) return humanizeKey(v);
+  return String(v);
+};
+
+function ChangeValue({ value }) {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return <span className="text-gray-400">—</span>;
+    const allScalar = value.every((x) => x === null || typeof x !== 'object');
+    if (allScalar) return <span>{value.map(formatScalar).join(', ')}</span>;
+    return <div className="space-y-2">{value.map((item, i) => <ChangeRows key={i} data={item} />)}</div>;
+  }
+  if (value && typeof value === 'object') {
+    return <div className="pl-3 border-l border-gray-200 mt-1"><ChangeRows data={value} /></div>;
+  }
+  return <span>{formatScalar(value)}</span>;
+}
+
+function ChangeRows({ data }) {
+  const entries = Object.entries(data || {});
+  if (entries.length === 0) return <span className="text-gray-400">—</span>;
+  return (
+    <div className="space-y-1.5">
+      {entries.map(([k, v]) => (
+        <div key={k} className="flex gap-3 text-xs">
+          <span className="text-gray-400 font-medium min-w-[130px] shrink-0">{humanizeKey(k)}</span>
+          <span className="text-gray-700 break-words min-w-0"><ChangeValue value={v} /></span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ChangeDetails({ changes }) {
+  if (changes == null) return null;
+  // A truncated / non-JSON payload arrives as a string — show it as-is.
+  if (typeof changes === 'string') {
+    return <p className="text-xs text-gray-600 whitespace-pre-wrap break-words">{changes}</p>;
+  }
+  if (Array.isArray(changes)) return <ChangeValue value={changes} />;
+  return <ChangeRows data={changes} />;
+}
+
 // ── Page ────────────────────────────────────────────────────────────────────
 export default function AuditLogPage() {
   useAuth();
@@ -47,7 +119,11 @@ export default function AuditLogPage() {
   const [total, setTotal]     = useState(0);
   const [page, setPage]       = useState(1);
   const [action, setAction]   = useState('');
-  const [entity, setEntity]   = useState('');
+  const [module, setModule]   = useState('');   // audit `entity`
+  const [actorId, setActorId] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo]   = useState('');
+  const [users, setUsers]     = useState([]);
   const [expanded, setExpanded] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -57,12 +133,17 @@ export default function AuditLogPage() {
   // so the page never briefly renders for a non-system user.
   const canView = !!me?.is_system;
 
-  const fetchLogs = async (p = page, a = action, e = entity) => {
+  // Reads the current filter state — the applied filters are whatever's in the
+  // inputs, so paging and re-filtering both use the same source.
+  const fetchLogs = async (p = page) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(p), limit: String(limit) });
-      if (a) params.set('action', a);
-      if (e) params.set('entity', e);
+      if (action)   params.set('action', action);
+      if (module)   params.set('entity', module);
+      if (actorId)  params.set('actor_id', actorId);
+      if (dateFrom) params.set('date_from', dateFrom);
+      if (dateTo)   params.set('date_to', dateTo);
       const res = await apiGet(`/audit-logs?${params.toString()}`);
       setLogs(res.data);
       setTotal(res.meta.pagination.total);
@@ -71,13 +152,27 @@ export default function AuditLogPage() {
   };
 
   useEffect(() => {
-    if (!permLoading && canView) fetchLogs();
-    else if (!permLoading) setLoading(false);
+    if (!permLoading && canView) {
+      fetchLogs();
+      // Populate the user filter (active users). Ignored if it fails.
+      apiGet('/lookup/users').then((list) => setUsers(Array.isArray(list) ? list : [])).catch(() => {});
+    } else if (!permLoading) setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [permLoading]);
 
-  const applyFilters = (e) => { e.preventDefault(); setPage(1); setExpanded(null); fetchLogs(1, action, entity); };
-  const goPage = (delta) => { const p = page + delta; setPage(p); setExpanded(null); fetchLogs(p, action, entity); };
+  const applyFilters = (e) => { e.preventDefault(); setPage(1); setExpanded(null); fetchLogs(1); };
+  const clearFilters = () => {
+    setAction(''); setModule(''); setActorId(''); setDateFrom(''); setDateTo('');
+    setPage(1); setExpanded(null);
+    // Fetch with everything cleared (state updates are batched, so pass a reset).
+    setLoading(true);
+    apiGet(`/audit-logs?page=1&limit=${limit}`)
+      .then((res) => { setLogs(res.data); setTotal(res.meta.pagination.total); })
+      .catch(() => setLogs([]))
+      .finally(() => setLoading(false));
+  };
+  const goPage = (delta) => { const p = page + delta; setPage(p); setExpanded(null); fetchLogs(p); };
+  const hasFilters = action || module || actorId || dateFrom || dateTo;
 
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to   = Math.min(page * limit, total);
@@ -108,20 +203,45 @@ export default function AuditLogPage() {
           <span className="text-sm font-medium text-gray-700 shrink-0 px-1">Audit Log</span>
           <div className="flex-1 min-w-0" />
 
+          <select value={module} onChange={(e) => setModule(e.target.value)}
+            className="shrink-0 py-1.5 px-2 text-sm text-gray-700 border border-gray-300 rounded bg-white outline-none cursor-pointer">
+            <option value="">All modules</option>
+            {MODULES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+
           <select value={action} onChange={(e) => setAction(e.target.value)}
-            className="shrink-0 py-1.5 px-2 text-sm text-gray-700 border border-gray-300 rounded bg-white outline-none">
+            className="shrink-0 py-1.5 px-2 text-sm text-gray-700 border border-gray-300 rounded bg-white outline-none cursor-pointer">
             <option value="">All actions</option>
             {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
 
-          <input value={entity} onChange={(e) => setEntity(e.target.value)} placeholder="Entity (e.g. User)"
-            className="shrink-0 py-1.5 px-2.5 text-sm text-gray-700 border border-gray-300 rounded bg-white outline-none"
-            style={{ minWidth: 160 }} />
+          <select value={actorId} onChange={(e) => setActorId(e.target.value)}
+            className="shrink-0 py-1.5 px-2 text-sm text-gray-700 border border-gray-300 rounded bg-white outline-none cursor-pointer max-w-[160px]">
+            <option value="">All users</option>
+            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
 
-          <button type="submit" className="shrink-0 px-3 py-1.5 text-sm font-medium text-white rounded-sm"
+          <label className="shrink-0 flex items-center gap-1 text-xs text-gray-400">
+            From
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+              className="py-1.5 px-2 text-sm text-gray-700 border border-gray-300 rounded bg-white outline-none cursor-pointer" />
+          </label>
+          <label className="shrink-0 flex items-center gap-1 text-xs text-gray-400">
+            To
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+              className="py-1.5 px-2 text-sm text-gray-700 border border-gray-300 rounded bg-white outline-none cursor-pointer" />
+          </label>
+
+          <button type="submit" className="shrink-0 px-3 py-1.5 text-sm font-medium text-white rounded-sm cursor-pointer"
             style={{ backgroundColor: 'var(--ams-primary)' }}>
             Filter
           </button>
+          {hasFilters && (
+            <button type="button" onClick={clearFilters}
+              className="shrink-0 px-2.5 py-1.5 text-sm text-gray-500 hover:text-gray-800 cursor-pointer">
+              Clear
+            </button>
+          )}
 
           <div className="flex items-center gap-0.5 shrink-0 text-sm text-gray-500">
             <span className="px-1 tabular-nums">{total === 0 ? '0' : `${from}-${to}`} / {total}</span>
@@ -187,9 +307,9 @@ export default function AuditLogPage() {
                       {isOpen && hasChanges && (
                         <tr className="border-b border-gray-100 bg-gray-50">
                           <td colSpan={5} className="px-3 py-3">
-                            <pre className="text-xs text-gray-700 whitespace-pre-wrap break-words max-h-72 overflow-auto">
-                              {typeof row.changes === 'string' ? row.changes : JSON.stringify(row.changes, null, 2)}
-                            </pre>
+                            <div className="max-h-72 overflow-auto">
+                              <ChangeDetails changes={row.changes} />
+                            </div>
                           </td>
                         </tr>
                       )}

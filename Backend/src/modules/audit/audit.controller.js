@@ -26,8 +26,18 @@ const getAuditLogs = async (req, res) => {
     },
   });
 
+  // Date range (created_at). `date_from` is inclusive from the start of the day,
+  // `date_to` inclusive to the end of the day. Invalid dates are ignored.
+  const filters = { ...query.filters };
+  const from = req.query.date_from ? new Date(req.query.date_from) : null;
+  const to   = req.query.date_to ? new Date(req.query.date_to) : null;
+  const range = {};
+  if (from && !Number.isNaN(from.getTime())) range.gte = from;
+  if (to && !Number.isNaN(to.getTime())) { to.setHours(23, 59, 59, 999); range.lte = to; }
+  if (Object.keys(range).length > 0) filters.created_at = range;
+
   const { items, total } = await auditService.list({
-    filters: query.filters,
+    filters,
     skip: query.skip,
     take: query.take,
     orderBy: query.orderBy,
