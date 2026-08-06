@@ -109,13 +109,45 @@ const updateTicket = async (req, res) => {
 };
 
 /**
- * `DELETE /service/tickets/:id`
+ * `DELETE /service/tickets/:id` — soft delete (moves to trash).
  *
  * @type {import('express').RequestHandler}
  */
 const deleteTicket = async (req, res) => {
   await serviceService.remove(req.params.id, requestContext(req));
   ApiResponse.message(res, 'Ticket deleted successfully');
+};
+
+/**
+ * `GET /service/tickets/deleted` — the trash. Same shape as the live list.
+ *
+ * @type {import('express').RequestHandler}
+ */
+const getDeletedTickets = async (req, res) => {
+  const query = parseListQuery(req.query, {
+    sortable: [...serviceService.SORTABLE_FIELDS],
+    defaultSort: 'created_at',
+    defaultOrder: 'desc',
+    filterable: {
+      status:         (v) => (['OPEN', 'IN_PROGRESS', 'CONTACTED', 'RESOLVED', 'ON_OBSERVATION', 'CLOSED', 'REOPENED'].includes(v) ? v : undefined),
+      issue_severity: (v) => (['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].includes(v) ? v : undefined),
+      ticket_type:    (v) => (['CALL', 'EMAIL', 'OTHERS'].includes(v) ? v : undefined),
+    },
+  });
+
+  const { items, total } = await serviceService.listDeleted(query);
+  ApiResponse.paginated(res, items, { page: query.page, limit: query.limit, total });
+};
+
+/** `POST /service/tickets/:id/restore` — bring a ticket back from the trash. */
+const restoreTicket = async (req, res) => {
+  ApiResponse.ok(res, await serviceService.restore(req.params.id, requestContext(req)));
+};
+
+/** `DELETE /service/tickets/:id/purge` — permanent, irreversible delete. */
+const purgeTicket = async (req, res) => {
+  await serviceService.purge(req.params.id, requestContext(req));
+  ApiResponse.message(res, 'Ticket permanently deleted');
 };
 
 module.exports = {
@@ -129,4 +161,7 @@ module.exports = {
   closeTicket,
   reopenTicket,
   deleteTicket,
+  getDeletedTickets,
+  restoreTicket,
+  purgeTicket,
 };

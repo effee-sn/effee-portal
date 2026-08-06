@@ -3,6 +3,7 @@ const { z } = require('zod');
 
 const authenticate = require('../../middleware/authenticate');
 const authorize    = require('../../middleware/authorize');
+const requireSystemRole = require('../../middleware/requireSystemRole');
 const { asyncHandler, validate, schemas } = require('../../core');
 const {
   listTicketsQuery, ticketIdParam, createTicketBody, updateTicketBody,
@@ -11,6 +12,7 @@ const {
   getDashboard, getTickets, getInbox, getTicketById,
   createTicket, updateTicket,
   confirmTicket, closeTicket, reopenTicket, deleteTicket,
+  getDeletedTickets, restoreTicket, purgeTicket,
 } = require('./service.controller');
 const { taskPlansParam, planParams, saveDraftBody } = require('./resolution.validation');
 const {
@@ -52,6 +54,15 @@ router.get(
   '/tickets/inbox',
   validate({ query: schemas.listQuery.passthrough() }),
   asyncHandler(getInbox)
+);
+
+// The trash — soft-deleted tickets. Oversight tier (same as delete). Declared
+// before `/tickets/:id` so "deleted" is not captured as an id.
+router.get(
+  '/tickets/deleted',
+  authorize('SERVICE_DELETE'),
+  validate({ query: listTicketsQuery }),
+  asyncHandler(getDeletedTickets)
 );
 
 router.post(
@@ -136,12 +147,29 @@ router.post('/tickets/:id/dept-tasks/:taskId/plans/:planId/clone', validate({ pa
 router.post('/tickets/:id/dept-tasks/:taskId/plans/:planId/restore', validate({ params: planParams }), asyncHandler(restorePlan));
 router.delete('/tickets/:id/dept-tasks/:taskId/plans/:planId', validate({ params: planParams }), asyncHandler(discardPlan));
 
-// Delete — oversight tier.
+// Soft delete (→ trash) — oversight tier.
 router.delete(
   '/tickets/:id',
   authorize('SERVICE_DELETE'),
   validate({ params: ticketIdParam }),
   asyncHandler(deleteTicket)
+);
+
+// Restore from trash — oversight tier (if you can delete, you can undelete).
+router.post(
+  '/tickets/:id/restore',
+  authorize('SERVICE_DELETE'),
+  validate({ params: ticketIdParam }),
+  asyncHandler(restoreTicket)
+);
+
+// Permanent delete — super-admin only. Irreversible, so it sits above the
+// per-module permission on the platform-level gate.
+router.delete(
+  '/tickets/:id/purge',
+  requireSystemRole,
+  validate({ params: ticketIdParam }),
+  asyncHandler(purgeTicket)
 );
 
 module.exports = router;

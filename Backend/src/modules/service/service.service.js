@@ -416,6 +416,61 @@ function createServiceService(repository) {
     },
 
     /**
+     * The trash — soft-deleted tickets, same search/filter as the live list.
+     *
+     * @param {import('../../core/http/queryOptions').ListQuery} query
+     * @returns {Promise<{ items: object[], total: number }>}
+     */
+    async listDeleted(query) {
+      const search = buildSearchClause(query.search, [...SEARCHABLE_FIELDS]);
+      const where = { ...query.filters, ...(search || {}) };
+      return repository.findDeletedPage({
+        where, orderBy: query.orderBy, skip: query.skip, take: query.take,
+      });
+    },
+
+    /**
+     * Restores a soft-deleted ticket. Guarded to tickets actually in the trash.
+     *
+     * @param {number} id
+     * @param {import('../../core/http/requestContext').ActorContext} [actor]
+     * @returns {Promise<object>}
+     * @throws {NotFoundError}
+     */
+    async restore(id, actor) {
+      const ticket = await repository.findDeletedById(id);
+      if (!ticket) throw new NotFoundError('Deleted ticket');
+
+      const restored = await repository.restore(id, actor?.id ?? null);
+      await auditService.record({
+        action: 'RESTORED', entity: 'ServiceTicket', entityId: id, actor,
+        changes: { ticket_id: ticket.ticket_id },
+      });
+      return restored;
+    },
+
+    /**
+     * Permanently deletes a ticket (and its cascaded children). Irreversible;
+     * only a ticket already in the trash can be purged. The audit entry is
+     * written before the row is destroyed.
+     *
+     * @param {number} id
+     * @param {import('../../core/http/requestContext').ActorContext} [actor]
+     * @returns {Promise<void>}
+     * @throws {NotFoundError}
+     */
+    async purge(id, actor) {
+      const ticket = await repository.findDeletedById(id);
+      if (!ticket) throw new NotFoundError('Deleted ticket');
+
+      await auditService.record({
+        action: 'PURGED', entity: 'ServiceTicket', entityId: id, actor,
+        changes: { ticket_id: ticket.ticket_id, permanent: true },
+      });
+      await repository.hardDelete(id);
+    },
+
+    /**
      * Dashboard payload: totals, breakdowns, and recent activity.
      *
      * @returns {Promise<object>}

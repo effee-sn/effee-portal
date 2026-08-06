@@ -63,6 +63,9 @@ function createServiceRepository(db) {
   /** @param {Record<string, unknown>} [where] */
   const active = (where = {}) => ({ ...where, deleted_at: null });
 
+  /** Scopes to soft-deleted rows only — the inverse of `active`, for the trash. */
+  const deleted = (where = {}) => ({ ...where, deleted_at: { not: null } });
+
   return {
     ticketSelect,
 
@@ -89,6 +92,54 @@ function createServiceRepository(db) {
      */
     findById(id) {
       return db.serviceTicket.findFirst({ where: active({ id }), select: ticketSelect });
+    },
+
+    /**
+     * The trash — soft-deleted tickets only.
+     *
+     * @param {object} params { where, orderBy, skip, take }
+     * @returns {Promise<{ items: object[], total: number }>}
+     */
+    async findDeletedPage({ where, orderBy, skip, take }) {
+      const scoped = deleted(where);
+      const [items, total] = await Promise.all([
+        db.serviceTicket.findMany({ where: scoped, select: ticketSelect, orderBy, skip, take }),
+        db.serviceTicket.count({ where: scoped }),
+      ]);
+      return { items, total };
+    },
+
+    /**
+     * A specific soft-deleted ticket — used to validate restore / purge targets
+     * (the normal `findById` is scoped to live rows and would not find it).
+     * @param {number} id
+     * @returns {Promise<object|null>}
+     */
+    findDeletedById(id) {
+      return db.serviceTicket.findFirst({ where: deleted({ id }), select: ticketSelect });
+    },
+
+    /**
+     * Clears the soft-delete flag, bringing a ticket back.
+     * @param {number} id @param {number|null} [actorId]
+     * @returns {Promise<object>}
+     */
+    restore(id, actorId = null) {
+      return db.serviceTicket.update({
+        where: { id },
+        data: { deleted_at: null, updated_by: actorId },
+        select: ticketSelect,
+      });
+    },
+
+    /**
+     * Permanently removes a ticket. Its department tasks, plans, and participants
+     * are removed too via `onDelete: Cascade`. Irreversible.
+     * @param {number} id
+     * @returns {Promise<{ id: number }>}
+     */
+    hardDelete(id) {
+      return db.serviceTicket.delete({ where: { id }, select: { id: true } });
     },
 
     /**

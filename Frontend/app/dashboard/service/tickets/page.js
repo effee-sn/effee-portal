@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import useNav from '@/lib/useNav';
-import { apiGet, apiDelete } from '@/lib/api';
+import { apiGet, apiPost, apiDelete } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
 import CreateTicketModal from '@/components/CreateTicketModal';
 // Shared styles so every status (Reopened, On Observation, Contacted, …) renders
@@ -52,6 +52,38 @@ function DeleteModal({ ticket, onClose, onDeleted }) {
   );
 }
 
+// ── Permanent-delete confirm (super-admin only) ───────────────────────────────
+function PurgeModal({ ticket, onClose, onPurged }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
+
+  const purge = async () => {
+    setSaving(true);
+    try { await apiDelete(`/service/tickets/${ticket.id}/purge`); onPurged(ticket.id); onClose(); }
+    catch (err) { setError(err.message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="w-full max-w-sm bg-white rounded-lg shadow-xl p-6">
+        <h2 className="text-base font-semibold text-gray-800 mb-2">Permanently delete</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          Permanently delete <span className="font-medium text-gray-700">{ticket.ticket_id}</span> and all its
+          department tasks, plans, and history? <span className="font-medium text-red-600">This cannot be undone.</span>
+        </p>
+        {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm mb-3">{error}</div>}
+        <div className="flex gap-3">
+          <button onClick={onClose} className="btn-secondary flex-1 justify-center py-2 cursor-pointer">Cancel</button>
+          <button onClick={purge} disabled={saving} className="btn-danger flex-1 justify-center py-2 cursor-pointer">
+            {saving ? 'Deleting…' : 'Delete forever'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ────────────────────────────────────────────────────────────────────
 export default function ServiceTicketsPage() {
   useAuth();
@@ -65,17 +97,21 @@ export default function ServiceTicketsPage() {
   const [search, setSearch]   = useState('');
   const [loading, setLoading] = useState(true);
   const [modal, setModal]     = useState(null);
+  const [view, setView]       = useState('active'); // 'active' | 'trash'
 
   const limit = 10;
+  const isTrash = view === 'trash';
 
   const canView   = me?.is_system || can('SERVICE_VIEW');
   const canCreate = me?.is_system || can('SERVICE_CREATE');
   const canDelete = me?.is_system || can('SERVICE_DELETE');
+  const canPurge  = Boolean(me?.is_system); // permanent delete: super-admin only
 
-  const fetchTickets = async (p = page, s = search) => {
+  const fetchTickets = async (p = page, s = search, v = view) => {
     setLoading(true);
     try {
-      const res = await apiGet(`/service/tickets?page=${p}&limit=${limit}&search=${encodeURIComponent(s)}`);
+      const base = v === 'trash' ? '/service/tickets/deleted' : '/service/tickets';
+      const res = await apiGet(`${base}?page=${p}&limit=${limit}&search=${encodeURIComponent(s)}`);
       setTickets(res.data);
       setTotal(res.meta.pagination.total);
     } catch { setTickets([]); }
@@ -90,8 +126,14 @@ export default function ServiceTicketsPage() {
   const onSearch = (e) => { e.preventDefault(); setPage(1); fetchTickets(1, search); };
   const goPage = (delta) => { const p = page + delta; setPage(p); fetchTickets(p, search); };
 
+  const switchView = (v) => { setView(v); setPage(1); setSearch(''); fetchTickets(1, '', v); };
+
   const onCreated = (t) => { setTickets((prev) => [t, ...prev]); setTotal((n) => n + 1); };
   const onDeleted = (id) => { setTickets((prev) => prev.filter((t) => t.id !== id)); setTotal((n) => n - 1); };
+  const onRestore = async (t) => {
+    try { await apiPost(`/service/tickets/${t.id}/restore`); onDeleted(t.id); }
+    catch { /* stays in the trash on failure */ }
+  };
 
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to   = Math.min(page * limit, total);
@@ -119,14 +161,31 @@ export default function ServiceTicketsPage() {
       <div className="bg-white rounded border border-gray-200 overflow-hidden">
         {/* Control panel */}
         <div className="flex items-center gap-2 px-3 py-3 border-b border-gray-200 flex-wrap bg-white">
-          {canCreate && (
+          {canCreate && !isTrash && (
             <button onClick={() => setModal({ type: 'create' })}
               className="cursor-pointer shrink-0 px-3 py-1.5 text-sm font-medium text-white rounded-sm"
               style={{ backgroundColor: 'var(--ams-primary)' }}>
               New
             </button>
           )}
-          <span className="text-sm font-medium text-gray-700 shrink-0 px-1">Services</span>
+          <span className="text-sm font-medium text-gray-700 shrink-0 px-1">{isTrash ? 'Trash' : 'Services'}</span>
+
+          {/* Trash toggle — visible to anyone who can delete. */}
+          {canDelete && (
+            <button
+              onClick={() => switchView(isTrash ? 'active' : 'trash')}
+              className={`cursor-pointer shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 text-sm rounded-sm border transition ${
+                isTrash ? 'bg-gray-100 border-gray-300 text-gray-700' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+              }`}
+              title={isTrash ? 'Back to active tickets' : 'View deleted tickets'}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              {isTrash ? 'Back to active' : 'Trash'}
+            </button>
+          )}
           <div className="flex-1 min-w-0" />
 
           <form onSubmit={onSearch} className="shrink-0 flex items-center border border-gray-300 rounded bg-white overflow-hidden"
@@ -160,7 +219,7 @@ export default function ServiceTicketsPage() {
         {/* Table */}
         <div className="overflow-x-auto">
           {tickets.length === 0 ? (
-            <div className="py-20 text-center text-sm text-gray-400">No tickets found.</div>
+            <div className="py-20 text-center text-sm text-gray-400">{isTrash ? 'Trash is empty.' : 'No tickets found.'}</div>
           ) : (
             <table className="w-full text-sm" style={{ minWidth: 940 }}>
               <thead>
@@ -181,8 +240,9 @@ export default function ServiceTicketsPage() {
                   const sev = SEVERITY_STYLE[t.issue_severity] || {};
                   const st  = STATUS_STYLE[t.status] || {};
                   return (
-                    <tr key={t.id} onClick={() => nav(`/dashboard/service/tickets/${t.id}`)}
-                      className="border-b border-gray-100 hover:bg-gray-50 group cursor-pointer">
+                    <tr key={t.id}
+                      onClick={isTrash ? undefined : () => nav(`/dashboard/service/tickets/${t.id}`)}
+                      className={`border-b border-gray-100 group ${isTrash ? '' : 'hover:bg-gray-50 cursor-pointer'}`}>
                       <td className="px-3 py-3 font-medium text-gray-800">{t.ticket_id}</td>
                       <td className="px-3 py-3 text-gray-600">{TICKET_TYPES.find((o) => o.value === t.ticket_type)?.label || t.ticket_type}</td>
                       <td className="px-3 py-3 text-gray-600">{t.company_name}</td>
@@ -196,16 +256,35 @@ export default function ServiceTicketsPage() {
                       </td>
                       <td className="px-3 py-3 text-gray-600">{t.created_by_name || '—'}</td>
                       <td className="px-3 py-3 text-gray-500 whitespace-nowrap">{formatDate(t.created_at)}</td>
-                      <td className="px-3 py-3 text-right">
-                        {canDelete && (
-                          <button onClick={(e) => { e.stopPropagation(); setModal({ type: 'delete', ticket: t }); }}
-                            className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition"
-                            title="Delete">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
+                      <td className="px-3 py-3 text-right whitespace-nowrap">
+                        {isTrash ? (
+                          <div className="flex items-center justify-end gap-1">
+                            {canDelete && (
+                              <button onClick={(e) => { e.stopPropagation(); onRestore(t); }}
+                                className="cursor-pointer px-2 py-1 rounded text-xs font-medium text-gray-600 hover:text-green-700 hover:bg-green-50 transition"
+                                title="Restore this ticket">
+                                Restore
+                              </button>
+                            )}
+                            {canPurge && (
+                              <button onClick={(e) => { e.stopPropagation(); setModal({ type: 'purge', ticket: t }); }}
+                                className="cursor-pointer px-2 py-1 rounded text-xs font-medium text-red-500 hover:text-red-700 hover:bg-red-50 transition"
+                                title="Permanently delete">
+                                Delete forever
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          canDelete && (
+                            <button onClick={(e) => { e.stopPropagation(); setModal({ type: 'delete', ticket: t }); }}
+                              className="cursor-pointer p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition"
+                              title="Delete">
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          )
                         )}
                       </td>
                     </tr>
@@ -219,6 +298,7 @@ export default function ServiceTicketsPage() {
 
       {modal?.type === 'create' && <CreateTicketModal onClose={() => setModal(null)} onCreated={onCreated} />}
       {modal?.type === 'delete' && <DeleteModal ticket={modal.ticket} onClose={() => setModal(null)} onDeleted={onDeleted} />}
+      {modal?.type === 'purge' && <PurgeModal ticket={modal.ticket} onClose={() => setModal(null)} onPurged={onDeleted} />}
     </div>
   );
 }
