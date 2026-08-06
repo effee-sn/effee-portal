@@ -165,7 +165,7 @@ function createDeptTaskService(repository, tickets) {
           entityType: 'ServiceTicket', entityId: ticketId, link: ticketLink(ticketId), actorId: user?.id,
         });
       }
-      await rec('DEPT_TASK_ADDED', task.id, user, { ticket_id: ticketId, department: dept.name });
+      await rec('DEPT_TASK_ADDED', task.id, user, { ticket_id: ticket.ticket_id, department: dept.name });
       return repository.listForTicket(ticketId);
     },
 
@@ -183,12 +183,12 @@ function createDeptTaskService(repository, tickets) {
 
     /** Remove a task (manage). Removing the last blocker can complete the ticket. */
     async removeTask(ticketId, taskId, user) {
-      await ticketForView(ticketId, user);
+      const ticket = await ticketForView(ticketId, user);
       assertManage(user);
       await taskOfTicket(ticketId, taskId);
       await repository.softDelete(taskId);
       await syncTicket(ticketId);
-      await rec('DEPT_TASK_REMOVED', taskId, user, { ticket_id: ticketId });
+      await rec('DEPT_TASK_REMOVED', taskId, user, { ticket_id: ticket.ticket_id });
       return repository.listForTicket(ticketId);
     },
 
@@ -223,7 +223,7 @@ function createDeptTaskService(repository, tickets) {
       }
       await tickets.update(ticketId, { status: 'IN_PROGRESS', current_step_id: null });
       await syncTicket(ticketId);
-      await rec('DEPT_DISPATCHED', ticketId, user, { ticket_id: ticketId, departments: pending.length });
+      await rec('DEPT_DISPATCHED', ticketId, user, { ticket_id: ticket.ticket_id, departments_dispatched: pending.length });
       return repository.listForTicket(ticketId);
     },
 
@@ -268,7 +268,7 @@ function createDeptTaskService(repository, tickets) {
         body: `${ticket.ticket_id}: resolve “${snippet(task.issue_note)}”.`,
         entityType: 'ServiceTicket', entityId: ticketId, link: ticketLink(ticketId), actorId: user?.id,
       });
-      await rec('DEPT_TASK_ASSIGNED', taskId, user, { ticket_id: ticketId, to: target.name });
+      await rec('DEPT_TASK_ASSIGNED', taskId, user, { ticket_id: ticket.ticket_id, to: target.name });
       return repository.listForTicket(ticketId);
     },
 
@@ -291,7 +291,7 @@ function createDeptTaskService(repository, tickets) {
         body: `${ticket.ticket_id}: ${task.department_name} — review and validate the resolver’s work.`,
         entityType: 'ServiceTicket', entityId: ticketId, link: ticketLink(ticketId), actorId: user?.id,
       });
-      await rec('DEPT_TASK_SUBMITTED', taskId, user, { ticket_id: ticketId });
+      await rec('DEPT_TASK_SUBMITTED', taskId, user, { ticket_id: ticket.ticket_id });
       return repository.listForTicket(ticketId);
     },
 
@@ -311,13 +311,13 @@ function createDeptTaskService(repository, tickets) {
         body: `${ticket.ticket_id}: ${task.department_name} — the lead returned your work for changes.`,
         entityType: 'ServiceTicket', entityId: ticketId, link: ticketLink(ticketId), actorId: user?.id,
       });
-      await rec('DEPT_TASK_RETURNED', taskId, user, { ticket_id: ticketId });
+      await rec('DEPT_TASK_RETURNED', taskId, user, { ticket_id: ticket.ticket_id });
       return repository.listForTicket(ticketId);
     },
 
     /** Lead finalises the task (validates the resolver's work, or resolves it directly). */
     async resolve(ticketId, taskId, resolutionNote, user) {
-      await ticketForView(ticketId, user);
+      const ticket = await ticketForView(ticketId, user);
       const task = await taskOfTicket(ticketId, taskId);
       assertLead(user, task);
       if (task.status === 'RESOLVED') throw new BadRequestError('This task is already resolved');
@@ -343,7 +343,7 @@ function createDeptTaskService(repository, tickets) {
         assigned_user_id: user?.id ?? null, assigned_to_name: task.lead_name,
       });
       await syncTicket(ticketId);
-      await rec('DEPT_TASK_RESOLVED', taskId, user, { ticket_id: ticketId, department: task.department_name });
+      await rec('DEPT_TASK_RESOLVED', taskId, user, { ticket_id: ticket.ticket_id, department: task.department_name });
       return repository.listForTicket(ticketId);
     },
 
@@ -353,7 +353,7 @@ function createDeptTaskService(repository, tickets) {
      * they work it, the lead when it is back with them.
      */
     async saveReport(ticketId, taskId, { resolution_note, resolution_note_json }, user) {
-      await ticketForView(ticketId, user);
+      const ticket = await ticketForView(ticketId, user);
       const task = await taskOfTicket(ticketId, taskId);
       // A resolved/declined issue's report is frozen — it records what was done.
       if (task.status !== 'OPEN') {
@@ -364,7 +364,7 @@ function createDeptTaskService(repository, tickets) {
         ...(resolution_note !== undefined ? { resolution_note } : {}),
         ...(resolution_note_json !== undefined ? { resolution_note_json } : {}),
       });
-      await rec('DEPT_TASK_REPORTED', taskId, user, { ticket_id: ticketId });
+      await rec('DEPT_TASK_REPORTED', taskId, user, { ticket_id: ticket.ticket_id });
       return repository.listForTicket(ticketId);
     },
 
@@ -374,14 +374,14 @@ function createDeptTaskService(repository, tickets) {
      * assigned or resolved. Frozen once the issue leaves OPEN.
      */
     async setMethod(ticketId, taskId, resolutionMethod, user) {
-      await ticketForView(ticketId, user);
+      const ticket = await ticketForView(ticketId, user);
       const task = await taskOfTicket(ticketId, taskId);
       if (task.status !== 'OPEN') {
         throw new BadRequestError('This issue is closed — its resolution method can no longer be changed');
       }
       assertHolds(user, task);
       await repository.update(taskId, { resolution_method: resolutionMethod });
-      await rec('DEPT_TASK_METHOD_SET', taskId, user, { ticket_id: ticketId, method: resolutionMethod });
+      await rec('DEPT_TASK_METHOD_SET', taskId, user, { ticket_id: ticket.ticket_id, method: resolutionMethod });
       return repository.listForTicket(ticketId);
     },
 
@@ -401,7 +401,7 @@ function createDeptTaskService(repository, tickets) {
         body: `${ticket.ticket_id}: ${task.department_name} declined — ${snippet(reason)}. Redirect it to a department.`,
         entityType: 'ServiceTicket', entityId: ticketId, link: ticketLink(ticketId), actorId: user?.id,
       });
-      await rec('DEPT_TASK_DECLINED', taskId, user, { ticket_id: ticketId, reason });
+      await rec('DEPT_TASK_DECLINED', taskId, user, { ticket_id: ticket.ticket_id, reason });
       return repository.listForTicket(ticketId);
     },
 
@@ -435,7 +435,7 @@ function createDeptTaskService(repository, tickets) {
         body: `${ticket.ticket_id}: “${snippet(issue_note ?? task.issue_note)}” — write the resolution plan.`,
         entityType: 'ServiceTicket', entityId: ticketId, link: ticketLink(ticketId), actorId: user?.id,
       });
-      await rec('DEPT_TASK_REDIRECTED', taskId, user, { ticket_id: ticketId, department: dept.name });
+      await rec('DEPT_TASK_REDIRECTED', taskId, user, { ticket_id: ticket.ticket_id, department: dept.name });
       return repository.listForTicket(ticketId);
     },
   };
