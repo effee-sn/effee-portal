@@ -57,14 +57,20 @@ const testEmail = async (req, res) => {
   const { test_to } = req.body;
   const settings = await settingsService.get(req.user);
 
-  await sendTestMail({
-    to: test_to,
-    subject: 'Effee Portal — Email Test',
-    // The company name is administrator-controlled and rendered into HTML, so
-    // it is escaped rather than interpolated raw.
-    html: `<p>This is a test email from <strong>${escapeHtml(settings.company_name || 'Effee Portal')}</strong>. `
-        + 'Your email configuration is working correctly.</p>',
-  });
+  try {
+    await sendTestMail({
+      to: test_to,
+      subject: 'Effee Portal — Email Test',
+      // The company name is administrator-controlled and rendered into HTML, so
+      // it is escaped rather than interpolated raw.
+      html: `<p>This is a test email from <strong>${escapeHtml(settings.company_name || 'Effee Portal')}</strong>. `
+          + 'Your email configuration is working correctly.</p>',
+    });
+  } catch (err) {
+    // Admin-only config test: surface the real SMTP reason (timeout, bad login,
+    // relay denied, …) instead of a generic 500 the admin can't act on.
+    throw new BadRequestError(`Could not send test email: ${err.message}`);
+  }
 
   res.json({ message: `Test email sent to ${test_to}` });
 };

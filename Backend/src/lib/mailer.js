@@ -36,6 +36,11 @@ function buildTransporter(config) {
     // Implicit TLS on 465; STARTTLS negotiated on other ports.
     secure: port === 465,
     auth: { user: config.smtp_user, pass: config.smtp_pass },
+    // Fail fast with a clear error instead of hanging for ~30s when the SMTP
+    // host is unreachable (e.g. outbound port blocked, wrong host/port).
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
   });
 }
 
