@@ -20,6 +20,8 @@ const {
 } = require('./resolution.controller');
 const dt = require('./deptTask.validation');
 const dtc = require('./deptTask.controller');
+const { commentParams, addCommentBody } = require('./comment.validation');
+const { listComments, addComment, removeComment } = require('./comment.controller');
 
 const router = Router();
 
@@ -133,6 +135,11 @@ router.post('/tickets/:id/dept-tasks/:taskId/redirect', validate({ params: dt.ta
 router.put('/tickets/:id/dept-tasks/:taskId/report', validate({ params: dt.taskParams, body: dt.reportBody }), asyncHandler(dtc.saveReport));
 // The department's resolution method (Remote / Site Visit) — set by the lead.
 router.put('/tickets/:id/dept-tasks/:taskId/method', validate({ params: dt.taskParams, body: dt.methodBody }), asyncHandler(dtc.setMethod));
+
+// ── Comments (record tier; the service enforces view access + the closed gate) ─
+router.get('/tickets/:id/comments', validate({ params: ticketIdParam }), asyncHandler(listComments));
+router.post('/tickets/:id/comments', validate({ params: ticketIdParam, body: addCommentBody }), asyncHandler(addComment));
+router.delete('/tickets/:id/comments/:commentId', validate({ params: commentParams }), asyncHandler(removeComment));
 
 // ── Resolution plans — scoped per department task (record tier) ───────────────
 // Viewing follows canView; authoring/finalising/cloning is the task LEAD only —

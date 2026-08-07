@@ -6,6 +6,7 @@ import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost } from '@/lib/api';
 import DepartmentTasks from '@/components/DepartmentTasks';
+import TicketComments from '@/components/TicketComments';
 import {
   SERVICE_LOCATIONS, TICKET_TYPES,
   SEVERITY_STYLE, STATUS_STYLE,
@@ -375,6 +376,14 @@ export default function TicketDetailPage() {
         </div>
         <p className="text-[11px] text-gray-400 mt-3">Status updates automatically as the ticket moves through the flow.</p>
       </Section>
+
+      {/* Discussion thread — any viewer can comment while the ticket is open. */}
+      <TicketComments
+        ticketId={id}
+        closed={ticket.status === 'CLOSED'}
+        me={me}
+        canModerate={Boolean(me?.is_system || can('SERVICE_EDIT'))}
+      />
 
       </div>{/* /content */}
 

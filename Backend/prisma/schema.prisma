@@ -446,6 +446,10 @@ model ServiceTicket {
   /// reaches customer confirmation once every task is RESOLVED.
   department_tasks TicketDepartmentTask[]
 
+  /// Discussion thread. Anyone who can view the ticket may comment while it is
+  /// open; once CLOSED the thread is read-only.
+  comments TicketComment[]
+
   status TicketStatus @default(OPEN)
 
   created_at DateTime  @default(now())
@@ -488,6 +492,24 @@ model TicketParticipant {
 
   @@unique([ticket_id, user_id])
   @@index([user_id])
+}
+
+/// A comment on a ticket's discussion thread. `user_name` is denormalised (like
+/// participants) so the author stays readable after the user record changes.
+/// Soft-deletable for moderation; reads exclude removed rows.
+model TicketComment {
+  id        Int           @id @default(autoincrement())
+  ticket    ServiceTicket @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+  ticket_id Int
+  user_id   Int
+  user_name String?
+  body      String        @db.Text
+
+  created_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  // Threads are read oldest-first for one ticket.
+  @@index([ticket_id, created_at])
 }
 
 /// A resolution plan authored for a ticket — a rich document (block-editor
