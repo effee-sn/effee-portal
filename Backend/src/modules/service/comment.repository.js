@@ -8,7 +8,7 @@ const prisma = require('../../lib/prisma');
  */
 function createCommentRepository(db) {
   const commentSelect = Object.freeze({
-    id: true, ticket_id: true, user_id: true, user_name: true, body: true, created_at: true,
+    id: true, ticket_id: true, parent_id: true, user_id: true, user_name: true, body: true, created_at: true,
   });
 
   const active = (where = {}) => ({ ...where, deleted_at: null });

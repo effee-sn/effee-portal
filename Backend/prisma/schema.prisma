@@ -501,15 +501,23 @@ model TicketComment {
   id        Int           @id @default(autoincrement())
   ticket    ServiceTicket @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
   ticket_id Int
+
+  /// Reply threading (self-relation). A null parent is a top-level comment;
+  /// otherwise this is a reply. Deleting a comment cascades to its replies.
+  parent    TicketComment?  @relation("CommentReplies", fields: [parent_id], references: [id], onDelete: Cascade)
+  parent_id Int?
+  replies   TicketComment[] @relation("CommentReplies")
+
   user_id   Int
   user_name String?
-  body      String        @db.Text
+  body      String  @db.Text
 
   created_at DateTime  @default(now())
   deleted_at DateTime?
 
   // Threads are read oldest-first for one ticket.
   @@index([ticket_id, created_at])
+  @@index([parent_id])
 }
 
 /// A resolution plan authored for a ticket — a rich document (block-editor

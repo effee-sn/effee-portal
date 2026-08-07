@@ -377,12 +377,18 @@ export default function TicketDetailPage() {
         <p className="text-[11px] text-gray-400 mt-3">Status updates automatically as the ticket moves through the flow.</p>
       </Section>
 
-      {/* Discussion thread — any viewer can comment while the ticket is open. */}
+      {/* Discussion thread — any viewer can comment while the ticket is open.
+          People on the ticket (participants) are the @-mentionable set. */}
       <TicketComments
         ticketId={id}
         closed={ticket.status === 'CLOSED'}
         me={me}
         canModerate={Boolean(me?.is_system || can('SERVICE_EDIT'))}
+        people={Array.from(
+          new Map((ticket.participants || [])
+            .filter((p) => p.user_id && p.user_name)
+            .map((p) => [p.user_id, { id: p.user_id, name: p.user_name }])).values()
+        )}
       />
 
       </div>{/* /content */}
