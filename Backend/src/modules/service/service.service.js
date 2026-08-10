@@ -261,6 +261,8 @@ function createServiceService(repository) {
         issue_description: dto.issue_description,
         issue_severity:    dto.issue_severity,
         impact_details:    dto.impact_details ?? null,
+        billing_type:      dto.billing_type ?? null,
+        cost_center:       dto.cost_center ?? null,
         // Status is flow-driven, never set on intake.
         status:            'OPEN',
         created_by:        actor?.id ?? null,
@@ -359,6 +361,8 @@ function createServiceService(repository) {
         // Service location (where the machine is handled). The resolution method
         // + findings are per department task, not on the ticket.
         'service_location',
+        // Billing classification (finance/sales), editable until close.
+        'billing_type', 'cost_center',
         // NOTE: status, customer_confirmed and observation_until are NOT here —
         // they are driven by the workflow actions (advance/confirm/close/reopen),
         // never set by a manual update.

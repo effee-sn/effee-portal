@@ -34,6 +34,9 @@ function createServiceRepository(db) {
     originating_department: { select: { id: true, name: true } },
     // Impacts
     impact_details: true,
+    // Billing
+    billing_type: true,
+    cost_center: true,
     // Resolution
     service_location: true,
     customer_confirmed: true,

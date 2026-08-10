@@ -398,6 +398,12 @@ model ServiceTicket {
   /// Free-text description of the ticket's impact (production, customer, safety…).
   impact_details String? @db.Text
 
+  /// Billing classification for finance/sales. `billing_type` marks the ticket
+  /// billable or non-billable; `cost_center` is the free-text Tally cost centre
+  /// it maps to. Set at creation and editable until the ticket is closed.
+  billing_type BillingType?
+  cost_center  String?
+
   /// Where the machine is handled — set at intake by the initiator. The actual
   /// resolution method (remote / site visit) is decided later, per department,
   /// on each TicketDepartmentTask.
@@ -656,6 +662,13 @@ enum TicketStatus {
   ON_OBSERVATION
   CLOSED
   REOPENED
+}
+
+/// Whether a ticket's work is billable to the customer or not. Pairs with the
+/// free-text `cost_center` for finance/sales.
+enum BillingType {
+  BILLABLE
+  NON_BILLABLE
 }
 
 /// Where the machine is handled for a ticket — chosen at intake by the

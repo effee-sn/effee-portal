@@ -29,6 +29,12 @@ export const RESOLUTION_METHODS = [
   { value: 'SITE_VISIT', label: 'Site Visit' },
 ];
 
+/** Billing classification for finance/sales — pairs with a free-text cost centre. */
+export const BILLING_TYPES = [
+  { value: 'BILLABLE',     label: 'Billable' },
+  { value: 'NON_BILLABLE', label: 'Non-billable' },
+];
+
 /**
  * Source (ticket) types — display labels for the stored `ticket_type` enum.
  * The DB values stay CALL / EMAIL / DC; only the shown label differs (DC reads

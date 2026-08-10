@@ -18,6 +18,12 @@ const serviceLocation = z.preprocess(
   z.enum(['AT_CUSTOMER', 'AT_EFFEE']).optional()
 );
 
+/** Optional billing classification; a blank value is omitted. */
+const billingType = z.preprocess(
+  (v) => (v === '' || v === null ? undefined : v),
+  z.enum(['BILLABLE', 'NON_BILLABLE']).optional()
+);
+
 const shortText = (max) => z.string().trim().min(1).max(max);
 
 /** Optional text; blank strings normalise to undefined rather than "". */
@@ -85,6 +91,8 @@ const createTicketBody = z.object({
   issue_severity:    severity,
   service_location:          serviceLocation,
   impact_details:            optionalText(5000),
+  billing_type:              billingType,
+  cost_center:               optionalText(120),
 }).refine((d) => d.ticket_type !== 'OTHERS' || (d.source_details && d.source_details.trim().length > 0), {
   message: 'Source details are required for an "Others" source',
   path: ['source_details'],
@@ -115,6 +123,10 @@ const updateTicketBody = z.object({
   // Service location (where the machine is handled) is editable post-intake.
   // The resolution METHOD + findings live per department task, not on the ticket.
   service_location:          serviceLocation,
+
+  // Billing classification (finance/sales) — editable until the ticket closes.
+  billing_type:              billingType,
+  cost_center:               optionalText(120),
 
   // status, customer_confirmed and observation_until are flow-driven only —
   // set by the workflow actions, never by a manual update.

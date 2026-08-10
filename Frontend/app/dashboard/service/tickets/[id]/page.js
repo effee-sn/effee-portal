@@ -7,6 +7,7 @@ import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost } from '@/lib/api';
 import DepartmentTasks from '@/components/DepartmentTasks';
 import TicketComments from '@/components/TicketComments';
+import TicketBilling from '@/components/TicketBilling';
 import {
   SERVICE_LOCATIONS, TICKET_TYPES,
   SEVERITY_STYLE, STATUS_STYLE,
@@ -357,6 +358,16 @@ export default function TicketDetailPage() {
           {ticket.impact_details && <Field label="Impact Details"><p className="whitespace-pre-wrap">{ticket.impact_details}</p></Field>}
         </div>
       </Section>
+
+      {/* Billing — billable/non-billable + cost centre (finance/sales). */}
+      <TicketBilling
+        ticketId={id}
+        billingType={ticket.billing_type}
+        costCenter={ticket.cost_center}
+        closed={ticket.status === 'CLOSED'}
+        canEdit={canAct}
+        onSaved={(t) => applyTicket(t)}
+      />
 
       {/* Departments — each carries its own category + issue + resolution */}
       <DepartmentTasks

@@ -31,6 +31,8 @@ export default function CreateTicketModal({ onClose, onCreated }) {
       reported_by_phone: '',
       reported_by_email: '',
       service_location: '',
+      billing_type: '',
+      cost_center: '',
       machine_project: '',
       machine_serial_no: '',
       issue_severity: 'MEDIUM',
@@ -165,6 +167,25 @@ export default function CreateTicketModal({ onClose, onCreated }) {
                 <option value="AT_EFFEE">Sent to Effee</option>
               </select>
             </div>
+          </div>
+
+          {/* Billing — cost centre appears once a billing type is chosen. */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={label}>Billing Type</label>
+              <select name="billing_type" value={form.billing_type} onChange={change} className="ams-input">
+                <option value="">— Select —</option>
+                <option value="BILLABLE">Billable</option>
+                <option value="NON_BILLABLE">Non-billable</option>
+              </select>
+            </div>
+            {form.billing_type && (
+              <div>
+                <label className={label}>Cost Center</label>
+                <input name="cost_center" value={form.cost_center} onChange={change}
+                  placeholder="e.g. CC-Sales-01" className="ams-input" />
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
