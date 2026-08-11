@@ -8,7 +8,7 @@ import useNav from '@/lib/useNav';
 import { apiGet } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
 import CreateTicketModal from '@/components/CreateTicketModal';
-import { SEVERITY_STYLE, STATUS_STYLE } from '@/lib/serviceOptions';
+import { SEVERITY_STYLE, STATUS_STYLE, BILLING_STYLE } from '@/lib/serviceOptions';
 
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
 
@@ -69,7 +69,7 @@ export default function ServiceInboxPage() {
           <div className="py-20 text-center text-sm text-gray-400">Nothing assigned to you right now.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm" style={{ minWidth: 720 }}>
+            <table className="w-full text-sm" style={{ minWidth: 840 }}>
               <thead>
                 <tr className="border-b border-gray-200 text-left text-gray-500">
                   <th className="px-3 py-3 font-normal">Ticket ID</th>
@@ -77,6 +77,7 @@ export default function ServiceInboxPage() {
                   <th className="px-3 py-3 font-normal">Issue</th>
                   <th className="px-3 py-3 font-normal">Severity</th>
                   <th className="px-3 py-3 font-normal">Status</th>
+                  <th className="px-3 py-3 font-normal">Billing</th>
                   <th className="px-3 py-3 font-normal">Created</th>
                 </tr>
               </thead>
@@ -96,6 +97,17 @@ export default function ServiceInboxPage() {
                       </td>
                       <td className="px-3 py-3">
                         <span className="text-xs font-medium" style={{ color: st.color }}>{st.label}</span>
+                      </td>
+                      <td className="px-3 py-3">
+                        {t.billing_type ? (
+                          <>
+                            <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium"
+                              style={{ color: BILLING_STYLE[t.billing_type]?.color, backgroundColor: BILLING_STYLE[t.billing_type]?.bg }}>
+                              {BILLING_STYLE[t.billing_type]?.label}
+                            </span>
+                            {t.cost_center && <span className="block text-[11px] text-gray-400 mt-0.5 truncate max-w-[130px]">{t.cost_center}</span>}
+                          </>
+                        ) : <span className="text-gray-300">—</span>}
                       </td>
                       <td className="px-3 py-3 text-gray-500 whitespace-nowrap">{fmtDate(t.created_at)}</td>
                     </tr>

@@ -10,7 +10,7 @@ import { TableSkeleton } from '@/components/Skeleton';
 import CreateTicketModal from '@/components/CreateTicketModal';
 // Shared styles so every status (Reopened, On Observation, Contacted, …) renders
 // — the list must not fall behind the ticket's full status set.
-import { SEVERITY_STYLE, STATUS_STYLE, TICKET_TYPES } from '@/lib/serviceOptions';
+import { SEVERITY_STYLE, STATUS_STYLE, TICKET_TYPES, BILLING_STYLE } from '@/lib/serviceOptions';
 
 /** Formats an ISO timestamp as a short, locale-aware date. */
 const formatDate = (iso) => {
@@ -221,7 +221,7 @@ export default function ServiceTicketsPage() {
           {tickets.length === 0 ? (
             <div className="py-20 text-center text-sm text-gray-400">{isTrash ? 'Trash is empty.' : 'No tickets found.'}</div>
           ) : (
-            <table className="w-full text-sm" style={{ minWidth: 940 }}>
+            <table className="w-full text-sm" style={{ minWidth: 1060 }}>
               <thead>
                 <tr className="border-b border-gray-200 text-left text-gray-500">
                   <th className="px-3 py-3 font-normal">Ticket ID</th>
@@ -230,6 +230,7 @@ export default function ServiceTicketsPage() {
                   <th className="px-3 py-3 font-normal">Issue</th>
                   <th className="px-3 py-3 font-normal">Severity</th>
                   <th className="px-3 py-3 font-normal">Status</th>
+                  <th className="px-3 py-3 font-normal">Billing</th>
                   <th className="px-3 py-3 font-normal">Created By</th>
                   <th className="px-3 py-3 font-normal">Created</th>
                   <th className="px-3 py-3 w-10" />
@@ -253,6 +254,17 @@ export default function ServiceTicketsPage() {
                       </td>
                       <td className="px-3 py-3">
                         <span className="text-xs font-medium" style={{ color: st.color }}>{st.label}</span>
+                      </td>
+                      <td className="px-3 py-3">
+                        {t.billing_type ? (
+                          <>
+                            <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium"
+                              style={{ color: BILLING_STYLE[t.billing_type]?.color, backgroundColor: BILLING_STYLE[t.billing_type]?.bg }}>
+                              {BILLING_STYLE[t.billing_type]?.label}
+                            </span>
+                            {t.cost_center && <span className="block text-[11px] text-gray-400 mt-0.5 truncate max-w-[130px]">{t.cost_center}</span>}
+                          </>
+                        ) : <span className="text-gray-300">—</span>}
                       </td>
                       <td className="px-3 py-3 text-gray-600">{t.created_by_name || '—'}</td>
                       <td className="px-3 py-3 text-gray-500 whitespace-nowrap">{formatDate(t.created_at)}</td>

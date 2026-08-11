@@ -35,6 +35,12 @@ export const BILLING_TYPES = [
   { value: 'NON_BILLABLE', label: 'Non-billable' },
 ];
 
+/** Badge styles for the billing type, for list/detail display. */
+export const BILLING_STYLE = {
+  BILLABLE:     { label: 'Billable',     color: '#15803D', bg: '#F0FDF4' },
+  NON_BILLABLE: { label: 'Non-billable', color: '#6B7280', bg: '#F3F4F6' },
+};
+
 /**
  * Source (ticket) types — display labels for the stored `ticket_type` enum.
  * The DB values stay CALL / EMAIL / DC; only the shown label differs (DC reads
