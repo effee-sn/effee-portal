@@ -2,3 +2,6 @@ node_modules/
 .env
 
 /src/generated/prisma
+
+# Database backup files (never commit data dumps)
+/backups/

@@ -93,6 +93,20 @@ const config = Object.freeze({
    */
   TRUST_PROXY_HOPS: integer('TRUST_PROXY_HOPS', 0),
 
+  /**
+   * MySQL connection string. Prisma reads it directly from the environment; it
+   * is surfaced here for the backup/restore tooling, which parses it for the
+   * mysqldump/mysql credentials.
+   */
+  DATABASE_URL: process.env.DATABASE_URL || '',
+
+  /**
+   * Optional directory holding the `mysqldump` / `mysql` binaries. Empty means
+   * they are on PATH (the norm on the Linux server); set it to e.g.
+   * `C:\\xampp\\mysql\\bin` on a Windows/XAMPP dev box.
+   */
+  MYSQL_BIN_DIR: process.env.MYSQL_BIN_DIR || '',
+
   JWT: {
     SECRET:     JWT_SECRET,
     EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',

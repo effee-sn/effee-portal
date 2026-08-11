@@ -63,6 +63,7 @@ export const AREAS = [
       { label: 'Departments',  href: '/dashboard/departments', perm: 'DEPT_VIEW' },
       { label: 'Flow Builder', href: '/dashboard/flows',       perm: 'FLOW_VIEW' },
       { label: 'Audit Log',    href: '/dashboard/audit',       perm: null, system: true },
+      { label: 'Backup',       href: '/dashboard/backup',      perm: null, system: true },
       { label: 'Settings',     href: '/dashboard/settings',    perm: null },
     ],
   },
