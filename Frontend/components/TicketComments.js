@@ -181,6 +181,8 @@ export default function TicketComments({ ticketId, closed, me, canModerate, peop
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState('');
   const [replyTo, setReplyTo]   = useState(null);
+  const [open, setOpen]         = useState(false);  // drawer mounted
+  const [shown, setShown]       = useState(false);  // drawer slid in
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -190,6 +192,18 @@ export default function TicketComments({ ticketId, closed, me, canModerate, peop
   }, [ticketId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Mount, then slide in on the next frame so the transition runs; slide out
+  // then unmount so the closing animation is visible.
+  const openDrawer  = () => { setOpen(true); requestAnimationFrame(() => setShown(true)); };
+  const closeDrawer = () => { setShown(false); setTimeout(() => { setOpen(false); setReplyTo(null); }, 200); };
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') closeDrawer(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
 
   const post = async (body, mentions, parentId) => {
     setError('');
@@ -211,39 +225,67 @@ export default function TicketComments({ ticketId, closed, me, canModerate, peop
   const canRemove = (c) => !closed && me && (c.user_id === me.id || canModerate);
   const tree = buildTree(comments);
 
+  const countLabel = comments.length > 0 ? <span className="text-gray-400 font-normal">· {comments.length}</span> : null;
+
   return (
-    <div className="bg-white rounded-lg border border-gray-200">
-      <div className="px-5 py-3 border-b border-gray-100">
-        <h2 className="text-sm font-semibold text-gray-800">
-          Comments {comments.length > 0 && <span className="text-gray-400 font-normal">· {comments.length}</span>}
-        </h2>
-      </div>
+    <>
+      {/* Trigger — opens the discussion in a right-hand drawer so a long thread
+          never stretches the ticket page. */}
+      <button onClick={openDrawer}
+        className="w-full bg-white rounded-lg border border-gray-200 px-5 py-3 flex items-center justify-between hover:bg-gray-50 transition cursor-pointer">
+        <span className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.9 9.9 0 01-4-.8L3 20l.8-4A7.9 7.9 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+          Comments {countLabel}
+        </span>
+        <span className="text-xs text-gray-400">Open →</span>
+      </button>
 
-      <div className="px-5 py-4 space-y-4">
-        {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm">{error}</div>}
+      {open && (
+        <>
+          <div onClick={closeDrawer}
+            className={`fixed inset-0 z-50 bg-black/40 transition-opacity duration-200 ${shown ? 'opacity-100' : 'opacity-0'}`} />
+          <div className={`fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 flex flex-col transition-transform duration-200 ${shown ? 'translate-x-0' : 'translate-x-full'}`}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 h-14 border-b border-gray-100 shrink-0">
+              <h2 className="text-sm font-semibold text-gray-800">Comments {countLabel}</h2>
+              <button onClick={closeDrawer} aria-label="Close" className="cursor-pointer w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
 
-        {loading ? (
-          <p className="text-sm text-gray-400">Loading…</p>
-        ) : tree.length === 0 ? (
-          <p className="text-sm text-gray-400">No comments yet.</p>
-        ) : (
-          <div className="space-y-4">
-            {tree.map((node) => (
-              <CommentNode key={node.id} node={node} depth={0} people={people} closed={closed}
-                canRemove={canRemove} replyTo={replyTo} setReplyTo={setReplyTo}
-                onReply={post} onRemove={remove} />
-            ))}
+            {/* Scrollable thread */}
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm mb-4">{error}</div>}
+              {loading ? (
+                <p className="text-sm text-gray-400">Loading…</p>
+              ) : tree.length === 0 ? (
+                <p className="text-sm text-gray-400">No comments yet.</p>
+              ) : (
+                <div className="space-y-4">
+                  {tree.map((node) => (
+                    <CommentNode key={node.id} node={node} depth={0} people={people} closed={closed}
+                      canRemove={canRemove} replyTo={replyTo} setReplyTo={setReplyTo}
+                      onReply={post} onRemove={remove} />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Composer pinned at the bottom */}
+            <div className="px-5 shrink-0">
+              {closed ? (
+                <p className="text-xs text-gray-400 border-t border-gray-100 py-4">
+                  This ticket is closed — comments are read-only.
+                </p>
+              ) : (
+                <Composer people={people} onSubmit={(body, mentions) => post(body, mentions, null)} />
+              )}
+            </div>
           </div>
-        )}
-
-        {closed ? (
-          <p className="text-xs text-gray-400 border-t border-gray-100 pt-3">
-            This ticket is closed — comments are read-only.
-          </p>
-        ) : (
-          <Composer people={people} onSubmit={(body, mentions) => post(body, mentions, null)} />
-        )}
-      </div>
-    </div>
+        </>
+      )}
+    </>
   );
 }
