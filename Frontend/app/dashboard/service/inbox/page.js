@@ -68,9 +68,9 @@ export default function ServiceInboxPage() {
         {rows.length === 0 ? (
           <div className="py-20 text-center text-sm text-gray-400">Nothing assigned to you right now.</div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 170px)' }}>
             <table className="w-full text-sm" style={{ minWidth: 840 }}>
-              <thead>
+              <thead className="sticky top-0 z-10 bg-white">
                 <tr className="border-b border-gray-200 text-left text-gray-500">
                   <th className="px-3 py-3 font-normal">Ticket ID</th>
                   <th className="px-3 py-3 font-normal">Company</th>
