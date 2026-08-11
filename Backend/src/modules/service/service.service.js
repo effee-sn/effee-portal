@@ -389,7 +389,7 @@ function createServiceService(repository) {
         entity: 'ServiceTicket',
         entityId: id,
         actor,
-        changes: { fields: Object.keys(data).filter((k) => k !== 'updated_by') },
+        changes: auditService.diff(existing, data),
       });
 
       // Carry next-stage info (e.g. setting the originating department clears the

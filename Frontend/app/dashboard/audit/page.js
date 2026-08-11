@@ -100,6 +100,17 @@ function ChangeValue({ value, keyName, permMap }) {
     return <div className="space-y-2">{value.map((item, i) => <ChangeRows key={i} data={item} permMap={permMap} />)}</div>;
   }
   if (value && typeof value === 'object') {
+    // A before/after diff — render inline as "old → new".
+    const keys = Object.keys(value);
+    if (keys.length === 2 && 'from' in value && 'to' in value) {
+      return (
+        <span className="inline-flex items-center gap-1.5 flex-wrap">
+          <span className="text-gray-400">{formatScalar(value.from)}</span>
+          <span className="text-gray-400">→</span>
+          <span className="text-gray-800 font-medium">{formatScalar(value.to)}</span>
+        </span>
+      );
+    }
     return <div className="pl-3 border-l border-gray-200 mt-1"><ChangeRows data={value} permMap={permMap} /></div>;
   }
   return <span>{formatScalar(value)}</span>;

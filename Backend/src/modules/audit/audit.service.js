@@ -87,6 +87,30 @@ function createAuditService(repository) {
     Action,
 
     /**
+     * Builds a before/after diff for an update, as `{ field: { from, to } }`,
+     * keeping only fields whose value actually changed. Audit/bookkeeping columns
+     * are ignored. The result is passed straight to `record` as `changes`, where
+     * the serialiser redacts any secret-named field.
+     *
+     * @param {Record<string, unknown>} before The record's values before the update.
+     * @param {Record<string, unknown>} after The fields being written.
+     * @param {string[]} [skip] Extra field names to ignore.
+     * @returns {Record<string, { from: unknown, to: unknown }>}
+     */
+    diff(before, after, skip = []) {
+      const ignore = new Set(['updated_by', 'updated_at', 'created_by', 'created_at', ...skip]);
+      const out = {};
+      for (const [key, next] of Object.entries(after || {})) {
+        if (ignore.has(key)) continue;
+        const prev = before ? before[key] : undefined;
+        if (normalise(prev) !== normalise(next)) {
+          out[key] = { from: prev ?? null, to: next ?? null };
+        }
+      }
+      return out;
+    },
+
+    /**
      * Records an audit entry.
      *
      * @param {object} params
@@ -150,6 +174,21 @@ function createAuditService(repository) {
  */
 function safeParse(json) {
   try { return JSON.parse(json); } catch { return json; }
+}
+
+/**
+ * Normalises a value for change comparison: dates by their instant, objects by
+ * their JSON shape, and null/undefined as equal. Everything else compares by
+ * value.
+ *
+ * @param {unknown} v
+ * @returns {unknown}
+ */
+function normalise(v) {
+  if (v === undefined || v === null) return null;
+  if (v instanceof Date) return v.getTime();
+  if (typeof v === 'object') return JSON.stringify(v);
+  return v;
 }
 
 const auditService = createAuditService(auditRepository);

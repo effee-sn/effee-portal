@@ -182,7 +182,9 @@ function createUsersService(repository) {
      * @throws {NotFoundError|ConflictError|ValidationError}
      */
     async update(id, dto, actor) {
-      if (!(await repository.existsById(id))) throw new NotFoundError('User');
+      // Load the current values so the audit can record before → after.
+      const before = await repository.findById(id);
+      if (!before) throw new NotFoundError('User');
 
       if (dto.role_id !== undefined) await assertRoleExists(dto.role_id);
       if (dto.department_id !== undefined && dto.department_id !== null) {
@@ -223,7 +225,8 @@ function createUsersService(repository) {
         entityId: id,
         actor,
         changes: {
-          fields: Object.keys(data).filter((key) => key !== 'password' && key !== 'updated_by'),
+          // Password is tracked as a flag only — the hash never enters the trail.
+          ...auditService.diff(before, data, ['password']),
           ...(passwordChanged ? { password_changed: true } : {}),
         },
       });

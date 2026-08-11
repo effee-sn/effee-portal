@@ -173,6 +173,8 @@ function createRolesService(repository) {
      */
     async update(id, dto, actor) {
       await assertModifiable(id, 'modified');
+      // Current values, so the audit can record before → after.
+      const before = await repository.findById(id);
 
       if (dto.name !== undefined || dto.slug !== undefined) {
         const conflict = await repository.findConflicting({
@@ -191,7 +193,7 @@ function createRolesService(repository) {
         entity: 'Role',
         entityId: id,
         actor,
-        changes: dto,
+        changes: auditService.diff(before, dto),
       });
 
       const allPermissions = await repository.findAllPermissions();

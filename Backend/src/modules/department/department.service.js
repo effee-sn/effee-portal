@@ -90,7 +90,9 @@ function createDepartmentService(repository) {
      * @param {import('../../core/http/requestContext').ActorContext} [actor]
      */
     async update(id, dto, actor) {
-      if (!(await repository.existsById(id))) throw new NotFoundError('Department');
+      // Load the current values so the audit can record before → after.
+      const before = await repository.findById(id);
+      if (!before) throw new NotFoundError('Department');
 
       if (dto.name !== undefined) {
         await assertUnique({ name: dto.name, excludeId: id });
@@ -114,7 +116,7 @@ function createDepartmentService(repository) {
         entity: 'Department',
         entityId: id,
         actor,
-        changes: { fields: Object.keys(data).filter((k) => k !== 'updated_by') },
+        changes: auditService.diff(before, data),
       });
 
       return dept;
