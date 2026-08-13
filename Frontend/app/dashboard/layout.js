@@ -42,17 +42,21 @@ export default function DashboardLayout({ children }) {
     }).catch(() => {});
   }, []);
 
-  // Use the company logo as the browser tab favicon once it's loaded.
+  // Use the company logo as the browser tab favicon and the iOS home-screen
+  // icon (apple-touch-icon) once it's loaded. The installable app icon on
+  // Android/desktop comes from the web manifest instead.
   useEffect(() => {
     if (!companyLogo || typeof document === 'undefined') return;
-    let link = document.getElementById('company-favicon');
-    if (!link) {
-      link = document.createElement('link');
-      link.id = 'company-favicon';
-      link.rel = 'icon';
-      document.head.appendChild(link);
+    for (const [id, rel] of [['company-favicon', 'icon'], ['company-apple-icon', 'apple-touch-icon']]) {
+      let link = document.getElementById(id);
+      if (!link) {
+        link = document.createElement('link');
+        link.id = id;
+        link.rel = rel;
+        document.head.appendChild(link);
+      }
+      link.href = companyLogo;
     }
-    link.href = companyLogo;
   }, [companyLogo]);
 
   // Close the user menu on any outside click. The app drawer manages its own

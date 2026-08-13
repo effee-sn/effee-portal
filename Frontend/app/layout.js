@@ -20,6 +20,9 @@ const jbMono = JetBrains_Mono({
 export const metadata = {
   title: "Effee Portal",
   description: "Effee Portal — service ticketing",
+  // Installable web-app manifest, generated dynamically so its icon reflects the
+  // uploaded company logo (see app/manifest.webmanifest/route.js).
+  manifest: "/manifest.webmanifest",
 };
 
 export default function RootLayout({ children }) {

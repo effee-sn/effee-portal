@@ -11,7 +11,7 @@ const {
   updateCompanyBody, updateEmailBody, updateSecurityBody, testEmailBody,
 } = require('./settings.validation');
 const {
-  getSettings, updateCompanyInfo, updateEmailSettings,
+  getSettings, getBranding, updateCompanyInfo, updateEmailSettings,
   updateSecuritySettings, testEmail, uploadLogo,
 } = require('./settings.controller');
 
@@ -97,6 +97,10 @@ function handleUploadErrors(handler) {
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
+
+// Public branding (company name + logo) — no auth, for the login screen, the
+// favicon, and the installable web-app manifest. Declared before the auth gate.
+router.get('/branding', asyncHandler(getBranding));
 
 router.use(authenticate);
 

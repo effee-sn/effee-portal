@@ -33,6 +33,17 @@ const getSettings = async (req, res) => {
   res.json(await settingsService.get(req.user));
 };
 
+/**
+ * `GET /settings/branding` — public company branding (name + logo only). No
+ * auth, so the login screen, favicon, and the installable web-app manifest can
+ * read it. Passing no actor yields only the public-field projection.
+ *
+ * @type {import('express').RequestHandler}
+ */
+const getBranding = async (req, res) => {
+  res.json(await settingsService.get());
+};
+
 /** @type {import('express').RequestHandler} */
 const updateCompanyInfo = async (req, res) => {
   res.json(await settingsService.updateCompanyInfo(req.body));
@@ -89,6 +100,7 @@ const uploadLogo = async (req, res) => {
 
 module.exports = {
   getSettings,
+  getBranding,
   updateCompanyInfo,
   updateEmailSettings,
   updateSecuritySettings,
