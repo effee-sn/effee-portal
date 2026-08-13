@@ -27,10 +27,15 @@ export default function TicketBilling({ ticketId, billingType, costCenter, close
   const open = () => { setBt(billingType || ''); setCc(costCenter || ''); setError(''); setEditing(true); };
   const cancel = () => { setEditing(false); setError(''); };
 
+  // A billable ticket must carry a cost centre; a non-billable one never does.
+  const needsCostCenter = bt === 'BILLABLE';
+  const canSave = bt && (!needsCostCenter || cc.trim());
+
   const save = async () => {
+    if (!canSave) return;
     setSaving(true); setError('');
     try {
-      const res = await apiPut(`/service/tickets/${ticketId}`, { billing_type: bt, cost_center: bt ? cc : '' });
+      const res = await apiPut(`/service/tickets/${ticketId}`, { billing_type: bt, cost_center: needsCostCenter ? cc : '' });
       onSaved?.(res.data);
       setEditing(false);
     } catch (e) { setError(e.message); }
@@ -47,7 +52,7 @@ export default function TicketBilling({ ticketId, billingType, costCenter, close
         {editing && (
           <div className="flex items-center gap-2">
             <button onClick={cancel} className="cursor-pointer text-sm text-gray-500 hover:text-gray-800">Cancel</button>
-            <button onClick={save} disabled={saving || !bt}
+            <button onClick={save} disabled={saving || !canSave}
               className="cursor-pointer px-3 py-1 text-sm font-medium text-white rounded-sm disabled:opacity-40 disabled:cursor-not-allowed"
               style={{ backgroundColor: 'var(--ams-primary)' }}>
               {saving ? 'Saving…' : 'Save'}
@@ -69,9 +74,11 @@ export default function TicketBilling({ ticketId, billingType, costCenter, close
                 {BILLING_TYPES.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
               </select>
             </div>
-            {bt && (
+            {needsCostCenter && (
               <div>
-                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Cost Center</label>
+                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                  Cost Center <span className="text-red-500">*</span>
+                </label>
                 <input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="e.g. CC-Sales-01" className="ams-input" />
               </div>
             )}

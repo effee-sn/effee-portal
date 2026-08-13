@@ -96,6 +96,9 @@ const createTicketBody = z.object({
 }).refine((d) => d.ticket_type !== 'OTHERS' || (d.source_details && d.source_details.trim().length > 0), {
   message: 'Source details are required for an "Others" source',
   path: ['source_details'],
+}).refine((d) => d.billing_type !== 'BILLABLE' || (d.cost_center && d.cost_center.trim().length > 0), {
+  message: 'A cost center is required for a billable ticket',
+  path: ['cost_center'],
 });
 
 /** `PUT /service/tickets/:id` — partial update. */
@@ -133,7 +136,10 @@ const updateTicketBody = z.object({
 }).refine(
   (data) => Object.values(data).some((v) => v !== undefined),
   { message: 'At least one field must be provided' }
-);
+).refine((d) => d.billing_type !== 'BILLABLE' || (d.cost_center && d.cost_center.trim().length > 0), {
+  message: 'A cost center is required for a billable ticket',
+  path: ['cost_center'],
+});
 
 module.exports = {
   listTicketsQuery,

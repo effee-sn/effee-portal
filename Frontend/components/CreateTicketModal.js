@@ -51,6 +51,10 @@ export default function CreateTicketModal({ onClose, onCreated }) {
 
   const submit = async (e) => {
     e.preventDefault();
+    if (form.billing_type === 'BILLABLE' && !form.cost_center.trim()) {
+      setError('A cost center is required for a billable ticket.');
+      return;
+    }
     setSaving(true); setError('');
     try {
       const res = await apiPost('/service/tickets', form);
@@ -169,19 +173,21 @@ export default function CreateTicketModal({ onClose, onCreated }) {
             </div>
           </div>
 
-          {/* Billing — cost centre appears once a billing type is chosen. */}
+          {/* Billing — cost centre is required for a billable ticket only. */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={label}>Billing Type</label>
-              <select name="billing_type" value={form.billing_type} onChange={change} className="ams-input">
+              <select name="billing_type" value={form.billing_type}
+                onChange={(e) => { setForm((f) => ({ ...f, billing_type: e.target.value, cost_center: e.target.value === 'BILLABLE' ? f.cost_center : '' })); setError(''); }}
+                className="ams-input">
                 <option value="">— Select —</option>
                 <option value="BILLABLE">Billable</option>
                 <option value="NON_BILLABLE">Non-billable</option>
               </select>
             </div>
-            {form.billing_type && (
+            {form.billing_type === 'BILLABLE' && (
               <div>
-                <label className={label}>Cost Center</label>
+                <label className={label}>Cost Center <span className="text-red-500">*</span></label>
                 <input name="cost_center" value={form.cost_center} onChange={change}
                   placeholder="e.g. CC-Sales-01" className="ams-input" />
               </div>
