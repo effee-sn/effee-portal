@@ -30,7 +30,7 @@ export async function GET() {
       { src: iconUrl, sizes: '512x512', type, purpose: 'any' },
       { src: iconUrl, sizes: '512x512', type, purpose: 'maskable' },
     ]
-    : [{ src: '/favicon.ico', sizes: 'any' }];
+    : []; // no logo uploaded yet — no icon rather than the framework default
 
   const manifest = {
     name,

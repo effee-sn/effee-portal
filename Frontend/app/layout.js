@@ -1,6 +1,7 @@
 import NextTopLoader from "nextjs-toploader";
 import { Lato, JetBrains_Mono } from "next/font/google";
 import LoaderBridge from "@/components/LoaderBridge";
+import BrandingIcons from "@/components/BrandingIcons";
 import "./globals.css";
 
 const lato = Lato({
@@ -31,6 +32,7 @@ export default function RootLayout({ children }) {
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <NextTopLoader color="#875A7B" height={3} showSpinner={false} />
         <LoaderBridge />
+        <BrandingIcons />
         {children}
       </body>
     </html>
