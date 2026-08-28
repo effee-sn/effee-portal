@@ -17,6 +17,15 @@ const {
   listContacts, createContact, updateContact, deleteContact,
 } = require('./contact.controller');
 
+const {
+  listEnquiriesQuery, enquiryIdParam, createEnquiryBody, updateEnquiryBody,
+  winEnquiryBody, loseEnquiryBody,
+} = require('./enquiry.validation');
+const {
+  getEnquiries, getEnquiryById, createEnquiry, updateEnquiry,
+  winEnquiry, loseEnquiry, reopenEnquiry, deleteEnquiry,
+} = require('./enquiry.controller');
+
 const router = Router();
 
 router.use(authenticate);
@@ -91,6 +100,63 @@ router.delete(
   authorize('SALES_DELETE'),
   validate({ params: contactValidation.contactIdParam }),
   asyncHandler(deleteContact)
+);
+
+// ── Enquiries (the pipeline) ──────────────────────────────────────────────────
+router.get(
+  '/enquiries',
+  authorize('SALES_VIEW'),
+  validate({ query: listEnquiriesQuery }),
+  asyncHandler(getEnquiries)
+);
+
+router.post(
+  '/enquiries',
+  authorize('SALES_CREATE'),
+  validate({ body: createEnquiryBody }),
+  asyncHandler(createEnquiry)
+);
+
+router.get(
+  '/enquiries/:id',
+  authorize('SALES_VIEW'),
+  validate({ params: enquiryIdParam }),
+  asyncHandler(getEnquiryById)
+);
+
+router.put(
+  '/enquiries/:id',
+  authorize('SALES_EDIT'),
+  validate({ params: enquiryIdParam, body: updateEnquiryBody }),
+  asyncHandler(updateEnquiry)
+);
+
+router.post(
+  '/enquiries/:id/win',
+  authorize('SALES_EDIT'),
+  validate({ params: enquiryIdParam, body: winEnquiryBody }),
+  asyncHandler(winEnquiry)
+);
+
+router.post(
+  '/enquiries/:id/lose',
+  authorize('SALES_EDIT'),
+  validate({ params: enquiryIdParam, body: loseEnquiryBody }),
+  asyncHandler(loseEnquiry)
+);
+
+router.post(
+  '/enquiries/:id/reopen',
+  authorize('SALES_EDIT'),
+  validate({ params: enquiryIdParam }),
+  asyncHandler(reopenEnquiry)
+);
+
+router.delete(
+  '/enquiries/:id',
+  authorize('SALES_DELETE'),
+  validate({ params: enquiryIdParam }),
+  asyncHandler(deleteEnquiry)
 );
 
 module.exports = router;

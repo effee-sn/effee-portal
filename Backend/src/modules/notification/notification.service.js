@@ -31,6 +31,10 @@ function createNotificationService(repository) {
     DEPT_TASK_RETURNED:         'DEPT_TASK_RETURNED',
     DEPT_TASK_DECLINED:         'DEPT_TASK_DECLINED',
     DEPT_TASK_REDIRECTED:       'DEPT_TASK_REDIRECTED',
+    // Sales area.
+    ENQUIRY_ASSIGNED:           'ENQUIRY_ASSIGNED',
+    ENQUIRY_WON:                'ENQUIRY_WON',
+    ACTIVITY_FOLLOWUP:          'ACTIVITY_FOLLOWUP',
   });
 
   return {
