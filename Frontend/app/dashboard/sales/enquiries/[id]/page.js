@@ -128,7 +128,7 @@ function EditModal({ enquiry, users, onClose, onDone }) {
   const [error, setError]   = useState('');
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { apiGet('/sales/customers/options').then(setCustomers).catch(() => {}); }, []);
+  useEffect(() => { apiGet('/sales/customers/options').then((res) => setCustomers(res.data ?? [])).catch(() => {}); }, []);
   useEffect(() => {
     if (!form.customer_id) { setContacts([]); return; }
     apiGet(`/sales/customers/${form.customer_id}`).then((res) => setContacts(res.data.contacts || [])).catch(() => setContacts([]));

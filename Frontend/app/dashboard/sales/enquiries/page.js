@@ -32,7 +32,7 @@ function EnquiryModal({ users, onClose, onSaved }) {
   const [error, setError]   = useState('');
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { apiGet('/sales/customers/options').then(setCustomers).catch(() => {}); }, []);
+  useEffect(() => { apiGet('/sales/customers/options').then((res) => setCustomers(res.data ?? [])).catch(() => {}); }, []);
 
   // Load the chosen customer's contacts for the dependent dropdown.
   useEffect(() => {
