@@ -76,6 +76,10 @@ model User {
   headedDepartments   Department[]         @relation("DepartmentHead")
   workflowSteps       WorkflowStep[]       @relation("StepAssigneeUser")
 
+  // Sales module ownership.
+  ownedCustomers Customer[] @relation("CustomerOwner")
+  ownedEnquiries Enquiry[]  @relation("EnquiryOwner")
+
   // `email` and `phone` remain globally unique, including across soft-deleted
   // rows. That is intentional: reusing a departed user's address would make
   // audit history ambiguous about which person an entry refers to.
@@ -683,4 +687,288 @@ enum ServiceLocation {
 enum ResolutionMethod {
   REMOTE
   SITE_VISIT
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SALES MODULE
+// Enquiry -> activity/MOM tracking -> line-item quotation -> order confirmed.
+// Masters: Customer + Contact (who we sell to) and Product (the price list the
+// quotation lines are drawn from). Full GST: intra-state = CGST+SGST,
+// inter-state = IGST, with HSN/SAC per line.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// How an enquiry first reached us.
+enum EnquirySource {
+  CALL
+  EMAIL
+  WALK_IN
+  EXHIBITION
+  REFERRAL
+  WEBSITE
+  OTHER
+}
+
+/// Pipeline stage of an enquiry. WON / LOST / ON_HOLD are terminal-ish states.
+enum EnquiryStage {
+  NEW
+  QUALIFIED
+  QUOTATION
+  NEGOTIATION
+  WON
+  LOST
+  ON_HOLD
+}
+
+/// The kind of customer interaction an activity records (its MOM).
+enum ActivityType {
+  CALL
+  MEETING
+  TEAMS
+  SITE_VISIT
+  EMAIL
+}
+
+/// Lifecycle of a quotation document.
+enum QuotationStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  SUPERSEDED
+}
+
+/// A customer company we sell to. state / state_code is the place of supply and
+/// decides intra- vs inter-state GST on its quotations.
+model Customer {
+  id       Int     @id @default(autoincrement())
+  name     String
+  gstin    String?
+  email    String?
+  phone    String?
+  website  String?
+  industry String?
+
+  billing_address  String? @db.Text
+  shipping_address String? @db.Text
+  city             String?
+  state            String?
+  state_code       String?
+  pincode          String?
+  notes            String? @db.Text
+
+  owner    User? @relation("CustomerOwner", fields: [owner_id], references: [id])
+  owner_id Int?
+
+  contacts   Contact[]
+  enquiries  Enquiry[]
+  quotations Quotation[]
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+  created_by Int?
+  updated_by Int?
+
+  @@index([owner_id])
+  @@index([deleted_at])
+  @@index([created_at])
+}
+
+/// A person at a customer company.
+model Contact {
+  id          Int      @id @default(autoincrement())
+  customer    Customer @relation(fields: [customer_id], references: [id])
+  customer_id Int
+  name        String
+  designation String?
+  email       String?
+  phone       String?
+  is_primary  Boolean  @default(false)
+  notes       String?  @db.Text
+
+  enquiries Enquiry[]
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+  created_by Int?
+  updated_by Int?
+
+  @@index([customer_id])
+  @@index([deleted_at])
+}
+
+/// Price-list item. Quotation lines are drawn from here (dropdown); a snapshot
+/// of the chosen values is stored on the line so later master edits do not
+/// rewrite issued quotations.
+model Product {
+  id          Int     @id @default(autoincrement())
+  name        String
+  sku         String?
+  hsn_sac     String?
+  unit        String  @default("Nos")
+  unit_price  Decimal @db.Decimal(14, 2)
+  gst_rate    Decimal @default(18) @db.Decimal(5, 2)
+  description String? @db.Text
+  is_active   Boolean @default(true)
+
+  quotationItems QuotationItem[]
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+  created_by Int?
+  updated_by Int?
+
+  @@index([is_active])
+  @@index([deleted_at])
+  @@index([created_at])
+}
+
+/// A sales opportunity, from first enquiry through to order confirmed.
+model Enquiry {
+  id          Int           @id @default(autoincrement())
+  ref_no      String        @unique
+  title       String
+  customer    Customer      @relation(fields: [customer_id], references: [id])
+  customer_id Int
+  contact     Contact?      @relation(fields: [contact_id], references: [id])
+  contact_id  Int?
+  source      EnquirySource @default(OTHER)
+  stage       EnquiryStage  @default(NEW)
+  description String?       @db.Text
+
+  expected_value Decimal?  @db.Decimal(14, 2)
+  expected_close DateTime?
+
+  owner    User @relation("EnquiryOwner", fields: [owner_id], references: [id])
+  owner_id Int
+
+  // Won close-out (no execution module - we just capture the order).
+  won_at      DateTime?
+  order_no    String?
+  order_value Decimal?  @db.Decimal(14, 2)
+  order_date  DateTime?
+
+  // Lost close-out.
+  lost_at     DateTime?
+  lost_reason String?   @db.Text
+
+  activities EnquiryActivity[]
+  quotations Quotation[]
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+  created_by Int?
+  updated_by Int?
+
+  @@index([customer_id])
+  @@index([owner_id])
+  @@index([stage])
+  @@index([deleted_at])
+  @@index([created_at])
+}
+
+/// One customer interaction on an enquiry - a call, meeting, Teams call, site
+/// visit or email - with its minutes (MOM) and an optional follow-up. Many per
+/// enquiry, shown as a chronological timeline.
+model EnquiryActivity {
+  id           Int          @id @default(autoincrement())
+  enquiry      Enquiry      @relation(fields: [enquiry_id], references: [id])
+  enquiry_id   Int
+  type         ActivityType
+  activity_at  DateTime
+  duration_min Int?
+  subject      String
+  minutes      String?      @db.Text
+  outcome      String?      @db.Text
+
+  // Participants: internal = JSON array of user ids; customer = free text.
+  internal_participants String? @db.Text
+  customer_participants String? @db.Text
+
+  next_action  String?   @db.Text
+  follow_up_at DateTime?
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+  created_by Int?
+  updated_by Int?
+
+  @@index([enquiry_id])
+  @@index([follow_up_at])
+  @@index([deleted_at])
+}
+
+/// A line-item quotation raised against an enquiry. GST scheme is decided by
+/// is_inter_state; the *_total columns are rolled up from the items and stored
+/// for listing and audit.
+model Quotation {
+  id          Int             @id @default(autoincrement())
+  quote_no    String          @unique
+  version     Int             @default(1)
+  enquiry     Enquiry         @relation(fields: [enquiry_id], references: [id])
+  enquiry_id  Int
+  customer    Customer        @relation(fields: [customer_id], references: [id])
+  customer_id Int
+  status      QuotationStatus @default(DRAFT)
+  quote_date  DateTime        @default(now())
+  valid_until DateTime?
+
+  is_inter_state Boolean @default(false)
+
+  sub_total      Decimal @default(0) @db.Decimal(14, 2)
+  discount_total Decimal @default(0) @db.Decimal(14, 2)
+  cgst_total     Decimal @default(0) @db.Decimal(14, 2)
+  sgst_total     Decimal @default(0) @db.Decimal(14, 2)
+  igst_total     Decimal @default(0) @db.Decimal(14, 2)
+  grand_total    Decimal @default(0) @db.Decimal(14, 2)
+
+  terms String? @db.Text
+  notes String? @db.Text
+
+  items QuotationItem[]
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+  created_by Int?
+  updated_by Int?
+
+  @@index([enquiry_id])
+  @@index([customer_id])
+  @@index([status])
+  @@index([deleted_at])
+}
+
+/// A single line on a quotation. Values are snapshotted from the chosen
+/// product; taxes are split into CGST/SGST (intra-state) or IGST (inter-state).
+model QuotationItem {
+  id           Int       @id @default(autoincrement())
+  quotation    Quotation @relation(fields: [quotation_id], references: [id], onDelete: Cascade)
+  quotation_id Int
+  product      Product?  @relation(fields: [product_id], references: [id])
+  product_id   Int?
+
+  description   String
+  hsn_sac       String?
+  unit          String  @default("Nos")
+  quantity      Decimal @default(1) @db.Decimal(12, 2)
+  unit_rate     Decimal @db.Decimal(14, 2)
+  discount_pct  Decimal @default(0) @db.Decimal(5, 2)
+  taxable_value Decimal @db.Decimal(14, 2)
+  gst_rate      Decimal @default(0) @db.Decimal(5, 2)
+  cgst_amount   Decimal @default(0) @db.Decimal(14, 2)
+  sgst_amount   Decimal @default(0) @db.Decimal(14, 2)
+  igst_amount   Decimal @default(0) @db.Decimal(14, 2)
+  line_total    Decimal @db.Decimal(14, 2)
+  sort_order    Int     @default(0)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([quotation_id])
+  @@index([product_id])
 }

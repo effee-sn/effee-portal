@@ -10,6 +10,7 @@ const auditRoutes     = require('../modules/audit/audit.routes');
 const backupRoutes    = require('../modules/backup/backup.routes');
 const notificationRoutes = require('../modules/notification/notification.routes');
 const serviceRoutes   = require('../modules/service/service.routes');
+const salesRoutes     = require('../modules/sales/sales.routes');
 const flowRoutes      = require('../modules/flow/flow.routes');
 const departmentRoutes = require('../modules/department/department.routes');
 
@@ -32,6 +33,7 @@ router.use('/audit-logs', auditRoutes);
 router.use('/backups',    backupRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/service',     serviceRoutes);
+router.use('/sales',       salesRoutes);
 router.use('/flow',        flowRoutes);
 router.use('/departments', departmentRoutes);
 
