@@ -6,6 +6,7 @@ import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { ENQUIRY_SOURCES, ACTIVE_STAGES, STAGE_STYLE, SOURCE_LABEL, formatINR } from '@/lib/salesOptions';
+import EnquiryCustomerContact from '@/components/EnquiryCustomerContact';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
@@ -117,8 +118,6 @@ function LoseModal({ enquiryId, onClose, onDone }) {
 
 // ── Edit modal ────────────────────────────────────────────────────────────────
 function EditModal({ enquiry, users, onClose, onDone }) {
-  const [customers, setCustomers] = useState([]);
-  const [contacts, setContacts]   = useState([]);
   const [form, setForm] = useState({
     title: enquiry.title || '', customer_id: enquiry.customer_id || '', contact_id: enquiry.contact_id || '',
     owner_id: enquiry.owner_id || '', source: enquiry.source || 'CALL',
@@ -128,17 +127,14 @@ function EditModal({ enquiry, users, onClose, onDone }) {
   const [error, setError]   = useState('');
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { apiGet('/sales/customers/options').then((res) => setCustomers(res.data ?? [])).catch(() => {}); }, []);
-  useEffect(() => {
-    if (!form.customer_id) { setContacts([]); return; }
-    apiGet(`/sales/customers/${form.customer_id}`).then((res) => setContacts(res.data.contacts || [])).catch(() => setContacts([]));
-  }, [form.customer_id]);
-
   const change = (e) => {
     const { name, value } = e.target;
-    setForm((f) => ({ ...f, [name]: value, ...(name === 'customer_id' ? { contact_id: '' } : {}) }));
+    setForm((f) => ({ ...f, [name]: value }));
     setError('');
   };
+
+  const setCustomerContact = ({ customer_id, contact_id }) =>
+    setForm((f) => ({ ...f, customer_id, contact_id }));
   const submit = async (e) => {
     e.preventDefault();
     setSaving(true); setError('');
@@ -165,21 +161,13 @@ function EditModal({ enquiry, users, onClose, onDone }) {
             <label className={label}>Title<span className="text-red-500"> *</span></label>
             <input name="title" value={form.title} onChange={change} required className="ams-input" />
           </div>
+          <EnquiryCustomerContact
+            initialCustomer={enquiry.customer_id ? { id: enquiry.customer_id, name: enquiry.customer?.name } : null}
+            initialContactId={enquiry.contact_id}
+            onChange={setCustomerContact}
+          />
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className={label}>Customer<span className="text-red-500"> *</span></label>
-              <select name="customer_id" value={form.customer_id} onChange={change} required className="ams-input">
-                <option value="">— Select customer —</option>
-                {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={label}>Contact</label>
-              <select name="contact_id" value={form.contact_id} onChange={change} disabled={!form.customer_id} className="ams-input">
-                <option value="">— None —</option>
-                {contacts.map((c) => <option key={c.id} value={c.id}>{c.name}{c.designation ? ` (${c.designation})` : ''}</option>)}
-              </select>
-            </div>
             <div>
               <label className={label}>Owner</label>
               <select name="owner_id" value={form.owner_id} onChange={change} className="ams-input">
