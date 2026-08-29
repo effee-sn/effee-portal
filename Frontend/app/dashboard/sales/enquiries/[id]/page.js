@@ -445,10 +445,15 @@ export default function EnquiryDetailPage() {
         </Section>
       </div>
 
-      {/* At New the only thing to do is upload the enquiry format; past New the
-          full document set and the interaction timeline appear. */}
+      {/* At New: Generated uploads the format only; Incoming also logs its
+          gathering activities. Past New: full documents + the timeline. */}
       {enquiry.stage === 'NEW' ? (
-        <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={['FORMAT_PDF', 'FORMAT_EXCEL']} onChanged={load} />
+        <>
+          {enquiry.enquiry_type === 'INCOMING' && (
+            <div id="activity"><EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} /></div>
+          )}
+          <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={['FORMAT_PDF', 'FORMAT_EXCEL']} onChanged={load} />
+        </>
       ) : (
         <>
           <div id="activity"><EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} /></div>

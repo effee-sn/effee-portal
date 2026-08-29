@@ -10,14 +10,17 @@
  * @property {boolean} hasConcept  A live concept document exists.
  * @property {boolean} hasCosting  A live costing document exists.
  * @property {boolean} hasSentOffer An offer document is marked sent to the customer.
+ * @property {boolean} hasActivity At least one interaction/activity is logged.
  */
 
 // Leaving New (intake) requires the enquiry format, so every stage beyond it
 // carries that requirement.
 const FORMAT_STAGES = ['CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'OFFER_RELEASED', 'FOLLOW_UP', 'WON'];
 
-// Additional, stage-specific document requirements.
+// Additional, stage-specific requirements.
 const EXTRA_GATES = Object.freeze({
+  // Incoming enquiries do their information-gathering at New before Contacted.
+  CONTACTED: (f) => (f.hasActivity ? [] : ['at least one logged activity']),
   OFFER_RELEASED: (f) => {
     const missing = [];
     if (!f.hasConcept) missing.push('a concept document');
