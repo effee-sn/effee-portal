@@ -903,8 +903,14 @@ model EnquiryActivity {
   internal_participants String? @db.Text
   customer_participants String? @db.Text
 
-  next_action  String?   @db.Text
-  follow_up_at DateTime?
+  // Follow-up: what to do next, when, and by which medium. `temperature` is the
+  // deal warmth captured on this follow-up (the newest non-null one rolls up to
+  // Enquiry.current_temperature). `follow_up_ended` closes the follow-up loop.
+  next_action     String?       @db.Text
+  follow_up_at    DateTime?
+  next_medium     ActivityType?
+  temperature     Temperature?
+  follow_up_ended Boolean       @default(false)
 
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt

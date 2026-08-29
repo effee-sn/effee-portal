@@ -26,6 +26,11 @@ const {
   winEnquiry, loseEnquiry, reopenEnquiry, deleteEnquiry,
 } = require('./enquiry.controller');
 
+const activityValidation = require('./activity.validation');
+const {
+  listActivities, createActivity, updateActivity, deleteActivity,
+} = require('./activity.controller');
+
 const router = Router();
 
 router.use(authenticate);
@@ -157,6 +162,35 @@ router.delete(
   authorize('SALES_DELETE'),
   validate({ params: enquiryIdParam }),
   asyncHandler(deleteEnquiry)
+);
+
+// ── Enquiry activities (interactions + follow-ups) ────────────────────────────
+router.get(
+  '/enquiries/:enquiryId/activities',
+  authorize('SALES_VIEW'),
+  validate({ params: activityValidation.enquiryIdParam }),
+  asyncHandler(listActivities)
+);
+
+router.post(
+  '/enquiries/:enquiryId/activities',
+  authorize('SALES_EDIT'),
+  validate({ params: activityValidation.enquiryIdParam, body: activityValidation.createActivityBody }),
+  asyncHandler(createActivity)
+);
+
+router.put(
+  '/activities/:id',
+  authorize('SALES_EDIT'),
+  validate({ params: activityValidation.activityIdParam, body: activityValidation.updateActivityBody }),
+  asyncHandler(updateActivity)
+);
+
+router.delete(
+  '/activities/:id',
+  authorize('SALES_EDIT'),
+  validate({ params: activityValidation.activityIdParam }),
+  asyncHandler(deleteActivity)
 );
 
 module.exports = router;

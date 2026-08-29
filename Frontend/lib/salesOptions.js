@@ -56,6 +56,17 @@ export const STAGE_STYLE = {
   LOST:           { label: 'Lost',           color: '#DC2626', bg: '#FEF2F2' },
 };
 
+/** Interaction / follow-up medium (maps to the ActivityType enum). */
+export const ACTIVITY_MEDIUMS = [
+  { value: 'CALL',       label: 'Call' },
+  { value: 'MEETING',    label: 'Meeting' },
+  { value: 'TEAMS',      label: 'Teams' },
+  { value: 'SITE_VISIT', label: 'Site Visit' },
+  { value: 'EMAIL',      label: 'Email' },
+];
+
+export const MEDIUM_LABEL = Object.fromEntries(ACTIVITY_MEDIUMS.map((m) => [m.value, m.label]));
+
 /** Follow-up temperature. */
 export const TEMPERATURES = [
   { value: 'HOT',  label: 'Hot' },

@@ -7,6 +7,7 @@ import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { ENQUIRY_TYPES, STAGE_STYLE, TYPE_LABEL, TEMPERATURE_STYLE, stagesForType, formatINR } from '@/lib/salesOptions';
 import EnquiryCustomerContact from '@/components/EnquiryCustomerContact';
+import EnquiryActivities from '@/components/EnquiryActivities';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
@@ -227,7 +228,6 @@ export default function EnquiryDetailPage() {
   const [modal, setModal]     = useState(null);
   const [busy, setBusy]       = useState(false);
 
-  const canEdit   = me?.is_system || can('SALES_EDIT');
   const canDelete = me?.is_system || can('SALES_DELETE');
 
   const load = useCallback(async () => {
@@ -274,6 +274,8 @@ export default function EnquiryDetailPage() {
   }
 
   const isClosed = enquiry.stage === 'WON' || enquiry.stage === 'LOST';
+  // Stage work is the assigned owner's (or a system user's) — matches the API gate.
+  const canManage = me?.is_system || (me?.id != null && me.id === enquiry.owner_id);
 
   return (
     <div className="space-y-4">
@@ -292,7 +294,7 @@ export default function EnquiryDetailPage() {
           </div>
           <h1 className="text-lg font-semibold text-gray-800 truncate">{enquiry.title}</h1>
         </div>
-        {canEdit && (
+        {canManage && (
           <div className="flex items-center gap-2">
             {!isClosed && (
               <select value={enquiry.stage} onChange={(e) => changeStage(e.target.value)} disabled={busy}
@@ -365,12 +367,12 @@ export default function EnquiryDetailPage() {
         </div>
       </Section>
 
-      {/* Coming next: activities + quotations */}
-      <Section title="Activity Timeline">
-        <p className="text-sm text-gray-400 py-2">Activity / MOM tracking arrives in the next increment.</p>
-      </Section>
-      <Section title="Quotations">
-        <p className="text-sm text-gray-400 py-2">Line-item quotations arrive in the next increment.</p>
+      {/* Interactions & follow-ups */}
+      <EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} />
+
+      {/* Documents / offers arrive in the next increment. */}
+      <Section title="Documents &amp; Offers">
+        <p className="text-sm text-gray-400 py-2">Enquiry format, concept, costing and offer uploads arrive in the next increment.</p>
       </Section>
 
       {canDelete && (
