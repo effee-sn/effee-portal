@@ -443,17 +443,19 @@ export default function EnquiryDetailPage() {
       {/* At New: Generated uploads the format only; Incoming also logs its
           gathering activities. Past New: full documents + the timeline. */}
       {enquiry.stage === 'NEW' ? (
-        <>
-          {enquiry.enquiry_type === 'INCOMING' && (
+        enquiry.enquiry_type === 'INCOMING' ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+            <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={['FORMAT_PDF', 'FORMAT_EXCEL']} onChanged={load} />
             <div id="activity"><EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} /></div>
-          )}
+          </div>
+        ) : (
           <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={['FORMAT_PDF', 'FORMAT_EXCEL']} onChanged={load} />
-        </>
+        )
       ) : (
-        <>
-          <div id="activity"><EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} /></div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
           <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} onChanged={load} />
-        </>
+          <div id="activity"><EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} /></div>
+        </div>
       )}
 
 
