@@ -367,19 +367,32 @@ export default function EnquiryDetailPage() {
               {enquiry.expected_value != null && <span>Value: {formatINR(enquiry.expected_value)}</span>}
             </div>
           </div>
-          {canManage && (
+          {(canManage || canDelete) && (
             <div className="flex items-center gap-2 shrink-0">
-              <button onClick={() => setModal('edit')} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Edit</button>
-              {!isClosed ? (
+              {canManage && (
                 <>
-                  <button onClick={() => setModal('win')} disabled={wonBlocked.length > 0}
-                    title={wonBlocked.length ? `Needs ${wonBlocked.join(' & ')} first` : 'Mark won'}
-                    className="px-3 py-1.5 text-sm font-medium text-white rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ backgroundColor: '#15803D' }}>Won</button>
-                  <button onClick={() => setModal('lose')} className="btn-danger px-3 py-1.5 text-sm cursor-pointer">Lost</button>
+                  <button onClick={() => setModal('edit')} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Edit</button>
+                  {!isClosed ? (
+                    <>
+                      <button onClick={() => setModal('win')} disabled={wonBlocked.length > 0}
+                        title={wonBlocked.length ? `Needs ${wonBlocked.join(' & ')} first` : 'Mark won'}
+                        className="px-3 py-1.5 text-sm font-medium text-white rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{ backgroundColor: '#15803D' }}>Won</button>
+                      <button onClick={() => setModal('lose')} className="btn-danger px-3 py-1.5 text-sm cursor-pointer">Lost</button>
+                    </>
+                  ) : (
+                    <button onClick={reopen} disabled={busy} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Reopen</button>
+                  )}
                 </>
-              ) : (
-                <button onClick={reopen} disabled={busy} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Reopen</button>
+              )}
+              {canDelete && (
+                <button onClick={() => setModal('delete')} title="Delete enquiry"
+                  className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 cursor-pointer">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
               )}
             </div>
           )}
@@ -443,9 +456,6 @@ export default function EnquiryDetailPage() {
         </>
       )}
 
-      {canDelete && (
-        <button onClick={() => setModal('delete')} className="text-sm text-red-600 hover:underline cursor-pointer">Delete enquiry</button>
-      )}
 
       {showHistory && <StageHistoryDrawer events={enquiry.stageEvents} users={users} onClose={() => setShowHistory(false)} />}
 
