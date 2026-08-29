@@ -416,34 +416,29 @@ export default function EnquiryDetailPage() {
       {/* Process — where it is now and what's next */}
       <EnquiryProcess enquiry={enquiry} canManage={canManage} busy={busy} onPick={changeStage} blocked={readiness?.blocked} />
 
-      {/* Customer + Details — horizontal, full width, above the timeline */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-        <Section title="Customer" right={
-          <button onClick={() => router.push(`/dashboard/sales/customers/${enquiry.customer_id}`)}
-            className="text-xs text-blue-600 hover:underline cursor-pointer">Open</button>
-        }>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-            <Field label="Name">{enquiry.customer?.name}</Field>
-            <Field label="GSTIN">{enquiry.customer?.gstin}</Field>
-            <Field label="State">{enquiry.customer?.state}{enquiry.customer?.state_code ? ` (${enquiry.customer.state_code})` : ''}</Field>
-            <Field label="Contact">{enquiry.contact?.name}</Field>
-            <Field label="Designation">{enquiry.contact?.designation}</Field>
-            <Field label="Contact Info">{[enquiry.contact?.email, enquiry.contact?.phone].filter(Boolean).join(' · ') || null}</Field>
-          </div>
-        </Section>
-
-        <Section title="Details">
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-            <Field label="Type">{TYPE_LABEL[enquiry.enquiry_type] || enquiry.enquiry_type}</Field>
-            <Field label="Owner (assigned)">{enquiry.owner?.name}</Field>
-            <Field label="Temperature">{enquiry.current_temperature ? <TempChip value={enquiry.current_temperature} /> : null}</Field>
-            <Field label="Expected Value">{formatINR(enquiry.expected_value)}</Field>
-            <Field label="Expected Close">{fmtDate(enquiry.expected_close)}</Field>
-            <Field label="Created">{fmtDate(enquiry.created_at)}</Field>
-            {enquiry.description && <div className="col-span-2"><Field label="Description">{enquiry.description}</Field></div>}
-          </div>
-        </Section>
-      </div>
+      {/* Customer + details — a single full-width card */}
+      <Section title="Customer & Details" right={
+        <button onClick={() => router.push(`/dashboard/sales/customers/${enquiry.customer_id}`)}
+          className="text-xs text-blue-600 hover:underline cursor-pointer">Open customer</button>
+      }>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-3">
+          <Field label="Customer">{enquiry.customer?.name}</Field>
+          <Field label="GSTIN">{enquiry.customer?.gstin}</Field>
+          <Field label="State">{enquiry.customer?.state}{enquiry.customer?.state_code ? ` (${enquiry.customer.state_code})` : ''}</Field>
+          <Field label="Contact">{enquiry.contact?.name}</Field>
+          <Field label="Designation">{enquiry.contact?.designation}</Field>
+          <Field label="Contact Info">{[enquiry.contact?.email, enquiry.contact?.phone].filter(Boolean).join(' · ') || null}</Field>
+          <Field label="Type">{TYPE_LABEL[enquiry.enquiry_type] || enquiry.enquiry_type}</Field>
+          <Field label="Owner">{enquiry.owner?.name}</Field>
+          <Field label="Temperature">{enquiry.current_temperature ? <TempChip value={enquiry.current_temperature} /> : null}</Field>
+          <Field label="Expected Value">{formatINR(enquiry.expected_value)}</Field>
+          <Field label="Expected Close">{fmtDate(enquiry.expected_close)}</Field>
+          <Field label="Created">{fmtDate(enquiry.created_at)}</Field>
+          {enquiry.description && (
+            <div className="col-span-2 sm:col-span-3 lg:col-span-4"><Field label="Description">{enquiry.description}</Field></div>
+          )}
+        </div>
+      </Section>
 
       {/* At New: Generated uploads the format only; Incoming also logs its
           gathering activities. Past New: full documents + the timeline. */}
