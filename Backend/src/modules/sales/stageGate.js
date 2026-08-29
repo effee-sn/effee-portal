@@ -13,9 +13,10 @@
  * @property {boolean} hasActivity At least one interaction/activity is logged.
  */
 
-// Leaving New (intake) requires the enquiry format, so every stage beyond it
-// carries that requirement.
-const FORMAT_STAGES = ['CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'OFFER_RELEASED', 'FOLLOW_UP', 'WON'];
+// The enquiry format is required from Review onward. (Contacted, for Incoming,
+// is reached on the first logged activity — see EXTRA_GATES.CONTACTED — so it
+// doesn't require the format.)
+const FORMAT_STAGES = ['REVIEW', 'CONCEPT', 'COSTING', 'OFFER_RELEASED', 'FOLLOW_UP', 'WON'];
 
 // Additional, stage-specific requirements.
 const EXTRA_GATES = Object.freeze({

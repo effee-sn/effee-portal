@@ -89,7 +89,7 @@ function createActivityRepository(db) {
     findEnquiry(enquiryId) {
       return db.enquiry.findFirst({
         where: active({ id: enquiryId }),
-        select: { id: true, owner_id: true, ref_no: true, title: true },
+        select: { id: true, owner_id: true, ref_no: true, title: true, stage: true, enquiry_type: true },
       });
     },
   };

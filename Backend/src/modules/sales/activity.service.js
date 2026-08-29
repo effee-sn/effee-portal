@@ -1,4 +1,5 @@
 const { activityRepository } = require('./activity.repository');
+const { enquiryService } = require('./enquiry.service');
 const { auditService } = require('../audit/audit.service');
 const { notificationService } = require('../notification/notification.service');
 const { NotFoundError, ForbiddenError } = require('../../core');
@@ -98,6 +99,12 @@ function createActivityService(repository) {
         link: `/dashboard/sales/enquiries/${enquiryId}`,
         actorId: actor?.id ?? null,
       });
+
+      // An Incoming enquiry moves to Contacted on its first logged activity.
+      if (enquiry.enquiry_type === 'INCOMING' && enquiry.stage === 'NEW') {
+        try { await enquiryService.update(enquiryId, { stage: 'CONTACTED' }, actor); }
+        catch { /* prerequisites not met yet — leave it at New */ }
+      }
 
       return mapRow(activity);
     },
