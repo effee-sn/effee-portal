@@ -387,46 +387,51 @@ export default function EnquiryDetailPage() {
       {/* Process — where it is now and what's next */}
       <EnquiryProcess enquiry={enquiry} canManage={canManage} busy={busy} onPick={changeStage} blocked={readiness?.blocked} />
 
-      {/* Body: timeline + documents (main) · customer + details (side) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-        <div className="lg:col-span-2 space-y-4">
+      {/* Customer + Details — horizontal, full width, above the timeline */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        <Section title="Customer" right={
+          <button onClick={() => router.push(`/dashboard/sales/customers/${enquiry.customer_id}`)}
+            className="text-xs text-blue-600 hover:underline cursor-pointer">Open</button>
+        }>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+            <Field label="Name">{enquiry.customer?.name}</Field>
+            <Field label="GSTIN">{enquiry.customer?.gstin}</Field>
+            <Field label="State">{enquiry.customer?.state}{enquiry.customer?.state_code ? ` (${enquiry.customer.state_code})` : ''}</Field>
+            <Field label="Contact">{enquiry.contact?.name}</Field>
+            <Field label="Designation">{enquiry.contact?.designation}</Field>
+            <Field label="Contact Info">{[enquiry.contact?.email, enquiry.contact?.phone].filter(Boolean).join(' · ') || null}</Field>
+          </div>
+        </Section>
+
+        <Section title="Details">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+            <Field label="Type">{TYPE_LABEL[enquiry.enquiry_type] || enquiry.enquiry_type}</Field>
+            <Field label="Owner (assigned)">{enquiry.owner?.name}</Field>
+            <Field label="Temperature">{enquiry.current_temperature ? <TempChip value={enquiry.current_temperature} /> : null}</Field>
+            <Field label="Expected Value">{formatINR(enquiry.expected_value)}</Field>
+            <Field label="Expected Close">{fmtDate(enquiry.expected_close)}</Field>
+            <Field label="Created">{fmtDate(enquiry.created_at)}</Field>
+            {enquiry.description && <div className="col-span-2"><Field label="Description">{enquiry.description}</Field></div>}
+          </div>
+        </Section>
+      </div>
+
+      {/* At New the only thing to do is upload the enquiry format; past New the
+          full document set and the interaction timeline appear. */}
+      {enquiry.stage === 'NEW' ? (
+        <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={['FORMAT_PDF', 'FORMAT_EXCEL']} onChanged={load} />
+      ) : (
+        <>
           <div id="activity"><EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} /></div>
           <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} onChanged={load} />
-        </div>
-        <div className="space-y-4">
-          <Section title="Customer" right={
-            <button onClick={() => router.push(`/dashboard/sales/customers/${enquiry.customer_id}`)}
-              className="text-xs text-blue-600 hover:underline cursor-pointer">Open</button>
-          }>
-            <div className="space-y-3">
-              <Field label="Name">{enquiry.customer?.name}</Field>
-              <Field label="GSTIN">{enquiry.customer?.gstin}</Field>
-              <Field label="State">{enquiry.customer?.state}{enquiry.customer?.state_code ? ` (${enquiry.customer.state_code})` : ''}</Field>
-              <Field label="Contact">{enquiry.contact?.name}</Field>
-              <Field label="Designation">{enquiry.contact?.designation}</Field>
-              <Field label="Contact Info">{[enquiry.contact?.email, enquiry.contact?.phone].filter(Boolean).join(' · ') || null}</Field>
-            </div>
-          </Section>
+        </>
+      )}
 
-          <Section title="Details">
-            <div className="space-y-3">
-              <Field label="Type">{TYPE_LABEL[enquiry.enquiry_type] || enquiry.enquiry_type}</Field>
-              <Field label="Owner (assigned)">{enquiry.owner?.name}</Field>
-              <Field label="Temperature">{enquiry.current_temperature ? <TempChip value={enquiry.current_temperature} /> : null}</Field>
-              <Field label="Expected Value">{formatINR(enquiry.expected_value)}</Field>
-              <Field label="Expected Close">{fmtDate(enquiry.expected_close)}</Field>
-              <Field label="Created">{fmtDate(enquiry.created_at)}</Field>
-              {enquiry.description && <Field label="Description">{enquiry.description}</Field>}
-            </div>
-          </Section>
+      <StageHistory events={enquiry.stageEvents} users={users} />
 
-          <StageHistory events={enquiry.stageEvents} users={users} />
-
-          {canDelete && (
-            <button onClick={() => setModal('delete')} className="text-sm text-red-600 hover:underline cursor-pointer">Delete enquiry</button>
-          )}
-        </div>
-      </div>
+      {canDelete && (
+        <button onClick={() => setModal('delete')} className="text-sm text-red-600 hover:underline cursor-pointer">Delete enquiry</button>
+      )}
 
       {modal === 'edit'  && <EditModal enquiry={enquiry} users={users} onClose={() => setModal(null)} onDone={setEnquiry} />}
       {modal === 'win'   && <WinModal enquiryId={enquiry.id} onClose={() => setModal(null)} onDone={setEnquiry} />}
