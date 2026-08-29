@@ -35,6 +35,7 @@ function createNotificationService(repository) {
     ENQUIRY_ASSIGNED:           'ENQUIRY_ASSIGNED',
     ENQUIRY_WON:                'ENQUIRY_WON',
     ACTIVITY_FOLLOWUP:          'ACTIVITY_FOLLOWUP',
+    FOLLOWUP_DUE:               'FOLLOWUP_DUE',
   });
 
   return {

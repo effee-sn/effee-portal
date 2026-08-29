@@ -5,9 +5,12 @@ const config = require('./config/env');
 const app    = require('./app');
 const prisma = require('./lib/prisma');
 const { logger } = require('./core');
+const { startFollowupReminders } = require('./modules/sales/followup.scheduler');
 
 const server = app.listen(config.PORT, () => {
   logger.info({ port: config.PORT, env: config.NODE_ENV }, `Server listening on port ${config.PORT}`);
+  // Periodic sales follow-up reminder sweep (in-process; cluster-safe by claim).
+  startFollowupReminders();
 });
 
 /**

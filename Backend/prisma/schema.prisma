@@ -928,6 +928,8 @@ model EnquiryActivity {
   next_medium     ActivityType?
   temperature     Temperature?
   follow_up_ended Boolean       @default(false)
+  // Set when a due-follow-up reminder has been sent, so it fires only once.
+  reminded_at     DateTime?
 
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
