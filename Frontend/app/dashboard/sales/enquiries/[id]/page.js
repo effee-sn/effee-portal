@@ -8,7 +8,7 @@ import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { ENQUIRY_TYPES, STAGE_STYLE, TYPE_LABEL, TEMPERATURE_STYLE, stagesForType, formatINR } from '@/lib/salesOptions';
 import EnquiryCustomerContact from '@/components/EnquiryCustomerContact';
 import EnquiryActivities from '@/components/EnquiryActivities';
-import EnquiryAttachments from '@/components/EnquiryAttachments';
+import EnquiryProcess from '@/components/EnquiryProcess';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
@@ -215,6 +215,15 @@ function EditModal({ enquiry, users, onClose, onDone }) {
   );
 }
 
+function TempChip({ value }) {
+  const s = TEMPERATURE_STYLE[value];
+  if (!s) return null;
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+      style={{ color: s.color, backgroundColor: s.bg }}>{s.label}</span>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function EnquiryDetailPage() {
   useAuth();
@@ -280,42 +289,45 @@ export default function EnquiryDetailPage() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <button onClick={() => router.push('/dashboard/sales/enquiries')}
-          className="p-1.5 rounded hover:bg-gray-100 text-gray-500 cursor-pointer" title="Back">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-xs text-gray-400">{enquiry.ref_no}</span>
-            <StageBadge stage={enquiry.stage} />
+      {/* Header card */}
+      <div className="bg-white rounded-lg border border-gray-200 px-5 py-4">
+        <div className="flex items-start gap-3">
+          <button onClick={() => router.push('/dashboard/sales/enquiries')}
+            className="p-1.5 -ml-1.5 rounded hover:bg-gray-100 text-gray-500 cursor-pointer shrink-0" title="Back">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-xs text-gray-400">{enquiry.ref_no}</span>
+              <StageBadge stage={enquiry.stage} />
+              <span className="text-xs text-gray-500">{TYPE_LABEL[enquiry.enquiry_type] || enquiry.enquiry_type}</span>
+              {enquiry.current_temperature && <TempChip value={enquiry.current_temperature} />}
+            </div>
+            <h1 className="text-xl font-semibold text-gray-800 mt-0.5 break-words">{enquiry.title}</h1>
+            <div className="text-xs text-gray-500 mt-1 flex items-center gap-x-4 gap-y-1 flex-wrap">
+              <button onClick={() => router.push(`/dashboard/sales/customers/${enquiry.customer_id}`)}
+                className="hover:underline text-blue-600 cursor-pointer">{enquiry.customer?.name}</button>
+              <span>Owner: {enquiry.owner?.name || '—'}</span>
+              {enquiry.expected_value != null && <span>Value: {formatINR(enquiry.expected_value)}</span>}
+            </div>
           </div>
-          <h1 className="text-lg font-semibold text-gray-800 truncate">{enquiry.title}</h1>
+          {canManage && (
+            <div className="flex items-center gap-2 shrink-0">
+              <button onClick={() => setModal('edit')} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Edit</button>
+              {!isClosed ? (
+                <>
+                  <button onClick={() => setModal('win')} className="px-3 py-1.5 text-sm font-medium text-white rounded cursor-pointer"
+                    style={{ backgroundColor: '#15803D' }}>Won</button>
+                  <button onClick={() => setModal('lose')} className="btn-danger px-3 py-1.5 text-sm cursor-pointer">Lost</button>
+                </>
+              ) : (
+                <button onClick={reopen} disabled={busy} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Reopen</button>
+              )}
+            </div>
+          )}
         </div>
-        {canManage && (
-          <div className="flex items-center gap-2">
-            {!isClosed && (
-              <select value={enquiry.stage} onChange={(e) => changeStage(e.target.value)} disabled={busy}
-                className="ams-input py-1.5 text-sm cursor-pointer" style={{ width: 'auto' }} title="Change stage">
-                {stagesForType(enquiry.enquiry_type).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
-            )}
-            <button onClick={() => setModal('edit')} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Edit</button>
-            {!isClosed && (
-              <>
-                <button onClick={() => setModal('win')} className="px-3 py-1.5 text-sm font-medium text-white rounded cursor-pointer"
-                  style={{ backgroundColor: '#15803D' }}>Won</button>
-                <button onClick={() => setModal('lose')} className="btn-danger px-3 py-1.5 text-sm cursor-pointer">Lost</button>
-              </>
-            )}
-            {isClosed && (
-              <button onClick={reopen} disabled={busy} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Reopen</button>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Won / Lost banner */}
@@ -332,53 +344,46 @@ export default function EnquiryDetailPage() {
         </div>
       )}
 
-      {/* Enquiry details */}
-      <Section title="Enquiry">
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <Field label="Type">{TYPE_LABEL[enquiry.enquiry_type] || enquiry.enquiry_type}</Field>
-          <Field label="Owner (assigned)">{enquiry.owner?.name}</Field>
-          <Field label="Temperature">
-            {enquiry.current_temperature && TEMPERATURE_STYLE[enquiry.current_temperature] ? (
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-                style={{ color: TEMPERATURE_STYLE[enquiry.current_temperature].color, backgroundColor: TEMPERATURE_STYLE[enquiry.current_temperature].bg }}>
-                {TEMPERATURE_STYLE[enquiry.current_temperature].label}
-              </span>
-            ) : null}
-          </Field>
-          <Field label="Expected Value">{formatINR(enquiry.expected_value)}</Field>
-          <Field label="Expected Close">{fmtDate(enquiry.expected_close)}</Field>
-          <Field label="Created">{fmtDate(enquiry.created_at)}</Field>
-          <Field label="Activities / Quotes">{(enquiry._count?.activities ?? 0)} / {(enquiry._count?.quotations ?? 0)}</Field>
-          {enquiry.description && <div className="col-span-2 sm:col-span-3"><Field label="Description">{enquiry.description}</Field></div>}
+      {/* Process — where it is now, and the data for each step (docs inline) */}
+      <EnquiryProcess enquiry={enquiry} canManage={canManage} busy={busy} onPick={changeStage} onDocsChanged={load} />
+
+      {/* Body: interaction timeline (main) · customer + details (side) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+        <div className="lg:col-span-2 space-y-4">
+          <div id="activity"><EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} /></div>
         </div>
-      </Section>
+        <div className="space-y-4">
+          <Section title="Customer" right={
+            <button onClick={() => router.push(`/dashboard/sales/customers/${enquiry.customer_id}`)}
+              className="text-xs text-blue-600 hover:underline cursor-pointer">Open</button>
+          }>
+            <div className="space-y-3">
+              <Field label="Name">{enquiry.customer?.name}</Field>
+              <Field label="GSTIN">{enquiry.customer?.gstin}</Field>
+              <Field label="State">{enquiry.customer?.state}{enquiry.customer?.state_code ? ` (${enquiry.customer.state_code})` : ''}</Field>
+              <Field label="Contact">{enquiry.contact?.name}</Field>
+              <Field label="Designation">{enquiry.contact?.designation}</Field>
+              <Field label="Contact Info">{[enquiry.contact?.email, enquiry.contact?.phone].filter(Boolean).join(' · ') || null}</Field>
+            </div>
+          </Section>
 
-      {/* Customer */}
-      <Section title="Customer" right={
-        <button onClick={() => router.push(`/dashboard/sales/customers/${enquiry.customer_id}`)}
-          className="text-xs text-blue-600 hover:underline cursor-pointer">Open customer</button>
-      }>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <Field label="Name">{enquiry.customer?.name}</Field>
-          <Field label="GSTIN">{enquiry.customer?.gstin}</Field>
-          <Field label="State">{enquiry.customer?.state}{enquiry.customer?.state_code ? ` (${enquiry.customer.state_code})` : ''}</Field>
-          <Field label="Contact">{enquiry.contact?.name}</Field>
-          <Field label="Designation">{enquiry.contact?.designation}</Field>
-          <Field label="Contact Info">{[enquiry.contact?.email, enquiry.contact?.phone].filter(Boolean).join(' · ') || null}</Field>
+          <Section title="Details">
+            <div className="space-y-3">
+              <Field label="Type">{TYPE_LABEL[enquiry.enquiry_type] || enquiry.enquiry_type}</Field>
+              <Field label="Owner (assigned)">{enquiry.owner?.name}</Field>
+              <Field label="Temperature">{enquiry.current_temperature ? <TempChip value={enquiry.current_temperature} /> : null}</Field>
+              <Field label="Expected Value">{formatINR(enquiry.expected_value)}</Field>
+              <Field label="Expected Close">{fmtDate(enquiry.expected_close)}</Field>
+              <Field label="Created">{fmtDate(enquiry.created_at)}</Field>
+              {enquiry.description && <Field label="Description">{enquiry.description}</Field>}
+            </div>
+          </Section>
+
+          {canDelete && (
+            <button onClick={() => setModal('delete')} className="text-sm text-red-600 hover:underline cursor-pointer">Delete enquiry</button>
+          )}
         </div>
-      </Section>
-
-      {/* Interactions & follow-ups */}
-      <EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} />
-
-      {/* Documents & offers */}
-      <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} />
-
-      {canDelete && (
-        <div className="pt-2">
-          <button onClick={() => setModal('delete')} className="text-sm text-red-600 hover:underline cursor-pointer">Delete enquiry</button>
-        </div>
-      )}
+      </div>
 
       {modal === 'edit'  && <EditModal enquiry={enquiry} users={users} onClose={() => setModal(null)} onDone={setEnquiry} />}
       {modal === 'win'   && <WinModal enquiryId={enquiry.id} onClose={() => setModal(null)} onDone={setEnquiry} />}

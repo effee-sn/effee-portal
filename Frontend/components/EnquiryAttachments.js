@@ -30,7 +30,17 @@ function DocIcon() {
   );
 }
 
-export default function EnquiryAttachments({ enquiryId, canEdit }) {
+const ALL_KINDS = ['FORMAT_PDF', 'FORMAT_EXCEL', 'CONCEPT', 'COSTING', 'OFFER'];
+
+/**
+ * Documents panel. By default shows all kinds in a card; pass `kinds` to scope
+ * it to specific document types and `bare` to drop the card chrome, so it can
+ * be embedded inline (e.g. one kind per stage in the process view). `onChanged`
+ * fires after any successful upload/delete/sent change.
+ */
+export default function EnquiryAttachments({
+  enquiryId, canEdit, kinds = ALL_KINDS, bare = false, onChanged,
+}) {
   const [items, setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy]     = useState(false);
@@ -47,8 +57,12 @@ export default function EnquiryAttachments({ enquiryId, canEdit }) {
 
   useEffect(() => { load(); }, [load]);
 
+  const reload = async () => { await load(); onChanged?.(); };
+
   const byKind = (kind) => items.find((a) => a.kind === kind) || null;
   const offers = items.filter((a) => a.kind === 'OFFER');
+  const slots = SLOTS.filter((s) => kinds.includes(s.kind));
+  const showOffers = kinds.includes('OFFER');
 
   const pick = (kind) => { pendingKind.current = kind; setError(''); fileRef.current?.click(); };
 
@@ -62,7 +76,7 @@ export default function EnquiryAttachments({ enquiryId, canEdit }) {
       fd.append('file', file);
       fd.append('kind', pendingKind.current);
       await apiPostForm(`/sales/enquiries/${enquiryId}/attachments`, fd);
-      await load();
+      await reload();
     } catch (err) { setError(err.message); }
     finally { setBusy(false); }
   };
@@ -97,24 +111,21 @@ export default function EnquiryAttachments({ enquiryId, canEdit }) {
     </div>
   );
 
-  return (
-    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-        <h2 className="text-sm font-semibold text-gray-800">Documents &amp; Offers</h2>
-      </div>
-      <div className="px-5 py-4 space-y-4">
-        {error && <div className="px-3 py-2 rounded bg-red-50 border border-red-200 text-red-600 text-xs">{error}</div>}
+  const inner = (
+    <div className="space-y-4">
+      {error && <div className="px-3 py-2 rounded bg-red-50 border border-red-200 text-red-600 text-xs">{error}</div>}
 
-        {/* Hidden shared file input */}
-        <input ref={fileRef} type="file" accept={ACCEPT} onChange={onFile} className="hidden" />
+      {/* Hidden shared file input */}
+      <input ref={fileRef} type="file" accept={ACCEPT} onChange={onFile} className="hidden" />
 
-        {loading ? (
-          <p className="text-sm text-gray-400 py-2 text-center">Loading…</p>
-        ) : (
+      {loading ? (
+        <p className="text-sm text-gray-400 py-2 text-center">Loading…</p>
+      ) : (
           <>
             {/* Single-document slots */}
+            {slots.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {SLOTS.map(({ kind, label }) => {
+              {slots.map(({ kind, label }) => {
                 const a = byKind(kind);
                 return (
                   <div key={kind} className="border border-gray-200 rounded-lg px-3 py-2.5">
@@ -141,8 +152,10 @@ export default function EnquiryAttachments({ enquiryId, canEdit }) {
                 );
               })}
             </div>
+            )}
 
             {/* Offers (multiple revisions) */}
+            {showOffers && (
             <div className="border border-gray-200 rounded-lg px-3 py-2.5">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Offers {offers.length ? `(${offers.length})` : ''}</p>
@@ -176,9 +189,20 @@ export default function EnquiryAttachments({ enquiryId, canEdit }) {
                 </div>
               )}
             </div>
+            )}
           </>
-        )}
+      )}
+    </div>
+  );
+
+  if (bare) return inner;
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+        <h2 className="text-sm font-semibold text-gray-800">Documents &amp; Offers</h2>
       </div>
+      <div className="px-5 py-4">{inner}</div>
     </div>
   );
 }
