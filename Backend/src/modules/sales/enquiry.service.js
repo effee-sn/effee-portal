@@ -1,7 +1,7 @@
 const { enquiryRepository } = require('./enquiry.repository');
 const { auditService } = require('../audit/audit.service');
 const { notificationService } = require('../notification/notification.service');
-const { NotFoundError, ConflictError, ValidationError, buildSearchClause } = require('../../core');
+const { NotFoundError, ConflictError, ValidationError, ForbiddenError, buildSearchClause } = require('../../core');
 
 /**
  * Enquiry business logic — the opportunity pipeline. WON / LOST are reached
@@ -16,10 +16,35 @@ function createEnquiryService(repository) {
 
   // Config for parseListQuery — turns query params into a Prisma `where`.
   const FILTERABLE = Object.freeze({
-    stage:       (v) => v,
-    owner_id:    (v) => Number(v) || undefined,
-    customer_id: (v) => Number(v) || undefined,
+    stage:        (v) => v,
+    enquiry_type: (v) => v,
+    owner_id:     (v) => Number(v) || undefined,
+    customer_id:  (v) => Number(v) || undefined,
   });
+
+  /**
+   * The stage work (review → offer → close) is done by the assigned owner.
+   * Only they, or a system user, may edit/advance an enquiry.
+   * @throws {ForbiddenError}
+   */
+  function assertCanManage(enquiry, actor) {
+    if (actor?.is_system) return;
+    if (actor?.id && actor.id === enquiry.owner_id) return;
+    throw new ForbiddenError('Only the assigned owner can update this enquiry');
+  }
+
+  /**
+   * CONTACTED belongs to the INCOMING path only — a GENERATED enquiry (field
+   * sales already interacted) skips straight to REVIEW.
+   * @throws {ValidationError}
+   */
+  function assertStageAllowed(stage, enquiryType) {
+    if (stage === 'CONTACTED' && enquiryType === 'GENERATED') {
+      throw new ValidationError('Validation failed', [
+        { field: 'stage', message: 'A generated enquiry does not use the Contacted stage' },
+      ]);
+    }
+  }
 
   /** Next `ENQ-YYYY-NNNN` reference for the current year. */
   async function nextRefNo() {
@@ -58,7 +83,7 @@ function createEnquiryService(repository) {
   }
 
   function pickWritable(dto, data = {}) {
-    for (const f of ['title', 'customer_id', 'contact_id', 'source', 'stage',
+    for (const f of ['title', 'customer_id', 'contact_id', 'enquiry_type', 'stage',
       'description', 'expected_value', 'expected_close', 'owner_id']) {
       if (dto[f] !== undefined) data[f] = dto[f];
     }
@@ -110,6 +135,7 @@ function createEnquiryService(repository) {
         ]);
       }
       await assertRefs({ customer_id: dto.customer_id, contact_id: dto.contact_id, owner_id });
+      if (dto.stage) assertStageAllowed(dto.stage, dto.enquiry_type || 'INCOMING');
 
       const data = pickWritable(dto, {
         owner_id,
@@ -140,6 +166,8 @@ function createEnquiryService(repository) {
     async update(id, dto, actor) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Enquiry');
+      assertCanManage(before, actor);
+      if (dto.stage) assertStageAllowed(dto.stage, dto.enquiry_type ?? before.enquiry_type);
 
       // Resolve the effective customer for contact validation (new or existing).
       const customer_id = dto.customer_id ?? before.customer_id;
@@ -180,6 +208,7 @@ function createEnquiryService(repository) {
     async win(id, dto, actor) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Enquiry');
+      assertCanManage(before, actor);
       if (before.stage === 'WON') throw new ConflictError('Enquiry is already marked won');
 
       const data = {
@@ -222,6 +251,7 @@ function createEnquiryService(repository) {
     async lose(id, dto, actor) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Enquiry');
+      assertCanManage(before, actor);
       if (before.stage === 'LOST') throw new ConflictError('Enquiry is already marked lost');
 
       const data = {
@@ -247,12 +277,13 @@ function createEnquiryService(repository) {
     async reopen(id, actor) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Enquiry');
+      assertCanManage(before, actor);
       if (before.stage !== 'WON' && before.stage !== 'LOST') {
         throw new ConflictError('Only a won or lost enquiry can be reopened');
       }
 
       const data = {
-        stage: 'NEGOTIATION',
+        stage: 'FOLLOW_UP',
         won_at: null, order_no: null, order_value: null, order_date: null,
         lost_at: null, lost_reason: null,
         updated_by: actor?.id ?? null,
@@ -264,7 +295,7 @@ function createEnquiryService(repository) {
         entity: 'Enquiry',
         entityId: id,
         actor,
-        changes: { stage: { from: before.stage, to: 'NEGOTIATION' }, reopened: true },
+        changes: { stage: { from: before.stage, to: 'FOLLOW_UP' }, reopened: true },
       });
 
       return enquiry;

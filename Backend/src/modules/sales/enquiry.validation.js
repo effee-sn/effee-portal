@@ -3,15 +3,15 @@ const { schemas } = require('../../core');
 
 /** Request schemas for the sales enquiry (opportunity) resource. */
 
-const SOURCES = ['CALL', 'EMAIL', 'WALK_IN', 'EXHIBITION', 'REFERRAL', 'WEBSITE', 'OTHER'];
+const TYPES = ['GENERATED', 'INCOMING'];
 // Stages a user may set directly. WON / LOST are reached only through the
 // dedicated win / lose actions so their close-out fields are captured.
-const ACTIVE_STAGES = ['NEW', 'QUALIFIED', 'QUOTATION', 'NEGOTIATION', 'ON_HOLD'];
+const ACTIVE_STAGES = ['NEW', 'CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'OFFER_RELEASED', 'FOLLOW_UP'];
+const ALL_STAGES = [...ACTIVE_STAGES, 'WON', 'LOST'];
 
 const optionalText = (max) =>
   z.string().trim().max(max).optional().transform((v) => (v === '' ? undefined : v));
 
-/** Optional positive money value; blank → undefined. */
 const optionalMoney = z.preprocess(
   (v) => (v === '' || v === null ? undefined : v),
   z.coerce.number().nonnegative('Must be zero or more').optional()
@@ -22,7 +22,6 @@ const requiredMoney = z.preprocess(
   z.coerce.number({ required_error: 'Order value is required' }).nonnegative('Must be zero or more')
 );
 
-/** Optional date (accepts yyyy-mm-dd or ISO); blank → undefined. */
 const optionalDate = z.preprocess(
   (v) => (v === '' || v === null ? undefined : v),
   z.coerce.date().optional()
@@ -39,9 +38,10 @@ const optionalOwner = z.preprocess(
 );
 
 const listEnquiriesQuery = schemas.listQuery.extend({
-  stage:       z.enum(['NEW', 'QUALIFIED', 'QUOTATION', 'NEGOTIATION', 'WON', 'LOST', 'ON_HOLD']).optional(),
-  owner_id:    z.coerce.number().int().positive().optional(),
-  customer_id: z.coerce.number().int().positive().optional(),
+  stage:        z.enum(ALL_STAGES).optional(),
+  enquiry_type: z.enum(TYPES).optional(),
+  owner_id:     z.coerce.number().int().positive().optional(),
+  customer_id:  z.coerce.number().int().positive().optional(),
 });
 
 const enquiryIdParam = schemas.idParam;
@@ -50,7 +50,7 @@ const createEnquiryBody = z.object({
   title:          z.string().trim().min(1, 'Title is required').max(191),
   customer_id:    z.coerce.number({ required_error: 'Customer is required' }).int().positive(),
   contact_id:     optionalContact,
-  source:         z.enum(SOURCES).optional(),
+  enquiry_type:   z.enum(TYPES).optional(),
   stage:          z.enum(ACTIVE_STAGES).optional(),
   description:    optionalText(2000),
   expected_value: optionalMoney,
@@ -62,7 +62,7 @@ const updateEnquiryBody = z.object({
   title:          z.string().trim().min(1).max(191).optional(),
   customer_id:    z.coerce.number().int().positive().optional(),
   contact_id:     optionalContact,
-  source:         z.enum(SOURCES).optional(),
+  enquiry_type:   z.enum(TYPES).optional(),
   stage:          z.enum(ACTIVE_STAGES).optional(),
   description:    optionalText(2000),
   expected_value: optionalMoney,
@@ -84,8 +84,9 @@ const loseEnquiryBody = z.object({
 });
 
 module.exports = {
-  SOURCES,
+  TYPES,
   ACTIVE_STAGES,
+  ALL_STAGES,
   listEnquiriesQuery,
   enquiryIdParam,
   createEnquiryBody,

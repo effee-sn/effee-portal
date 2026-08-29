@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
-import { ENQUIRY_SOURCES, ACTIVE_STAGES, STAGE_STYLE, SOURCE_LABEL, formatINR } from '@/lib/salesOptions';
+import { ENQUIRY_TYPES, STAGE_STYLE, TYPE_LABEL, TEMPERATURE_STYLE, stagesForType, formatINR } from '@/lib/salesOptions';
 import EnquiryCustomerContact from '@/components/EnquiryCustomerContact';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
@@ -120,8 +120,8 @@ function LoseModal({ enquiryId, onClose, onDone }) {
 function EditModal({ enquiry, users, onClose, onDone }) {
   const [form, setForm] = useState({
     title: enquiry.title || '', customer_id: enquiry.customer_id || '', contact_id: enquiry.contact_id || '',
-    owner_id: enquiry.owner_id || '', source: enquiry.source || 'CALL',
-    stage: ['WON', 'LOST'].includes(enquiry.stage) ? 'NEGOTIATION' : enquiry.stage,
+    owner_id: enquiry.owner_id || '', enquiry_type: enquiry.enquiry_type || 'INCOMING',
+    stage: ['WON', 'LOST'].includes(enquiry.stage) ? 'FOLLOW_UP' : enquiry.stage,
     expected_value: enquiry.expected_value ?? '', expected_close: toDateInput(enquiry.expected_close), description: enquiry.description || '',
   });
   const [error, setError]   = useState('');
@@ -129,7 +129,11 @@ function EditModal({ enquiry, users, onClose, onDone }) {
 
   const change = (e) => {
     const { name, value } = e.target;
-    setForm((f) => ({ ...f, [name]: value }));
+    setForm((f) => {
+      const next = { ...f, [name]: value };
+      if (name === 'enquiry_type' && value === 'GENERATED' && f.stage === 'CONTACTED') next.stage = 'NEW';
+      return next;
+    });
     setError('');
   };
 
@@ -175,15 +179,15 @@ function EditModal({ enquiry, users, onClose, onDone }) {
               </select>
             </div>
             <div>
-              <label className={label}>Source</label>
-              <select name="source" value={form.source} onChange={change} className="ams-input">
-                {ENQUIRY_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              <label className={label}>Type</label>
+              <select name="enquiry_type" value={form.enquiry_type} onChange={change} className="ams-input">
+                {ENQUIRY_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
             <div>
               <label className={label}>Stage</label>
               <select name="stage" value={form.stage} onChange={change} className="ams-input">
-                {ACTIVE_STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                {stagesForType(form.enquiry_type).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
             </div>
             <div>
@@ -245,6 +249,14 @@ export default function EnquiryDetailPage() {
     finally { setBusy(false); }
   };
 
+  const changeStage = async (stage) => {
+    if (busy) return;
+    setBusy(true);
+    try { const res = await apiPut(`/sales/enquiries/${id}`, { stage }); setEnquiry(res.data); }
+    catch (err) { alert(err.message); }
+    finally { setBusy(false); }
+  };
+
   const del = async () => {
     setBusy(true);
     try { await apiDelete(`/sales/enquiries/${id}`); router.push('/dashboard/sales/enquiries'); }
@@ -282,6 +294,12 @@ export default function EnquiryDetailPage() {
         </div>
         {canEdit && (
           <div className="flex items-center gap-2">
+            {!isClosed && (
+              <select value={enquiry.stage} onChange={(e) => changeStage(e.target.value)} disabled={busy}
+                className="ams-input py-1.5 text-sm cursor-pointer" style={{ width: 'auto' }} title="Change stage">
+                {stagesForType(enquiry.enquiry_type).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            )}
             <button onClick={() => setModal('edit')} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Edit</button>
             {!isClosed && (
               <>
@@ -314,8 +332,16 @@ export default function EnquiryDetailPage() {
       {/* Enquiry details */}
       <Section title="Enquiry">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <Field label="Source">{SOURCE_LABEL[enquiry.source] || enquiry.source}</Field>
-          <Field label="Owner">{enquiry.owner?.name}</Field>
+          <Field label="Type">{TYPE_LABEL[enquiry.enquiry_type] || enquiry.enquiry_type}</Field>
+          <Field label="Owner (assigned)">{enquiry.owner?.name}</Field>
+          <Field label="Temperature">
+            {enquiry.current_temperature && TEMPERATURE_STYLE[enquiry.current_temperature] ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                style={{ color: TEMPERATURE_STYLE[enquiry.current_temperature].color, backgroundColor: TEMPERATURE_STYLE[enquiry.current_temperature].bg }}>
+                {TEMPERATURE_STYLE[enquiry.current_temperature].label}
+              </span>
+            ) : null}
+          </Field>
           <Field label="Expected Value">{formatINR(enquiry.expected_value)}</Field>
           <Field label="Expected Close">{fmtDate(enquiry.expected_close)}</Field>
           <Field label="Created">{fmtDate(enquiry.created_at)}</Field>

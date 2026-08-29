@@ -697,26 +697,35 @@ enum ResolutionMethod {
 // inter-state = IGST, with HSN/SAC per line.
 // ═══════════════════════════════════════════════════════════════════════════
 
-/// How an enquiry first reached us.
-enum EnquirySource {
-  CALL
-  EMAIL
-  WALK_IN
-  EXHIBITION
-  REFERRAL
-  WEBSITE
-  OTHER
+/// How an enquiry originated. GENERATED = raised by a field salesperson from a
+/// site visit; INCOMING = an inbound enquiry with no prior field-sales contact.
+enum EnquiryType {
+  GENERATED
+  INCOMING
 }
 
-/// Pipeline stage of an enquiry. WON / LOST / ON_HOLD are terminal-ish states.
+/// Deal temperature during follow-up. Set per follow-up entry; the enquiry
+/// carries the latest as its current temperature.
+enum Temperature {
+  HOT
+  WARM
+  COLD
+}
+
+/// Pipeline stage of an enquiry.
+///   NEW -> (INCOMING: CONTACTED ->) REVIEW -> CONCEPT -> COSTING ->
+///   OFFER_RELEASED -> FOLLOW_UP -> WON / LOST.
+/// A GENERATED enquiry skips CONTACTED (field sales already interacted).
 enum EnquiryStage {
   NEW
-  QUALIFIED
-  QUOTATION
-  NEGOTIATION
+  CONTACTED
+  REVIEW
+  CONCEPT
+  COSTING
+  OFFER_RELEASED
+  FOLLOW_UP
   WON
   LOST
-  ON_HOLD
 }
 
 /// The kind of customer interaction an activity records (its MOM).
@@ -827,20 +836,25 @@ model Product {
 
 /// A sales opportunity, from first enquiry through to order confirmed.
 model Enquiry {
-  id          Int           @id @default(autoincrement())
-  ref_no      String        @unique
-  title       String
-  customer    Customer      @relation(fields: [customer_id], references: [id])
-  customer_id Int
-  contact     Contact?      @relation(fields: [contact_id], references: [id])
-  contact_id  Int?
-  source      EnquirySource @default(OTHER)
-  stage       EnquiryStage  @default(NEW)
-  description String?       @db.Text
+  id           Int          @id @default(autoincrement())
+  ref_no       String       @unique
+  title        String
+  customer     Customer     @relation(fields: [customer_id], references: [id])
+  customer_id  Int
+  contact      Contact?     @relation(fields: [contact_id], references: [id])
+  contact_id   Int?
+  enquiry_type EnquiryType  @default(INCOMING)
+  stage        EnquiryStage @default(NEW)
+  description  String?      @db.Text
+
+  // Latest follow-up temperature, denormalised from the newest follow-up entry
+  // so lists can show/filter it without loading the activity trail.
+  current_temperature Temperature?
 
   expected_value Decimal?  @db.Decimal(14, 2)
   expected_close DateTime?
 
+  // The assigned salesperson. Performs the stage work (review -> offer -> close).
   owner    User @relation("EnquiryOwner", fields: [owner_id], references: [id])
   owner_id Int
 
@@ -866,6 +880,7 @@ model Enquiry {
   @@index([customer_id])
   @@index([owner_id])
   @@index([stage])
+  @@index([enquiry_type])
   @@index([deleted_at])
   @@index([created_at])
 }

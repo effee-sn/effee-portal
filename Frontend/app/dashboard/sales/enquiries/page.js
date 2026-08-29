@@ -6,7 +6,7 @@ import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
-import { ENQUIRY_SOURCES, ACTIVE_STAGES, ALL_STAGES, STAGE_STYLE, SOURCE_LABEL, formatINR } from '@/lib/salesOptions';
+import { ENQUIRY_TYPES, ALL_STAGES, STAGE_STYLE, TYPE_LABEL, TEMPERATURE_STYLE, stagesForType, formatINR } from '@/lib/salesOptions';
 import EnquiryCustomerContact from '@/components/EnquiryCustomerContact';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
@@ -25,7 +25,7 @@ export function StageBadge({ stage }) {
 // ── Create modal ──────────────────────────────────────────────────────────────
 function EnquiryModal({ users, onClose, onSaved }) {
   const [form, setForm] = useState({
-    title: '', customer_id: '', contact_id: '', owner_id: '', source: 'CALL',
+    title: '', customer_id: '', contact_id: '', owner_id: '', enquiry_type: 'INCOMING',
     stage: 'NEW', expected_value: '', expected_close: '', description: '',
   });
   const [error, setError]   = useState('');
@@ -33,7 +33,12 @@ function EnquiryModal({ users, onClose, onSaved }) {
 
   const change = (e) => {
     const { name, value } = e.target;
-    setForm((f) => ({ ...f, [name]: value }));
+    setForm((f) => {
+      const next = { ...f, [name]: value };
+      // A generated enquiry can't sit at Contacted — snap it back if needed.
+      if (name === 'enquiry_type' && value === 'GENERATED' && f.stage === 'CONTACTED') next.stage = 'NEW';
+      return next;
+    });
     setError('');
   };
 
@@ -75,15 +80,15 @@ function EnquiryModal({ users, onClose, onSaved }) {
               </select>
             </div>
             <div>
-              <label className={label}>Source</label>
-              <select name="source" value={form.source} onChange={change} className="ams-input">
-                {ENQUIRY_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              <label className={label}>Type</label>
+              <select name="enquiry_type" value={form.enquiry_type} onChange={change} className="ams-input">
+                {ENQUIRY_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
             <div>
               <label className={label}>Stage</label>
               <select name="stage" value={form.stage} onChange={change} className="ams-input">
-                {ACTIVE_STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                {stagesForType(form.enquiry_type).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
             </div>
             <div>
@@ -243,10 +248,20 @@ export default function EnquiriesPage() {
                     <td className="px-3 py-3 font-mono text-xs text-gray-500 whitespace-nowrap">{e.ref_no}</td>
                     <td className="px-3 py-3 font-medium text-gray-800">
                       {e.title}
-                      <span className="block text-xs text-gray-400 font-normal">{SOURCE_LABEL[e.source] || e.source}</span>
+                      <span className="block text-xs text-gray-400 font-normal">{TYPE_LABEL[e.enquiry_type] || e.enquiry_type}</span>
                     </td>
                     <td className="px-3 py-3 text-gray-600">{e.customer?.name || '—'}</td>
-                    <td className="px-3 py-3"><StageBadge stage={e.stage} /></td>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <StageBadge stage={e.stage} />
+                        {e.current_temperature && TEMPERATURE_STYLE[e.current_temperature] && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold"
+                            style={{ color: TEMPERATURE_STYLE[e.current_temperature].color, backgroundColor: TEMPERATURE_STYLE[e.current_temperature].bg }}>
+                            {TEMPERATURE_STYLE[e.current_temperature].label}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-3 py-3 text-gray-600">{e.owner?.name || '—'}</td>
                     <td className="px-3 py-3 text-gray-700 tabular-nums text-right whitespace-nowrap">
                       {formatINR(e.stage === 'WON' ? e.order_value : e.expected_value)}
