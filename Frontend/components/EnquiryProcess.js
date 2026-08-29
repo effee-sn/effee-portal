@@ -1,6 +1,6 @@
 'use client';
 
-import { stagesForType } from '@/lib/salesOptions';
+import { stagesForType, stageAgeDays, isAging } from '@/lib/salesOptions';
 
 /**
  * Horizontal pipeline tracker for an enquiry — shows where it is now, marks the
@@ -23,6 +23,8 @@ export default function EnquiryProcess({ enquiry, canManage, busy, onPick }) {
   const closed = enquiry.stage === 'WON' || enquiry.stage === 'LOST';
   const curIdx = flow.findIndex((s) => s.value === enquiry.stage);
   const next = !closed && curIdx >= 0 && curIdx < flow.length - 1 ? flow[curIdx + 1] : null;
+  const age = stageAgeDays(enquiry.stage_since);
+  const aging = !closed && isAging(enquiry.stage, enquiry.stage_since);
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 px-5 py-4">
@@ -65,10 +67,14 @@ export default function EnquiryProcess({ enquiry, canManage, busy, onPick }) {
       {/* Now / what's next */}
       {!closed && (
         <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-3 flex-wrap">
-          <p className="text-xs text-gray-600 min-w-0">
+          <div className="text-xs text-gray-600 min-w-0">
             <span className="font-semibold text-gray-800">Now: {flow[curIdx]?.label || '—'}</span>
-            {STAGE_HINT[enquiry.stage] ? ` — ${STAGE_HINT[enquiry.stage]}` : ''}
-          </p>
+            <span className="text-gray-400"> · {age}d in stage</span>
+            {aging && (
+              <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-medium">⚠ aging</span>
+            )}
+            {STAGE_HINT[enquiry.stage] ? <span className="block text-gray-500 mt-0.5">{STAGE_HINT[enquiry.stage]}</span> : null}
+          </div>
           {next && canManage && (
             <button onClick={() => onPick(next.value)} disabled={busy}
               className="px-3 py-1.5 text-sm font-medium text-white rounded cursor-pointer shrink-0"

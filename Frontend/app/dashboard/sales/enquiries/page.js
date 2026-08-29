@@ -6,7 +6,7 @@ import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
-import { ENQUIRY_TYPES, ALL_STAGES, STAGE_STYLE, TYPE_LABEL, TEMPERATURE_STYLE, stagesForType, formatINR } from '@/lib/salesOptions';
+import { ENQUIRY_TYPES, ALL_STAGES, STAGE_STYLE, TYPE_LABEL, TEMPERATURE_STYLE, stagesForType, formatINR, isAging, stageAgeDays } from '@/lib/salesOptions';
 import EnquiryCustomerContact from '@/components/EnquiryCustomerContact';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
@@ -259,6 +259,10 @@ export default function EnquiriesPage() {
                             style={{ color: TEMPERATURE_STYLE[e.current_temperature].color, backgroundColor: TEMPERATURE_STYLE[e.current_temperature].bg }}>
                             {TEMPERATURE_STYLE[e.current_temperature].label}
                           </span>
+                        )}
+                        {isAging(e.stage, e.stage_since) && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700"
+                            title={`${stageAgeDays(e.stage_since)} days in stage`}>⚠ {stageAgeDays(e.stage_since)}d</span>
                         )}
                       </div>
                     </td>

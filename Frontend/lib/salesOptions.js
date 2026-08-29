@@ -80,6 +80,27 @@ export const TEMPERATURE_STYLE = {
   COLD: { label: 'Cold', color: '#2563EB', bg: '#EFF6FF' },
 };
 
+/**
+ * How many days an enquiry may sit in a stage before it's flagged as aging.
+ * WON / LOST are terminal and never age.
+ */
+export const STAGE_AGING_DAYS = {
+  NEW: 3, CONTACTED: 3, REVIEW: 4, CONCEPT: 5, COSTING: 5, OFFER_RELEASED: 7, FOLLOW_UP: 10,
+};
+
+/** Whole days the enquiry has been in its current stage. */
+export function stageAgeDays(stageSince) {
+  if (!stageSince) return 0;
+  return Math.max(0, Math.floor((Date.now() - new Date(stageSince).getTime()) / 86400000));
+}
+
+/** True when the current stage has aged past its threshold. */
+export function isAging(stage, stageSince) {
+  const threshold = STAGE_AGING_DAYS[stage];
+  if (!threshold) return false;
+  return stageAgeDays(stageSince) >= threshold;
+}
+
 /** Formats a number as Indian-rupee currency for display. */
 export function formatINR(value) {
   if (value === null || value === undefined || value === '') return '—';

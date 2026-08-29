@@ -13,6 +13,7 @@ function createEnquiryRepository(db) {
     stage: true,
     enquiry_type: true,
     current_temperature: true,
+    stage_since: true,
     expected_value: true,
     expected_close: true,
     order_value: true,
@@ -36,6 +37,7 @@ function createEnquiryRepository(db) {
     stage: true,
     enquiry_type: true,
     current_temperature: true,
+    stage_since: true,
     description: true,
     expected_value: true,
     expected_close: true,
@@ -53,6 +55,10 @@ function createEnquiryRepository(db) {
     owner: { select: { id: true, name: true } },
     created_at: true,
     updated_at: true,
+    stageEvents: {
+      orderBy: { created_at: 'asc' },
+      select: { id: true, from_stage: true, to_stage: true, changed_by: true, created_at: true },
+    },
     _count: {
       select: {
         activities: { where: { deleted_at: null } },
@@ -105,6 +111,14 @@ function createEnquiryRepository(db) {
     /** @param {number} id @param {object} data */
     update(id, data) {
       return db.enquiry.update({ where: { id }, data, select: enquiryDetailSelect });
+    },
+
+    /**
+     * Appends an immutable stage-transition record.
+     * @param {{ enquiry_id: number, from_stage: string|null, to_stage: string, changed_by: number|null }} data
+     */
+    recordStageEvent(data) {
+      return db.enquiryStageEvent.create({ data, select: { id: true } });
     },
 
     /** @param {number} id @param {number|null} [actorId] */

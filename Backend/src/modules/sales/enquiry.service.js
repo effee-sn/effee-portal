@@ -145,6 +145,9 @@ function createEnquiryService(repository) {
       });
 
       const enquiry = await repository.create(data);
+      await repository.recordStageEvent({
+        enquiry_id: enquiry.id, from_stage: null, to_stage: enquiry.stage, changed_by: actor?.id ?? null,
+      });
 
       await auditService.record({
         action: auditService.Action.CREATE,
@@ -185,8 +188,15 @@ function createEnquiryService(repository) {
         }
       }
 
+      const stageChanged = dto.stage !== undefined && dto.stage !== before.stage;
       const data = pickWritable(dto, { updated_by: actor?.id ?? null });
+      if (stageChanged) data.stage_since = new Date();
       const enquiry = await repository.update(id, data);
+      if (stageChanged) {
+        await repository.recordStageEvent({
+          enquiry_id: id, from_stage: before.stage, to_stage: dto.stage, changed_by: actor?.id ?? null,
+        });
+      }
 
       await auditService.record({
         action: auditService.Action.UPDATE,
@@ -213,6 +223,7 @@ function createEnquiryService(repository) {
 
       const data = {
         stage: 'WON',
+        stage_since: new Date(),
         won_at: new Date(),
         order_no: dto.order_no ?? null,
         order_value: dto.order_value,
@@ -223,6 +234,7 @@ function createEnquiryService(repository) {
         updated_by: actor?.id ?? null,
       };
       const enquiry = await repository.update(id, data);
+      await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'WON', changed_by: actor?.id ?? null });
 
       await auditService.record({
         action: auditService.Action.UPDATE,
@@ -256,11 +268,13 @@ function createEnquiryService(repository) {
 
       const data = {
         stage: 'LOST',
+        stage_since: new Date(),
         lost_at: new Date(),
         lost_reason: dto.lost_reason,
         updated_by: actor?.id ?? null,
       };
       const enquiry = await repository.update(id, data);
+      await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'LOST', changed_by: actor?.id ?? null });
 
       await auditService.record({
         action: auditService.Action.UPDATE,
@@ -284,11 +298,13 @@ function createEnquiryService(repository) {
 
       const data = {
         stage: 'FOLLOW_UP',
+        stage_since: new Date(),
         won_at: null, order_no: null, order_value: null, order_date: null,
         lost_at: null, lost_reason: null,
         updated_by: actor?.id ?? null,
       };
       const enquiry = await repository.update(id, data);
+      await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'FOLLOW_UP', changed_by: actor?.id ?? null });
 
       await auditService.record({
         action: auditService.Action.UPDATE,

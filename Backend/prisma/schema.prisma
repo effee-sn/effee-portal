@@ -862,6 +862,10 @@ model Enquiry {
   // so lists can show/filter it without loading the activity trail.
   current_temperature Temperature?
 
+  // When the enquiry entered its current stage — powers time-in-stage and the
+  // aging flag without walking the stage-event history.
+  stage_since DateTime @default(now())
+
   expected_value Decimal?  @db.Decimal(14, 2)
   expected_close DateTime?
 
@@ -882,6 +886,7 @@ model Enquiry {
   activities  EnquiryActivity[]
   quotations  Quotation[]
   attachments EnquiryAttachment[]
+  stageEvents EnquiryStageEvent[]
 
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
@@ -933,6 +938,20 @@ model EnquiryActivity {
   @@index([enquiry_id])
   @@index([follow_up_at])
   @@index([deleted_at])
+}
+
+/// One stage transition on an enquiry — the audit trail behind time-in-stage
+/// and the process history. Never soft-deleted; it is an immutable record.
+model EnquiryStageEvent {
+  id         Int           @id @default(autoincrement())
+  enquiry    Enquiry       @relation(fields: [enquiry_id], references: [id])
+  enquiry_id Int
+  from_stage EnquiryStage?
+  to_stage   EnquiryStage
+  changed_by Int?
+  created_at DateTime      @default(now())
+
+  @@index([enquiry_id])
 }
 
 /// A document stored against an enquiry (intake format, concept, costing, or a
