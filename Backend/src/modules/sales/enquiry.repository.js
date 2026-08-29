@@ -161,6 +161,7 @@ function createEnquiryRepository(db) {
         select: { kind: true, sent_at: true },
       });
       return {
+        hasFormat: rows.some((r) => r.kind === 'FORMAT_PDF' || r.kind === 'FORMAT_EXCEL'),
         hasConcept: rows.some((r) => r.kind === 'CONCEPT'),
         hasCosting: rows.some((r) => r.kind === 'COSTING'),
         hasSentOffer: rows.some((r) => r.kind === 'OFFER' && r.sent_at != null),

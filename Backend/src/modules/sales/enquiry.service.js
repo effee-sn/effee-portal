@@ -1,7 +1,7 @@
 const { enquiryRepository } = require('./enquiry.repository');
 const { auditService } = require('../audit/audit.service');
 const { notificationService } = require('../notification/notification.service');
-const { missingForStage, GATES } = require('./stageGate');
+const { missingForStage, GATED_STAGES } = require('./stageGate');
 const { NotFoundError, ConflictError, ValidationError, ForbiddenError, buildSearchClause } = require('../../core');
 
 /**
@@ -54,7 +54,6 @@ function createEnquiryService(repository) {
    * @throws {ConflictError}
    */
   async function assertStageGate(enquiryId, targetStage) {
-    if (!GATES[targetStage]) return;
     const missing = missingForStage(targetStage, await repository.docFlags(enquiryId));
     if (missing.length) {
       throw new ConflictError(`This stage needs ${missing.join(' and ')} first.`);
@@ -147,7 +146,7 @@ function createEnquiryService(repository) {
       const flags = await repository.docFlags(id);
       /** @type {Record<string, string[]>} */
       const blocked = {};
-      for (const stage of Object.keys(GATES)) blocked[stage] = missingForStage(stage, flags);
+      for (const stage of GATED_STAGES) blocked[stage] = missingForStage(stage, flags);
       return { flags, blocked };
     },
 

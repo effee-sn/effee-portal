@@ -6,13 +6,18 @@
 
 /**
  * @typedef {object} DocFlags
+ * @property {boolean} hasFormat   An enquiry-format document (PDF or Excel) exists.
  * @property {boolean} hasConcept  A live concept document exists.
  * @property {boolean} hasCosting  A live costing document exists.
  * @property {boolean} hasSentOffer An offer document is marked sent to the customer.
  */
 
-/** target stage → (flags) => list of unmet requirement phrases. */
-const GATES = Object.freeze({
+// Leaving New (intake) requires the enquiry format, so every stage beyond it
+// carries that requirement.
+const FORMAT_STAGES = ['CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'OFFER_RELEASED', 'FOLLOW_UP', 'WON'];
+
+// Additional, stage-specific document requirements.
+const EXTRA_GATES = Object.freeze({
   OFFER_RELEASED: (f) => {
     const missing = [];
     if (!f.hasConcept) missing.push('a concept document');
@@ -22,6 +27,9 @@ const GATES = Object.freeze({
   WON: (f) => (f.hasSentOffer ? [] : ['an offer marked sent to the customer']),
 });
 
+/** Stages that can be blocked — used to build the UI readiness map. */
+const GATED_STAGES = Object.freeze([...new Set([...FORMAT_STAGES, ...Object.keys(EXTRA_GATES)])]);
+
 /**
  * What's still missing before an enquiry may enter `targetStage`.
  * @param {string} targetStage
@@ -29,8 +37,12 @@ const GATES = Object.freeze({
  * @returns {string[]} empty when the move is allowed
  */
 function missingForStage(targetStage, flags) {
-  const rule = GATES[targetStage];
-  return rule ? rule(flags) : [];
+  const missing = [];
+  if (FORMAT_STAGES.includes(targetStage) && !flags.hasFormat) {
+    missing.push('the enquiry format (PDF or Excel)');
+  }
+  if (EXTRA_GATES[targetStage]) missing.push(...EXTRA_GATES[targetStage](flags));
+  return missing;
 }
 
-module.exports = { GATES, missingForStage };
+module.exports = { GATED_STAGES, missingForStage };
