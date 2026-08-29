@@ -1,113 +1,83 @@
 'use client';
 
 import { stagesForType } from '@/lib/salesOptions';
-import EnquiryAttachments from '@/components/EnquiryAttachments';
 
 /**
- * The enquiry process, top to bottom. Each stage shows where the enquiry is and
- * surfaces the data it needs: document stages embed their upload/download inline
- * (reusing EnquiryAttachments in `bare` mode), interaction stages prompt for the
- * timeline. The current stage is highlighted and the next is one click away.
+ * Horizontal pipeline tracker for an enquiry — shows where it is now, marks the
+ * completed steps, and offers the next move. Stage data is shown in the panels
+ * below (timeline, documents), not inline here.
  */
 
-// Per-stage guidance + which data belongs to it.
-const STAGE_META = {
-  NEW:            { note: 'Capture the enquiry and upload the enquiry format.', docs: ['FORMAT_PDF', 'FORMAT_EXCEL'] },
-  CONTACTED:      { note: 'Contact the customer and gather information.', activity: true },
-  REVIEW:         { note: 'Review the requirement internally.', activity: true },
-  CONCEPT:        { note: 'Prepare and upload the concept document.', docs: ['CONCEPT'] },
-  COSTING:        { note: 'Work out and upload the costing.', docs: ['COSTING'] },
-  OFFER_RELEASED: { note: 'Upload the offer and mark it sent to the customer.', docs: ['OFFER'] },
-  FOLLOW_UP:      { note: 'Record follow-ups and set the next follow-up date & temperature.', activity: true },
+const STAGE_HINT = {
+  NEW:            'Capture the enquiry and upload the enquiry format.',
+  CONTACTED:      'Contact the customer and gather information.',
+  REVIEW:         'Review the requirement internally.',
+  CONCEPT:        'Prepare and upload the concept document.',
+  COSTING:        'Work out and upload the costing.',
+  OFFER_RELEASED: 'Upload the offer and mark it sent to the customer.',
+  FOLLOW_UP:      'Record follow-ups and set the next follow-up date & temperature.',
 };
 
-const scrollToTimeline = () => document.getElementById('activity')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-export default function EnquiryProcess({ enquiry, canManage, busy, onPick, onDocsChanged }) {
+export default function EnquiryProcess({ enquiry, canManage, busy, onPick }) {
   const flow = stagesForType(enquiry.enquiry_type);
   const closed = enquiry.stage === 'WON' || enquiry.stage === 'LOST';
   const curIdx = flow.findIndex((s) => s.value === enquiry.stage);
   const next = !closed && curIdx >= 0 && curIdx < flow.length - 1 ? flow[curIdx + 1] : null;
-  const activityCount = enquiry._count?.activities ?? 0;
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-        <h2 className="text-sm font-semibold text-gray-800">Process</h2>
-        {closed && (
-          <span className={`text-xs font-semibold ${enquiry.stage === 'WON' ? 'text-green-700' : 'text-red-600'}`}>
-            Closed · {enquiry.stage === 'WON' ? 'Won' : 'Lost'}
-          </span>
-        )}
-      </div>
-
-      <div className="px-5 py-4">
+    <div className="bg-white rounded-lg border border-gray-200 px-5 py-4">
+      {/* Stepper */}
+      <div className="flex items-center overflow-x-auto pb-1">
         {flow.map((s, i) => {
           const state = closed || i < curIdx ? 'done' : i === curIdx ? 'current' : 'upcoming';
-          const meta = STAGE_META[s.value] || {};
-          const last = i === flow.length - 1;
-          const clickable = canManage && !closed && state !== 'current';
-
+          const clickable = canManage && !closed && s.value !== enquiry.stage;
           return (
-            <div key={s.value} className="flex gap-3">
-              {/* Node + connector */}
-              <div className="flex flex-col items-center shrink-0">
-                <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold border-2
+            <div key={s.value} className="flex items-center shrink-0">
+              {i > 0 && <div className={`h-0.5 w-5 sm:w-10 ${closed || i <= curIdx ? 'bg-green-300' : 'bg-gray-200'}`} />}
+              <button type="button" disabled={!clickable || busy} onClick={() => clickable && onPick(s.value)}
+                title={clickable ? `Move to ${s.label}` : s.label}
+                className={`flex flex-col items-center gap-1 px-1.5 ${clickable ? 'cursor-pointer group' : 'cursor-default'}`}>
+                <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold border-2 transition
                   ${state === 'done' ? 'bg-green-500 border-green-500 text-white'
-                    : state === 'current' ? 'border-transparent text-white' : 'bg-white border-gray-300 text-gray-400'}`}
+                    : state === 'current' ? 'border-transparent text-white'
+                    : 'bg-white border-gray-300 text-gray-400 group-hover:border-blue-400'}`}
                   style={state === 'current' ? { backgroundColor: 'var(--ams-primary)' } : undefined}>
                   {state === 'done' ? '✓' : i + 1}
                 </span>
-                {!last && <span className={`w-0.5 flex-1 my-1 ${state === 'done' ? 'bg-green-300' : 'bg-gray-200'}`} />}
-              </div>
-
-              {/* Content */}
-              <div className={`flex-1 min-w-0 ${last ? 'pb-1' : 'pb-5'}`}>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`text-sm font-semibold ${state === 'current' ? '' : state === 'done' ? 'text-gray-700' : 'text-gray-400'}`}
-                    style={state === 'current' ? { color: 'var(--ams-primary)' } : undefined}>
-                    {s.label}
-                  </span>
-                  {state === 'current' && <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">Now</span>}
-                  {clickable && (
-                    <button onClick={() => onPick(s.value)} disabled={busy}
-                      className="text-[11px] text-gray-400 hover:text-blue-600 cursor-pointer">move here</button>
-                  )}
-                </div>
-                <p className={`text-xs mt-0.5 ${state === 'upcoming' ? 'text-gray-400' : 'text-gray-500'}`}>{meta.note}</p>
-
-                {/* Stage data */}
-                <div className={`mt-2 rounded-lg ${state === 'current' ? 'bg-blue-50/40 border border-blue-100 p-3' : ''}`}>
-                  {meta.docs && (
-                    <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={meta.docs} bare onChanged={onDocsChanged} />
-                  )}
-                  {meta.activity && (
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs text-gray-500">
-                        {activityCount} interaction{activityCount === 1 ? '' : 's'} logged
-                        {s.value === 'FOLLOW_UP' && enquiry.current_temperature ? ` · ${enquiry.current_temperature.toLowerCase()}` : ''}
-                      </span>
-                      <button onClick={scrollToTimeline} className="text-xs font-medium text-blue-600 hover:underline cursor-pointer">
-                        {s.value === 'FOLLOW_UP' ? 'Add follow-up' : 'Log activity'} →
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
+                <span className={`text-[11px] whitespace-nowrap ${state === 'current' ? 'font-semibold' : 'text-gray-500'}`}
+                  style={state === 'current' ? { color: 'var(--ams-primary)' } : undefined}>
+                  {s.label}
+                </span>
+              </button>
             </div>
           );
         })}
-
-        {next && canManage && (
-          <div className="pt-1 pl-9">
-            <button onClick={() => onPick(next.value)} disabled={busy}
-              className="px-3 py-1.5 text-sm font-medium text-white rounded cursor-pointer"
-              style={{ backgroundColor: 'var(--ams-primary)' }}>
-              Move to {next.label} →
-            </button>
+        {closed && (
+          <div className="flex items-center shrink-0">
+            <div className="h-0.5 w-5 sm:w-10 bg-green-300" />
+            <span className={`rounded-full px-3 py-1.5 text-xs font-semibold text-white ${enquiry.stage === 'WON' ? 'bg-green-600' : 'bg-red-600'}`}>
+              {enquiry.stage === 'WON' ? 'Won' : 'Lost'}
+            </span>
           </div>
         )}
       </div>
+
+      {/* Now / what's next */}
+      {!closed && (
+        <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-xs text-gray-600 min-w-0">
+            <span className="font-semibold text-gray-800">Now: {flow[curIdx]?.label || '—'}</span>
+            {STAGE_HINT[enquiry.stage] ? ` — ${STAGE_HINT[enquiry.stage]}` : ''}
+          </p>
+          {next && canManage && (
+            <button onClick={() => onPick(next.value)} disabled={busy}
+              className="px-3 py-1.5 text-sm font-medium text-white rounded cursor-pointer shrink-0"
+              style={{ backgroundColor: 'var(--ams-primary)' }}>
+              Move to {next.label} →
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

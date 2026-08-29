@@ -9,6 +9,7 @@ import { ENQUIRY_TYPES, STAGE_STYLE, TYPE_LABEL, TEMPERATURE_STYLE, stagesForTyp
 import EnquiryCustomerContact from '@/components/EnquiryCustomerContact';
 import EnquiryActivities from '@/components/EnquiryActivities';
 import EnquiryProcess from '@/components/EnquiryProcess';
+import EnquiryAttachments from '@/components/EnquiryAttachments';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
@@ -344,13 +345,14 @@ export default function EnquiryDetailPage() {
         </div>
       )}
 
-      {/* Process — where it is now, and the data for each step (docs inline) */}
-      <EnquiryProcess enquiry={enquiry} canManage={canManage} busy={busy} onPick={changeStage} onDocsChanged={load} />
+      {/* Process — where it is now and what's next */}
+      <EnquiryProcess enquiry={enquiry} canManage={canManage} busy={busy} onPick={changeStage} />
 
-      {/* Body: interaction timeline (main) · customer + details (side) */}
+      {/* Body: timeline + documents (main) · customer + details (side) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
         <div className="lg:col-span-2 space-y-4">
           <div id="activity"><EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} /></div>
+          <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} onChanged={load} />
         </div>
         <div className="space-y-4">
           <Section title="Customer" right={
