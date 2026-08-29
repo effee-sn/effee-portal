@@ -22,7 +22,7 @@ const {
   winEnquiryBody, loseEnquiryBody,
 } = require('./enquiry.validation');
 const {
-  getEnquiries, getEnquiryById, createEnquiry, updateEnquiry,
+  getEnquiries, getEnquiryById, getEnquiryReadiness, createEnquiry, updateEnquiry,
   winEnquiry, loseEnquiry, reopenEnquiry, deleteEnquiry,
 } = require('./enquiry.controller');
 
@@ -133,6 +133,13 @@ router.get(
   authorize('SALES_VIEW'),
   validate({ params: enquiryIdParam }),
   asyncHandler(getEnquiryById)
+);
+
+router.get(
+  '/enquiries/:id/readiness',
+  authorize('SALES_VIEW'),
+  validate({ params: enquiryIdParam }),
+  asyncHandler(getEnquiryReadiness)
 );
 
 router.put(

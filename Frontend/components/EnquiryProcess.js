@@ -18,13 +18,14 @@ const STAGE_HINT = {
   FOLLOW_UP:      'Record follow-ups and set the next follow-up date & temperature.',
 };
 
-export default function EnquiryProcess({ enquiry, canManage, busy, onPick }) {
+export default function EnquiryProcess({ enquiry, canManage, busy, onPick, blocked = {} }) {
   const flow = stagesForType(enquiry.enquiry_type);
   const closed = enquiry.stage === 'WON' || enquiry.stage === 'LOST';
   const curIdx = flow.findIndex((s) => s.value === enquiry.stage);
   const next = !closed && curIdx >= 0 && curIdx < flow.length - 1 ? flow[curIdx + 1] : null;
   const age = stageAgeDays(enquiry.stage_since);
   const aging = !closed && isAging(enquiry.stage, enquiry.stage_since);
+  const nextMissing = next ? (blocked[next.value] || []) : [];
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 px-5 py-4">
@@ -32,12 +33,13 @@ export default function EnquiryProcess({ enquiry, canManage, busy, onPick }) {
       <div className="flex items-center overflow-x-auto pb-1">
         {flow.map((s, i) => {
           const state = closed || i < curIdx ? 'done' : i === curIdx ? 'current' : 'upcoming';
-          const clickable = canManage && !closed && s.value !== enquiry.stage;
+          const gated = (blocked[s.value] || []).length > 0;
+          const clickable = canManage && !closed && s.value !== enquiry.stage && !gated;
           return (
             <div key={s.value} className="flex items-center shrink-0">
               {i > 0 && <div className={`h-0.5 w-5 sm:w-10 ${closed || i <= curIdx ? 'bg-green-300' : 'bg-gray-200'}`} />}
               <button type="button" disabled={!clickable || busy} onClick={() => clickable && onPick(s.value)}
-                title={clickable ? `Move to ${s.label}` : s.label}
+                title={gated ? `Needs ${(blocked[s.value] || []).join(' & ')} first` : clickable ? `Move to ${s.label}` : s.label}
                 className={`flex flex-col items-center gap-1 px-1.5 ${clickable ? 'cursor-pointer group' : 'cursor-default'}`}>
                 <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold border-2 transition
                   ${state === 'done' ? 'bg-green-500 border-green-500 text-white'
@@ -76,11 +78,16 @@ export default function EnquiryProcess({ enquiry, canManage, busy, onPick }) {
             {STAGE_HINT[enquiry.stage] ? <span className="block text-gray-500 mt-0.5">{STAGE_HINT[enquiry.stage]}</span> : null}
           </div>
           {next && canManage && (
-            <button onClick={() => onPick(next.value)} disabled={busy}
-              className="px-3 py-1.5 text-sm font-medium text-white rounded cursor-pointer shrink-0"
-              style={{ backgroundColor: 'var(--ams-primary)' }}>
-              Move to {next.label} →
-            </button>
+            <div className="flex flex-col items-end gap-1 shrink-0">
+              <button onClick={() => onPick(next.value)} disabled={busy || nextMissing.length > 0}
+                className="px-3 py-1.5 text-sm font-medium text-white rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ backgroundColor: 'var(--ams-primary)' }}>
+                Move to {next.label} →
+              </button>
+              {nextMissing.length > 0 && (
+                <span className="text-[11px] text-amber-700">Needs {nextMissing.join(' & ')} first</span>
+              )}
+            </div>
           )}
         </div>
       )}

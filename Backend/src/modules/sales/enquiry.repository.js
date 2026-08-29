@@ -149,6 +149,23 @@ function createEnquiryRepository(db) {
       const row = await db.user.findFirst({ where: { id, deleted_at: null }, select: { id: true } });
       return row !== null;
     },
+
+    /**
+     * Document presence flags for the prerequisite gates.
+     * @param {number} enquiryId
+     * @returns {Promise<{ hasConcept: boolean, hasCosting: boolean, hasSentOffer: boolean }>}
+     */
+    async docFlags(enquiryId) {
+      const rows = await db.enquiryAttachment.findMany({
+        where: { enquiry_id: enquiryId, deleted_at: null },
+        select: { kind: true, sent_at: true },
+      });
+      return {
+        hasConcept: rows.some((r) => r.kind === 'CONCEPT'),
+        hasCosting: rows.some((r) => r.kind === 'COSTING'),
+        hasSentOffer: rows.some((r) => r.kind === 'OFFER' && r.sent_at != null),
+      };
+    },
   };
 }
 

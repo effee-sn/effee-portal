@@ -21,6 +21,11 @@ const getEnquiryById = async (req, res) => {
   ApiResponse.ok(res, await enquiryService.getById(req.params.id));
 };
 
+/** `GET /sales/enquiries/:id/readiness` — prerequisite gate status for the UI. */
+const getEnquiryReadiness = async (req, res) => {
+  ApiResponse.ok(res, await enquiryService.readiness(req.params.id));
+};
+
 /** `POST /sales/enquiries` */
 const createEnquiry = async (req, res) => {
   const enquiry = await enquiryService.create(req.body, requestContext(req));
@@ -60,6 +65,7 @@ const deleteEnquiry = async (req, res) => {
 module.exports = {
   getEnquiries,
   getEnquiryById,
+  getEnquiryReadiness,
   createEnquiry,
   updateEnquiry,
   winEnquiry,

@@ -1,6 +1,7 @@
 const { enquiryRepository } = require('./enquiry.repository');
 const { auditService } = require('../audit/audit.service');
 const { notificationService } = require('../notification/notification.service');
+const { missingForStage, GATES } = require('./stageGate');
 const { NotFoundError, ConflictError, ValidationError, ForbiddenError, buildSearchClause } = require('../../core');
 
 /**
@@ -43,6 +44,20 @@ function createEnquiryService(repository) {
       throw new ValidationError('Validation failed', [
         { field: 'stage', message: 'A generated enquiry does not use the Contacted stage' },
       ]);
+    }
+  }
+
+  /**
+   * Prerequisite gate — a stage that requires documents can't be entered until
+   * they exist (e.g. Offer Released needs concept + costing; Won needs a sent
+   * offer).
+   * @throws {ConflictError}
+   */
+  async function assertStageGate(enquiryId, targetStage) {
+    if (!GATES[targetStage]) return;
+    const missing = missingForStage(targetStage, await repository.docFlags(enquiryId));
+    if (missing.length) {
+      throw new ConflictError(`This stage needs ${missing.join(' and ')} first.`);
     }
   }
 
@@ -123,6 +138,20 @@ function createEnquiryService(repository) {
     },
 
     /**
+     * Prerequisite readiness for the gated stages, so the UI can show what a
+     * move needs before it's attempted.
+     * @param {number} id
+     */
+    async readiness(id) {
+      if (!(await repository.findById(id))) throw new NotFoundError('Enquiry');
+      const flags = await repository.docFlags(id);
+      /** @type {Record<string, string[]>} */
+      const blocked = {};
+      for (const stage of Object.keys(GATES)) blocked[stage] = missingForStage(stage, flags);
+      return { flags, blocked };
+    },
+
+    /**
      * @param {object} dto
      * @param {import('../../core/http/requestContext').ActorContext} [actor]
      */
@@ -171,6 +200,7 @@ function createEnquiryService(repository) {
       if (!before) throw new NotFoundError('Enquiry');
       assertCanManage(before, actor);
       if (dto.stage) assertStageAllowed(dto.stage, dto.enquiry_type ?? before.enquiry_type);
+      if (dto.stage && dto.stage !== before.stage) await assertStageGate(id, dto.stage);
 
       // Resolve the effective customer for contact validation (new or existing).
       const customer_id = dto.customer_id ?? before.customer_id;
@@ -220,6 +250,7 @@ function createEnquiryService(repository) {
       if (!before) throw new NotFoundError('Enquiry');
       assertCanManage(before, actor);
       if (before.stage === 'WON') throw new ConflictError('Enquiry is already marked won');
+      await assertStageGate(id, 'WON');
 
       const data = {
         stage: 'WON',

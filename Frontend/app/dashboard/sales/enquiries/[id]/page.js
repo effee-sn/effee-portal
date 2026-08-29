@@ -265,6 +265,7 @@ export default function EnquiryDetailPage() {
 
   const [enquiry, setEnquiry] = useState(null);
   const [users, setUsers]     = useState([]);
+  const [readiness, setReadiness] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [modal, setModal]     = useState(null);
@@ -272,12 +273,16 @@ export default function EnquiryDetailPage() {
 
   const canDelete = me?.is_system || can('SALES_DELETE');
 
+  const loadReadiness = useCallback(() => {
+    apiGet(`/sales/enquiries/${id}/readiness`, { silent: true }).then((r) => setReadiness(r.data)).catch(() => {});
+  }, [id]);
+
   const load = useCallback(async () => {
     setLoading(true);
-    try { const res = await apiGet(`/sales/enquiries/${id}`); setEnquiry(res.data); }
+    try { const res = await apiGet(`/sales/enquiries/${id}`); setEnquiry(res.data); loadReadiness(); }
     catch { setNotFound(true); }
     finally { setLoading(false); }
-  }, [id]);
+  }, [id, loadReadiness]);
 
   useEffect(() => {
     if (!permLoading) { load(); apiGet('/lookup/users').then(setUsers).catch(() => {}); }
@@ -318,6 +323,7 @@ export default function EnquiryDetailPage() {
   const isClosed = enquiry.stage === 'WON' || enquiry.stage === 'LOST';
   // Stage work is the assigned owner's (or a system user's) — matches the API gate.
   const canManage = me?.is_system || (me?.id != null && me.id === enquiry.owner_id);
+  const wonBlocked = readiness?.blocked?.WON || [];
 
   return (
     <div className="space-y-4">
@@ -350,7 +356,9 @@ export default function EnquiryDetailPage() {
               <button onClick={() => setModal('edit')} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Edit</button>
               {!isClosed ? (
                 <>
-                  <button onClick={() => setModal('win')} className="px-3 py-1.5 text-sm font-medium text-white rounded cursor-pointer"
+                  <button onClick={() => setModal('win')} disabled={wonBlocked.length > 0}
+                    title={wonBlocked.length ? `Needs ${wonBlocked.join(' & ')} first` : 'Mark won'}
+                    className="px-3 py-1.5 text-sm font-medium text-white rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ backgroundColor: '#15803D' }}>Won</button>
                   <button onClick={() => setModal('lose')} className="btn-danger px-3 py-1.5 text-sm cursor-pointer">Lost</button>
                 </>
@@ -377,7 +385,7 @@ export default function EnquiryDetailPage() {
       )}
 
       {/* Process — where it is now and what's next */}
-      <EnquiryProcess enquiry={enquiry} canManage={canManage} busy={busy} onPick={changeStage} />
+      <EnquiryProcess enquiry={enquiry} canManage={canManage} busy={busy} onPick={changeStage} blocked={readiness?.blocked} />
 
       {/* Body: timeline + documents (main) · customer + details (side) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
