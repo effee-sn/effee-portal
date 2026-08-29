@@ -6,7 +6,7 @@ import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
-import { ENQUIRY_TYPES, ALL_STAGES, STAGE_STYLE, TYPE_LABEL, TEMPERATURE_STYLE, stagesForType, formatINR, isAging, stageAgeDays } from '@/lib/salesOptions';
+import { ALL_STAGES, STAGE_STYLE, TYPE_LABEL, TEMPERATURE_STYLE, formatINR, isAging, stageAgeDays } from '@/lib/salesOptions';
 import EnquiryCustomerContact from '@/components/EnquiryCustomerContact';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
@@ -22,34 +22,27 @@ export function StageBadge({ stage }) {
   );
 }
 
-// ── Create modal ──────────────────────────────────────────────────────────────
-function EnquiryModal({ users, onClose, onSaved }) {
-  const [form, setForm] = useState({
-    title: '', customer_id: '', contact_id: '', owner_id: '', enquiry_type: 'INCOMING',
-    stage: 'NEW', expected_value: '', expected_close: '', description: '',
-  });
+// ── Create: origin cards → slim form ──────────────────────────────────────────
+const ORIGIN_CARDS = [
+  { value: 'GENERATED', icon: '🧭', title: 'Generated', desc: 'Site visit by field sales — you generated this opportunity.' },
+  { value: 'INCOMING',  icon: '📥', title: 'Incoming',  desc: 'Inbound enquiry — came in without field-sales contact.' },
+];
+
+function EnquiryModal({ onClose, onSaved }) {
+  const [type, setType] = useState(null); // null = pick origin; else show the form
+  const [form, setForm] = useState({ title: '', customer_id: '', contact_id: '', description: '' });
   const [error, setError]   = useState('');
   const [saving, setSaving] = useState(false);
 
-  const change = (e) => {
-    const { name, value } = e.target;
-    setForm((f) => {
-      const next = { ...f, [name]: value };
-      // A generated enquiry can't sit at Contacted — snap it back if needed.
-      if (name === 'enquiry_type' && value === 'GENERATED' && f.stage === 'CONTACTED') next.stage = 'NEW';
-      return next;
-    });
-    setError('');
-  };
-
-  const setCustomerContact = ({ customer_id, contact_id }) =>
-    setForm((f) => ({ ...f, customer_id, contact_id }));
+  const change = (e) => { setForm((f) => ({ ...f, [e.target.name]: e.target.value })); setError(''); };
+  const setCustomerContact = ({ customer_id, contact_id }) => setForm((f) => ({ ...f, customer_id, contact_id }));
 
   const submit = async (e) => {
     e.preventDefault();
     setSaving(true); setError('');
     try {
-      const res = await apiPost('/sales/enquiries', form);
+      // Stage is automated to New; owner defaults to the creator server-side.
+      const res = await apiPost('/sales/enquiries', { ...form, enquiry_type: type, stage: 'NEW' });
       onSaved(res.data);
       onClose();
     } catch (err) { setError(err.message); }
@@ -63,52 +56,51 @@ function EnquiryModal({ users, onClose, onSaved }) {
           <h2 className="text-base font-semibold text-gray-800">New Enquiry</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
         </div>
-        <form onSubmit={submit} className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
-          {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm">{error}</div>}
-          <div>
-            <label className={label}>Title<span className="text-red-500"> *</span></label>
-            <input name="title" value={form.title} onChange={change} required placeholder="CNC spindle replacement" className="ams-input" />
-          </div>
-          <EnquiryCustomerContact onChange={setCustomerContact} />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className={label}>Owner <span className="text-gray-400 font-normal normal-case">(defaults to you)</span></label>
-              <select name="owner_id" value={form.owner_id} onChange={change} className="ams-input">
-                <option value="">— Me —</option>
-                {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={label}>Type</label>
-              <select name="enquiry_type" value={form.enquiry_type} onChange={change} className="ams-input">
-                {ENQUIRY_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={label}>Stage</label>
-              <select name="stage" value={form.stage} onChange={change} className="ams-input">
-                {stagesForType(form.enquiry_type).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={label}>Expected Value (₹)</label>
-              <input name="expected_value" type="number" min="0" step="0.01" value={form.expected_value} onChange={change} placeholder="250000" className="ams-input" />
-            </div>
-            <div>
-              <label className={label}>Expected Close</label>
-              <input name="expected_close" type="date" value={form.expected_close} onChange={change} className="ams-input" />
+        {!type ? (
+          <div className="px-6 py-6">
+            <p className="text-sm text-gray-500 mb-4">How did this enquiry originate?</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {ORIGIN_CARDS.map((c) => (
+                <button key={c.value} type="button" onClick={() => setType(c.value)}
+                  className="text-left border border-gray-200 rounded-lg p-5 hover:border-blue-400 hover:bg-blue-50/40 transition cursor-pointer">
+                  <div className="text-3xl mb-2">{c.icon}</div>
+                  <div className="text-sm font-semibold text-gray-800">{c.title}</div>
+                  <div className="text-xs text-gray-500 mt-1">{c.desc}</div>
+                </button>
+              ))}
             </div>
           </div>
-          <div>
-            <label className={label}>Description</label>
-            <textarea name="description" value={form.description} onChange={change} rows={3} className="ams-input resize-none" />
-          </div>
-          <div className="flex gap-3 pt-2 pb-1">
-            <button type="button" onClick={onClose} className="btn-secondary flex-1 justify-center py-2">Cancel</button>
-            <button type="submit" disabled={saving} className="btn-primary flex-1 justify-center py-2">{saving ? 'Saving…' : 'Create'}</button>
-          </div>
-        </form>
+        ) : (
+          <form onSubmit={submit} className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+            {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm">{error}</div>}
+
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Type</span>
+              <span className="inline-flex items-center px-2.5 py-1 rounded text-xs font-semibold bg-blue-50 text-blue-700">
+                {TYPE_LABEL[type] || type}
+              </span>
+              <button type="button" onClick={() => setType(null)} className="text-xs text-gray-400 hover:text-blue-600 cursor-pointer">change</button>
+            </div>
+
+            <div>
+              <label className={label}>Title<span className="text-red-500"> *</span></label>
+              <input name="title" value={form.title} onChange={change} required placeholder="CNC spindle replacement" className="ams-input" />
+            </div>
+
+            <EnquiryCustomerContact onChange={setCustomerContact} />
+
+            <div>
+              <label className={label}>Description</label>
+              <textarea name="description" value={form.description} onChange={change} rows={3} className="ams-input resize-none" />
+            </div>
+
+            <div className="flex gap-3 pt-2 pb-1">
+              <button type="button" onClick={onClose} className="btn-secondary flex-1 justify-center py-2">Cancel</button>
+              <button type="submit" disabled={saving} className="btn-primary flex-1 justify-center py-2">{saving ? 'Saving…' : 'Create'}</button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -126,7 +118,6 @@ export default function EnquiriesPage() {
   const [search, setSearch]   = useState('');
   const [stage, setStage]     = useState('');
   const [loading, setLoading] = useState(true);
-  const [users, setUsers]     = useState([]);
   const [showCreate, setShowCreate] = useState(false);
 
   const limit = 10;
@@ -148,7 +139,6 @@ export default function EnquiriesPage() {
   useEffect(() => {
     if (!permLoading && canView) {
       fetchRows();
-      apiGet('/lookup/users').then(setUsers).catch(() => {});
     } else if (!permLoading) setLoading(false);
   }, [permLoading]);
 
@@ -279,7 +269,7 @@ export default function EnquiriesPage() {
         </div>
       </div>
 
-      {showCreate && <EnquiryModal users={users} onClose={() => setShowCreate(false)} onSaved={onSaved} />}
+      {showCreate && <EnquiryModal onClose={() => setShowCreate(false)} onSaved={onSaved} />}
     </div>
   );
 }
