@@ -28,6 +28,8 @@ build/
 # ── Runtime uploads (user-generated content) ─────────────────────────────────
 Backend/uploads/*
 !Backend/uploads/.gitkeep
+# Sales documents live outside /uploads (streamed via an authenticated route).
+Backend/storage/
 
 # ── Logs ─────────────────────────────────────────────────────────────────────
 *.log

@@ -31,6 +31,12 @@ const {
   listActivities, createActivity, updateActivity, deleteActivity,
 } = require('./activity.controller');
 
+const attachmentValidation = require('./attachment.validation');
+const { docUpload, handleUploadErrors } = require('./attachment.upload');
+const {
+  listAttachments, uploadAttachment, downloadAttachment, markSent, deleteAttachment,
+} = require('./attachment.controller');
+
 const router = Router();
 
 router.use(authenticate);
@@ -191,6 +197,44 @@ router.delete(
   authorize('SALES_EDIT'),
   validate({ params: activityValidation.activityIdParam }),
   asyncHandler(deleteActivity)
+);
+
+// ── Enquiry attachments (documents & offers) ──────────────────────────────────
+router.get(
+  '/enquiries/:enquiryId/attachments',
+  authorize('SALES_VIEW'),
+  validate({ params: attachmentValidation.enquiryIdParam }),
+  asyncHandler(listAttachments)
+);
+
+// multer must run before body validation so req.body.kind is populated.
+router.post(
+  '/enquiries/:enquiryId/attachments',
+  authorize('SALES_EDIT'),
+  handleUploadErrors(docUpload.single('file')),
+  validate({ params: attachmentValidation.enquiryIdParam, body: attachmentValidation.uploadBody }),
+  asyncHandler(uploadAttachment)
+);
+
+router.get(
+  '/attachments/:id/download',
+  authorize('SALES_VIEW'),
+  validate({ params: attachmentValidation.attachmentIdParam }),
+  asyncHandler(downloadAttachment)
+);
+
+router.post(
+  '/attachments/:id/sent',
+  authorize('SALES_EDIT'),
+  validate({ params: attachmentValidation.attachmentIdParam, body: attachmentValidation.sentBody }),
+  asyncHandler(markSent)
+);
+
+router.delete(
+  '/attachments/:id',
+  authorize('SALES_EDIT'),
+  validate({ params: attachmentValidation.attachmentIdParam }),
+  asyncHandler(deleteAttachment)
 );
 
 module.exports = router;

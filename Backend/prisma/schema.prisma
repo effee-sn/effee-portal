@@ -746,6 +746,17 @@ enum QuotationStatus {
   SUPERSEDED
 }
 
+/// What a stored enquiry document is. Format PDF/Excel are the intake format;
+/// CONCEPT / COSTING are the internal stage docs; OFFER is a customer-facing
+/// offer (multiple revisions allowed, each markable as sent).
+enum AttachmentKind {
+  FORMAT_PDF
+  FORMAT_EXCEL
+  CONCEPT
+  COSTING
+  OFFER
+}
+
 /// A customer company we sell to. state / state_code is the place of supply and
 /// decides intra- vs inter-state GST on its quotations.
 model Customer {
@@ -868,8 +879,9 @@ model Enquiry {
   lost_at     DateTime?
   lost_reason String?   @db.Text
 
-  activities EnquiryActivity[]
-  quotations Quotation[]
+  activities  EnquiryActivity[]
+  quotations  Quotation[]
+  attachments EnquiryAttachment[]
 
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
@@ -920,6 +932,35 @@ model EnquiryActivity {
 
   @@index([enquiry_id])
   @@index([follow_up_at])
+  @@index([deleted_at])
+}
+
+/// A document stored against an enquiry (intake format, concept, costing, or a
+/// customer offer). Files live outside the public /uploads dir and are streamed
+/// through an authenticated route. OFFER rows carry a "sent to customer" record.
+model EnquiryAttachment {
+  id          Int            @id @default(autoincrement())
+  enquiry     Enquiry        @relation(fields: [enquiry_id], references: [id])
+  enquiry_id  Int
+  kind        AttachmentKind
+  file_name   String
+  stored_name String         @unique
+  mime_type   String
+  size_bytes  Int
+  note        String?        @db.Text
+
+  // Offer send record.
+  sent_at DateTime?
+  sent_by Int?
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+  created_by Int?
+  updated_by Int?
+
+  @@index([enquiry_id])
+  @@index([kind])
   @@index([deleted_at])
 }
 

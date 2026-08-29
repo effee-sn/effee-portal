@@ -8,6 +8,7 @@ import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { ENQUIRY_TYPES, STAGE_STYLE, TYPE_LABEL, TEMPERATURE_STYLE, stagesForType, formatINR } from '@/lib/salesOptions';
 import EnquiryCustomerContact from '@/components/EnquiryCustomerContact';
 import EnquiryActivities from '@/components/EnquiryActivities';
+import EnquiryAttachments from '@/components/EnquiryAttachments';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
@@ -370,10 +371,8 @@ export default function EnquiryDetailPage() {
       {/* Interactions & follow-ups */}
       <EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} />
 
-      {/* Documents / offers arrive in the next increment. */}
-      <Section title="Documents &amp; Offers">
-        <p className="text-sm text-gray-400 py-2">Enquiry format, concept, costing and offer uploads arrive in the next increment.</p>
-      </Section>
+      {/* Documents & offers */}
+      <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} />
 
       {canDelete && (
         <div className="pt-2">

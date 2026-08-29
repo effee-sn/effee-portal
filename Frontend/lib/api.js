@@ -84,3 +84,36 @@ export function apiPostForm(endpoint, formData, method = 'POST') {
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
   return request(endpoint, { method, headers, body: formData });
 }
+
+/**
+ * Downloads a protected file: fetches it with the bearer token (a plain <a>
+ * can't send the auth header), then saves the blob client-side.
+ *
+ * @param {string} endpoint
+ * @param {string} [filename]
+ */
+export async function downloadFile(endpoint, filename) {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  topLoader.start();
+  try {
+    const res = await fetch(`${BASE_URL}${endpoint}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      let msg = 'Download failed';
+      try { msg = errorMessage(await res.json()); } catch { /* non-JSON error */ }
+      throw new Error(msg);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'download';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } finally {
+    topLoader.done();
+  }
+}
