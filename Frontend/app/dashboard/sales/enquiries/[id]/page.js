@@ -227,32 +227,45 @@ function TempChip({ value }) {
 
 const fmtDateTime = (iso) => new Date(iso).toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
-/** Stage-transition history with time spent in each stage. */
-function StageHistory({ events, users }) {
-  if (!events || events.length === 0) return null;
+/** Stage-transition history, in a right off-canvas drawer. */
+function StageHistoryDrawer({ events, users, onClose }) {
+  const list = events || [];
   const nameFor = (uid) => (uid ? (users.find((u) => String(u.id) === String(uid))?.name || `#${uid}`) : 'system');
   return (
-    <Section title="Stage History">
-      <ol className="space-y-2.5">
-        {events.map((e, i) => {
-          const start = new Date(e.created_at).getTime();
-          const end = i < events.length - 1 ? new Date(events[i + 1].created_at).getTime() : Date.now();
-          const days = Math.max(0, Math.round((end - start) / 86400000));
-          const s = STAGE_STYLE[e.to_stage];
-          return (
-            <li key={e.id} className="text-xs">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded font-medium"
-                  style={s ? { color: s.color, backgroundColor: s.bg } : undefined}>{s?.label || e.to_stage}</span>
-                <span className="text-gray-400">{fmtDateTime(e.created_at)}</span>
-                {i === events.length - 1 && <span className="text-gray-400">· now</span>}
-              </div>
-              <div className="text-gray-400 mt-0.5">{nameFor(e.changed_by)} · {days}d in stage</div>
-            </li>
-          );
-        })}
-      </ol>
-    </Section>
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative w-full max-w-sm bg-white h-full shadow-xl flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="text-sm font-semibold text-gray-800">Stage History</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none cursor-pointer">&times;</button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          {list.length === 0 ? (
+            <p className="text-sm text-gray-400">No history yet.</p>
+          ) : (
+            <ol className="space-y-3">
+              {list.map((e, i) => {
+                const start = new Date(e.created_at).getTime();
+                const end = i < list.length - 1 ? new Date(list[i + 1].created_at).getTime() : Date.now();
+                const days = Math.max(0, Math.round((end - start) / 86400000));
+                const s = STAGE_STYLE[e.to_stage];
+                return (
+                  <li key={e.id} className="text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded font-medium"
+                        style={s ? { color: s.color, backgroundColor: s.bg } : undefined}>{s?.label || e.to_stage}</span>
+                      <span className="text-gray-400">{fmtDateTime(e.created_at)}</span>
+                      {i === list.length - 1 && <span className="text-gray-400">· now</span>}
+                    </div>
+                    <div className="text-gray-400 mt-0.5">{nameFor(e.changed_by)} · {days}d in stage</div>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -270,6 +283,7 @@ export default function EnquiryDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [modal, setModal]     = useState(null);
   const [busy, setBusy]       = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const canDelete = me?.is_system || can('SALES_DELETE');
 
@@ -341,6 +355,8 @@ export default function EnquiryDetailPage() {
               <span className="font-mono text-xs text-gray-400">{enquiry.ref_no}</span>
               <StageBadge stage={enquiry.stage} />
               <span className="text-xs text-gray-500">{TYPE_LABEL[enquiry.enquiry_type] || enquiry.enquiry_type}</span>
+              <button onClick={() => setShowHistory(true)}
+                className="text-xs text-blue-600 hover:underline cursor-pointer">Stage history</button>
               {enquiry.current_temperature && <TempChip value={enquiry.current_temperature} />}
             </div>
             <h1 className="text-xl font-semibold text-gray-800 mt-0.5 break-words">{enquiry.title}</h1>
@@ -427,11 +443,11 @@ export default function EnquiryDetailPage() {
         </>
       )}
 
-      <StageHistory events={enquiry.stageEvents} users={users} />
-
       {canDelete && (
         <button onClick={() => setModal('delete')} className="text-sm text-red-600 hover:underline cursor-pointer">Delete enquiry</button>
       )}
+
+      {showHistory && <StageHistoryDrawer events={enquiry.stageEvents} users={users} onClose={() => setShowHistory(false)} />}
 
       {modal === 'edit'  && <EditModal enquiry={enquiry} users={users} onClose={() => setModal(null)} onDone={setEnquiry} />}
       {modal === 'win'   && <WinModal enquiryId={enquiry.id} onClose={() => setModal(null)} onDone={setEnquiry} />}
