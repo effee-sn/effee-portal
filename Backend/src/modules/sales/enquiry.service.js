@@ -200,12 +200,15 @@ function createEnquiryService(repository) {
       assertCanManage(before, actor);
       if (dto.stage) assertStageAllowed(dto.stage, dto.enquiry_type ?? before.enquiry_type);
       if (dto.stage && dto.stage !== before.stage) {
-        // Forward-only: an enquiry can't step back to an earlier stage.
-        const order = ['NEW', 'CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'OFFER_RELEASED', 'FOLLOW_UP'];
-        const fromIdx = order.indexOf(before.stage);
-        const toIdx = order.indexOf(dto.stage);
-        if (fromIdx !== -1 && toIdx !== -1 && toIdx < fromIdx) {
-          throw new ConflictError('An enquiry cannot move back to a previous stage.');
+        // One step forward at a time, along the enquiry-type's own flow
+        // (Generated skips Contacted). No stepping back, no skipping ahead.
+        const flow = before.enquiry_type === 'GENERATED'
+          ? ['NEW', 'REVIEW', 'CONCEPT', 'COSTING', 'OFFER_RELEASED', 'FOLLOW_UP']
+          : ['NEW', 'CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'OFFER_RELEASED', 'FOLLOW_UP'];
+        const fromIdx = flow.indexOf(before.stage);
+        const toIdx = flow.indexOf(dto.stage);
+        if (fromIdx === -1 || toIdx !== fromIdx + 1) {
+          throw new ConflictError('An enquiry can only move to the next stage.');
         }
         await assertStageGate(id, dto.stage);
       }
