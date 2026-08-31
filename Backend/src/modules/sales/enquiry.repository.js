@@ -165,7 +165,7 @@ function createEnquiryRepository(db) {
         }),
         db.enquiryActivity.count({ where: { enquiry_id: enquiryId, deleted_at: null, is_review: false } }),
         db.enquiryActivity.count({ where: { enquiry_id: enquiryId, deleted_at: null, is_review: true, follow_up_ended: true } }),
-        db.enquiryActivity.count({ where: { enquiry_id: enquiryId, deleted_at: null, is_review: false, follow_up_ended: true } }),
+        db.enquiryActivity.count({ where: { enquiry_id: enquiryId, deleted_at: null, is_review: false, follow_up_ended: true, stage: 'OFFER_RELEASED' } }),
       ]);
       return {
         hasFormat: rows.some((r) => r.kind === 'FORMAT_PDF' || r.kind === 'FORMAT_EXCEL'),

@@ -14,7 +14,9 @@
  * @property {boolean} hasSentOffer An offer document is marked sent to the customer.
  * @property {boolean} hasActivity At least one interaction/activity is logged.
  * @property {boolean} hasConcludedReview A review is marked "no future review".
- * @property {boolean} hasEndedFollowup A (non-review) follow-up is marked "ended".
+ * @property {boolean} hasEndedFollowup A (non-review) follow-up logged AT the
+ *   Offer Released stage is marked "ended" — the signal that Offer Released is
+ *   done (older intake follow-ups don't count).
  */
 
 // The enquiry format is required from Review onward. (Contacted, for Incoming,
