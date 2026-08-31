@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
-import { ENQUIRY_TYPES, STAGE_STYLE, TYPE_LABEL, TEMPERATURE_STYLE, stagesForType, visibleDocKinds, formatINR } from '@/lib/salesOptions';
+import { ENQUIRY_TYPES, STAGE_STYLE, STAGE_RANK, TYPE_LABEL, TEMPERATURE_STYLE, stagesForType, visibleDocKinds, formatINR } from '@/lib/salesOptions';
 import EnquiryCustomerContact from '@/components/EnquiryCustomerContact';
 import EnquiryActivities from '@/components/EnquiryActivities';
 import EnquiryProcess from '@/components/EnquiryProcess';
@@ -269,6 +269,45 @@ function StageHistoryDrawer({ events, users, onClose }) {
   );
 }
 
+/** Internal review notes, captured from the Review stage onward. */
+function ReviewNotes({ enquiry, canManage, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText]       = useState(enquiry.review_notes || '');
+  const [saving, setSaving]   = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const res = await apiPut(`/sales/enquiries/${enquiry.id}`, { review_notes: text });
+      onSaved(res.data);
+      setEditing(false);
+    } catch (e) { alert(e.message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <Section title="Review Notes" right={canManage && !editing && (
+      <button onClick={() => { setText(enquiry.review_notes || ''); setEditing(true); }}
+        className="text-xs text-blue-600 hover:underline cursor-pointer">{enquiry.review_notes ? 'Edit' : 'Add'}</button>
+    )}>
+      {editing ? (
+        <div className="space-y-2">
+          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4} className="ams-input resize-none"
+            placeholder="What happened in the internal review — assessment, feasibility, decision…" />
+          <div className="flex gap-2">
+            <button onClick={save} disabled={saving} className="btn-primary px-3 py-1.5 text-sm cursor-pointer">{saving ? 'Saving…' : 'Save'}</button>
+            <button onClick={() => setEditing(false)} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-gray-700 whitespace-pre-wrap">
+          {enquiry.review_notes || <span className="text-gray-400">No review notes yet.</span>}
+        </p>
+      )}
+    </Section>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function EnquiryDetailPage() {
   useAuth();
@@ -440,6 +479,10 @@ export default function EnquiryDetailPage() {
           )}
         </div>
       </Section>
+
+      {STAGE_RANK[enquiry.stage] >= STAGE_RANK.REVIEW && (
+        <ReviewNotes enquiry={enquiry} canManage={canManage} onSaved={setEnquiry} />
+      )}
 
       {/* At New: Generated uploads the format only; Incoming also logs its
           gathering activities. Past New: full documents + the timeline. */}

@@ -65,6 +65,7 @@ const updateEnquiryBody = z.object({
   enquiry_type:   z.enum(TYPES).optional(),
   stage:          z.enum(ACTIVE_STAGES).optional(),
   description:    optionalText(2000),
+  review_notes:   optionalText(5000),
   expected_value: optionalMoney,
   expected_close: optionalDate,
   owner_id:       optionalOwner,

@@ -98,7 +98,7 @@ function createEnquiryService(repository) {
 
   function pickWritable(dto, data = {}) {
     for (const f of ['title', 'customer_id', 'contact_id', 'enquiry_type', 'stage',
-      'description', 'expected_value', 'expected_close', 'owner_id']) {
+      'description', 'review_notes', 'expected_value', 'expected_close', 'owner_id']) {
       if (dto[f] !== undefined) data[f] = dto[f];
     }
     return data;

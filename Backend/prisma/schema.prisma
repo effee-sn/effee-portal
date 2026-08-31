@@ -857,6 +857,8 @@ model Enquiry {
   enquiry_type EnquiryType  @default(INCOMING)
   stage        EnquiryStage @default(NEW)
   description  String?      @db.Text
+  // Internal assessment captured at the Review stage.
+  review_notes String?      @db.Text
 
   // Latest follow-up temperature, denormalised from the newest follow-up entry
   // so lists can show/filter it without loading the activity trail.
