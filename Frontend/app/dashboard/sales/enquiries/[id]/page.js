@@ -434,6 +434,7 @@ export default function EnquiryDetailPage() {
           <Field label="Expected Value">{formatINR(enquiry.expected_value)}</Field>
           <Field label="Expected Close">{fmtDate(enquiry.expected_close)}</Field>
           <Field label="Created">{fmtDate(enquiry.created_at)}</Field>
+          <Field label="Created by">{enquiry.created_by ? (users.find((u) => String(u.id) === String(enquiry.created_by))?.name || `#${enquiry.created_by}`) : '—'}</Field>
           {enquiry.description && (
             <div className="col-span-2 sm:col-span-3 lg:col-span-4"><Field label="Description">{enquiry.description}</Field></div>
           )}

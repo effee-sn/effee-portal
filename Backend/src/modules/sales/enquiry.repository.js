@@ -55,6 +55,7 @@ function createEnquiryRepository(db) {
     owner: { select: { id: true, name: true } },
     created_at: true,
     updated_at: true,
+    created_by: true,
     stageEvents: {
       orderBy: { created_at: 'asc' },
       select: { id: true, from_stage: true, to_stage: true, changed_by: true, created_at: true },
