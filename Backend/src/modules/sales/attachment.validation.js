@@ -3,7 +3,7 @@ const { schemas } = require('../../core');
 
 /** Request schemas for enquiry attachments. */
 
-const KINDS = ['FORMAT_PDF', 'FORMAT_EXCEL', 'CONCEPT', 'POWER_CALC', 'COSTING', 'OFFER'];
+const KINDS = ['FORMAT_PDF', 'FORMAT_EXCEL', 'CONCEPT', 'POWER_CALC', 'COSTING', 'COSTING_REVIEW', 'OFFER'];
 
 const enquiryIdParam = z.object({ enquiryId: z.coerce.number().int().positive() });
 const attachmentIdParam = schemas.idParam;

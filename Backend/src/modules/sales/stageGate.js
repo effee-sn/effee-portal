@@ -10,6 +10,7 @@
  * @property {boolean} hasConcept  A live concept document exists.
  * @property {boolean} hasPowerCalc A live costing & power-source calculation exists.
  * @property {boolean} hasCosting  A live costing document exists.
+ * @property {boolean} hasCostingReview A live costing review document exists.
  * @property {boolean} hasSentOffer An offer document is marked sent to the customer.
  * @property {boolean} hasActivity At least one interaction/activity is logged.
  * @property {boolean} hasConcludedReview A review is marked "no future review".
@@ -18,7 +19,7 @@
 // The enquiry format is required from Review onward. (Contacted, for Incoming,
 // is reached on the first logged activity — see EXTRA_GATES.CONTACTED — so it
 // doesn't require the format.)
-const FORMAT_STAGES = ['REVIEW', 'CONCEPT', 'COSTING', 'OFFER_RELEASED', 'FOLLOW_UP', 'WON'];
+const FORMAT_STAGES = ['REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED', 'FOLLOW_UP', 'WON'];
 
 // Additional, stage-specific requirements.
 const EXTRA_GATES = Object.freeze({
@@ -26,19 +27,17 @@ const EXTRA_GATES = Object.freeze({
   CONTACTED: (f) => (f.hasActivity ? [] : ['at least one logged activity']),
   // Review is concluded when a review is marked "no future review".
   CONCEPT: (f) => (f.hasConcludedReview ? [] : ['a review marked “no future review”']),
-  // Concept produces the concept document and the costing & power-source calc.
+  // Concept produces the concept document and the power-source calculation.
   COSTING: (f) => {
     const missing = [];
     if (!f.hasConcept) missing.push('a concept document');
     if (!f.hasPowerCalc) missing.push('the power-source calculation');
     return missing;
   },
-  OFFER_RELEASED: (f) => {
-    const missing = [];
-    if (!f.hasConcept) missing.push('a concept document');
-    if (!f.hasCosting) missing.push('a costing document');
-    return missing;
-  },
+  // Costing produces the costing document.
+  COSTING_REVIEW: (f) => (f.hasCosting ? [] : ['a costing document']),
+  // Costing Review produces the costing review document.
+  OFFER_RELEASED: (f) => (f.hasCostingReview ? [] : ['a costing review document']),
   WON: (f) => (f.hasSentOffer ? [] : ['an offer marked sent to the customer']),
 });
 

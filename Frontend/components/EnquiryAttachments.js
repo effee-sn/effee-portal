@@ -12,6 +12,7 @@ const SLOTS = [
   { kind: 'CONCEPT',      label: 'Concept Document' },
   { kind: 'POWER_CALC',   label: 'Power Source Calculation (Excel)' },
   { kind: 'COSTING',      label: 'Costing Document' },
+  { kind: 'COSTING_REVIEW', label: 'Costing Review Document' },
 ];
 
 const fmtSize = (b) => {

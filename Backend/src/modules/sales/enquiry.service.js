@@ -203,8 +203,8 @@ function createEnquiryService(repository) {
         // One step forward at a time, along the enquiry-type's own flow
         // (Generated skips Contacted). No stepping back, no skipping ahead.
         const flow = before.enquiry_type === 'GENERATED'
-          ? ['NEW', 'REVIEW', 'CONCEPT', 'COSTING', 'OFFER_RELEASED', 'FOLLOW_UP']
-          : ['NEW', 'CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'OFFER_RELEASED', 'FOLLOW_UP'];
+          ? ['NEW', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED', 'FOLLOW_UP']
+          : ['NEW', 'CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED', 'FOLLOW_UP'];
         const fromIdx = flow.indexOf(before.stage);
         const toIdx = flow.indexOf(dto.stage);
         if (fromIdx === -1 || toIdx !== fromIdx + 1) {

@@ -23,6 +23,7 @@ export const ACTIVE_STAGES = [
   { value: 'REVIEW',         label: 'Review' },
   { value: 'CONCEPT',        label: 'Concept' },
   { value: 'COSTING',        label: 'Costing' },
+  { value: 'COSTING_REVIEW', label: 'Costing Review' },
   { value: 'OFFER_RELEASED', label: 'Offer Released' },
   { value: 'FOLLOW_UP',      label: 'Follow-up' },
 ];
@@ -50,6 +51,7 @@ export const STAGE_STYLE = {
   REVIEW:         { label: 'Review',         color: '#7C3AED', bg: '#F5F3FF' },
   CONCEPT:        { label: 'Concept',        color: '#0891B2', bg: '#ECFEFF' },
   COSTING:        { label: 'Costing',        color: '#0D9488', bg: '#F0FDFA' },
+  COSTING_REVIEW: { label: 'Costing Review', color: '#0F766E', bg: '#ECFDF5' },
   OFFER_RELEASED: { label: 'Offer Released', color: '#D97706', bg: '#FFFBEB' },
   FOLLOW_UP:      { label: 'Follow-up',      color: '#EA580C', bg: '#FFF7ED' },
   WON:            { label: 'Won',            color: '#15803D', bg: '#F0FDF4' },
@@ -82,7 +84,7 @@ export const TEMPERATURE_STYLE = {
 
 /** Ordinal rank of a stage, for "have we reached X yet" comparisons. */
 export const STAGE_RANK = {
-  NEW: 0, CONTACTED: 1, REVIEW: 2, CONCEPT: 3, COSTING: 4, OFFER_RELEASED: 5, FOLLOW_UP: 6, WON: 7, LOST: 7,
+  NEW: 0, CONTACTED: 1, REVIEW: 2, CONCEPT: 3, COSTING: 4, COSTING_REVIEW: 5, OFFER_RELEASED: 6, FOLLOW_UP: 7, WON: 8, LOST: 8,
 };
 
 /**
@@ -96,6 +98,7 @@ export function visibleDocKinds(stage) {
   const kinds = ['FORMAT_PDF', 'FORMAT_EXCEL'];
   if (r >= STAGE_RANK.CONCEPT) kinds.push('CONCEPT', 'POWER_CALC');
   if (r >= STAGE_RANK.COSTING) kinds.push('COSTING');
+  if (r >= STAGE_RANK.COSTING_REVIEW) kinds.push('COSTING_REVIEW');
   if (r >= STAGE_RANK.OFFER_RELEASED) kinds.push('OFFER');
   return kinds;
 }
@@ -105,7 +108,7 @@ export function visibleDocKinds(stage) {
  * WON / LOST are terminal and never age.
  */
 export const STAGE_AGING_DAYS = {
-  NEW: 3, CONTACTED: 3, REVIEW: 4, CONCEPT: 5, COSTING: 5, OFFER_RELEASED: 7, FOLLOW_UP: 10,
+  NEW: 3, CONTACTED: 3, REVIEW: 4, CONCEPT: 5, COSTING: 5, COSTING_REVIEW: 4, OFFER_RELEASED: 7, FOLLOW_UP: 10,
 };
 
 /** Whole days the enquiry has been in its current stage. */

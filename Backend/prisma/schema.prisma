@@ -722,6 +722,7 @@ enum EnquiryStage {
   REVIEW
   CONCEPT
   COSTING
+  COSTING_REVIEW
   OFFER_RELEASED
   FOLLOW_UP
   WON
@@ -755,6 +756,7 @@ enum AttachmentKind {
   CONCEPT
   POWER_CALC
   COSTING
+  COSTING_REVIEW
   OFFER
 }
 

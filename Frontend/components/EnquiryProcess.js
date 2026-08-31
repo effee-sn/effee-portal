@@ -14,6 +14,7 @@ const STAGE_HINT = {
   REVIEW:         'Review the requirement internally.',
   CONCEPT:        'Prepare and upload the concept document.',
   COSTING:        'Work out and upload the costing.',
+  COSTING_REVIEW: 'Review the costing and upload the costing review document.',
   OFFER_RELEASED: 'Upload the offer and mark it sent to the customer.',
   FOLLOW_UP:      'Record follow-ups and set the next follow-up date & temperature.',
 };

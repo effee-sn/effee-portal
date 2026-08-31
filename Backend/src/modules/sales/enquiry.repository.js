@@ -171,6 +171,7 @@ function createEnquiryRepository(db) {
         hasConcept: rows.some((r) => r.kind === 'CONCEPT'),
         hasPowerCalc: rows.some((r) => r.kind === 'POWER_CALC'),
         hasCosting: rows.some((r) => r.kind === 'COSTING'),
+        hasCostingReview: rows.some((r) => r.kind === 'COSTING_REVIEW'),
         hasSentOffer: rows.some((r) => r.kind === 'OFFER' && r.sent_at != null),
         hasActivity: activityCount > 0,
         hasConcludedReview: concludedReviewCount > 0,

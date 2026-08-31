@@ -8,7 +8,7 @@ const { NotFoundError, ForbiddenError, BadRequestError, ConflictError } = requir
 
 // Kinds that hold a single live document (re-uploading replaces it). OFFER is
 // the exception — it keeps every revision.
-const SINGLE_KINDS = new Set(['FORMAT_PDF', 'FORMAT_EXCEL', 'CONCEPT', 'POWER_CALC', 'COSTING']);
+const SINGLE_KINDS = new Set(['FORMAT_PDF', 'FORMAT_EXCEL', 'CONCEPT', 'POWER_CALC', 'COSTING', 'COSTING_REVIEW']);
 
 /**
  * Enquiry attachment business logic. Uploading/removing/marking-sent is stage
