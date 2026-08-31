@@ -11,6 +11,7 @@
  * @property {boolean} hasCosting  A live costing document exists.
  * @property {boolean} hasSentOffer An offer document is marked sent to the customer.
  * @property {boolean} hasActivity At least one interaction/activity is logged.
+ * @property {boolean} hasConcludedReview A review is marked "no future review".
  */
 
 // The enquiry format is required from Review onward. (Contacted, for Incoming,
@@ -22,6 +23,8 @@ const FORMAT_STAGES = ['REVIEW', 'CONCEPT', 'COSTING', 'OFFER_RELEASED', 'FOLLOW
 const EXTRA_GATES = Object.freeze({
   // Incoming enquiries do their information-gathering at New before Contacted.
   CONTACTED: (f) => (f.hasActivity ? [] : ['at least one logged activity']),
+  // Review is concluded when a review is marked "no future review".
+  CONCEPT: (f) => (f.hasConcludedReview ? [] : ['a review marked “no future review”']),
   OFFER_RELEASED: (f) => {
     const missing = [];
     if (!f.hasConcept) missing.push('a concept document');

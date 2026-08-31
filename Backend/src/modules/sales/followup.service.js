@@ -31,6 +31,7 @@ async function runDueFollowupReminders() {
       id: true,
       subject: true,
       next_medium: true,
+      is_review: true,
       enquiry: { select: { id: true, ref_no: true, title: true, owner_id: true } },
     },
     orderBy: { follow_up_at: 'asc' },
@@ -49,8 +50,8 @@ async function runDueFollowupReminders() {
     await notificationService.notify({
       userIds: [a.enquiry.owner_id],
       type: notificationService.Type.FOLLOWUP_DUE,
-      title: `Follow-up due: ${a.enquiry.ref_no}`,
-      body: `${a.subject}${a.next_medium ? ` · ${a.next_medium}` : ''} — ${a.enquiry.title}`,
+      title: `${a.is_review ? 'Review' : 'Follow-up'} due: ${a.enquiry.ref_no}`,
+      body: `${a.subject}${!a.is_review && a.next_medium ? ` · ${a.next_medium}` : ''} — ${a.enquiry.title}`,
       entityType: 'Enquiry',
       entityId: String(a.enquiry.id),
       link: `/dashboard/sales/enquiries/${a.enquiry.id}`,

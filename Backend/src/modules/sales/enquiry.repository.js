@@ -158,12 +158,13 @@ function createEnquiryRepository(db) {
      * @returns {Promise<{ hasConcept: boolean, hasCosting: boolean, hasSentOffer: boolean }>}
      */
     async docFlags(enquiryId) {
-      const [rows, activityCount] = await Promise.all([
+      const [rows, activityCount, concludedReviewCount] = await Promise.all([
         db.enquiryAttachment.findMany({
           where: { enquiry_id: enquiryId, deleted_at: null },
           select: { kind: true, sent_at: true },
         }),
-        db.enquiryActivity.count({ where: { enquiry_id: enquiryId, deleted_at: null } }),
+        db.enquiryActivity.count({ where: { enquiry_id: enquiryId, deleted_at: null, is_review: false } }),
+        db.enquiryActivity.count({ where: { enquiry_id: enquiryId, deleted_at: null, is_review: true, follow_up_ended: true } }),
       ]);
       return {
         hasFormat: rows.some((r) => r.kind === 'FORMAT_PDF' || r.kind === 'FORMAT_EXCEL'),
@@ -171,6 +172,7 @@ function createEnquiryRepository(db) {
         hasCosting: rows.some((r) => r.kind === 'COSTING'),
         hasSentOffer: rows.some((r) => r.kind === 'OFFER' && r.sent_at != null),
         hasActivity: activityCount > 0,
+        hasConcludedReview: concludedReviewCount > 0,
       };
     },
   };

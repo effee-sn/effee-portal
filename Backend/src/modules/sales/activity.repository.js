@@ -22,6 +22,7 @@ function createActivityRepository(db) {
     next_medium: true,
     temperature: true,
     follow_up_ended: true,
+    is_review: true,
     created_at: true,
     created_by: true,
   });
@@ -32,10 +33,17 @@ function createActivityRepository(db) {
     activitySelect,
     active,
 
-    /** Timeline: newest interaction first. */
-    findByEnquiry(enquiryId) {
+    /**
+     * Timeline: newest first. `isReview` filters to review entries (true) or
+     * customer interactions (false); omit for all.
+     * @param {number} enquiryId
+     * @param {boolean} [isReview]
+     */
+    findByEnquiry(enquiryId, isReview) {
+      const where = active({ enquiry_id: enquiryId });
+      if (isReview !== undefined) where.is_review = isReview;
       return db.enquiryActivity.findMany({
-        where: active({ enquiry_id: enquiryId }),
+        where,
         select: activitySelect,
         orderBy: [{ activity_at: 'desc' }, { id: 'desc' }],
       });

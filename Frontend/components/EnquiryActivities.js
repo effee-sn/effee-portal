@@ -183,7 +183,7 @@ export default function EnquiryActivities({ enquiryId, canEdit, users = [], onCh
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { const res = await apiGet(`/sales/enquiries/${enquiryId}/activities`, { silent: true }); setItems(res.data || []); }
+    try { const res = await apiGet(`/sales/enquiries/${enquiryId}/activities?review=false`, { silent: true }); setItems(res.data || []); }
     catch { setItems([]); }
     finally { setLoading(false); }
   }, [enquiryId]);

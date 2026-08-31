@@ -39,7 +39,7 @@ function createActivityService(repository) {
   /** Maps a validated DTO to writable columns (serialising participant ids). */
   function pickWritable(dto, data = {}) {
     for (const f of ['type', 'activity_at', 'duration_min', 'subject', 'minutes', 'outcome',
-      'customer_participants', 'next_action', 'follow_up_at', 'next_medium', 'temperature', 'follow_up_ended']) {
+      'customer_participants', 'next_action', 'follow_up_at', 'next_medium', 'temperature', 'follow_up_ended', 'is_review']) {
       if (dto[f] !== undefined) data[f] = dto[f];
     }
     if (dto.internal_participants !== undefined) {
@@ -56,10 +56,10 @@ function createActivityService(repository) {
   }
 
   return {
-    /** @param {number} enquiryId */
-    async listForEnquiry(enquiryId) {
+    /** @param {number} enquiryId @param {boolean} [isReview] */
+    async listForEnquiry(enquiryId, isReview) {
       await loadEnquiry(enquiryId);
-      const rows = await repository.findByEnquiry(enquiryId);
+      const rows = await repository.findByEnquiry(enquiryId, isReview);
       return rows.map(mapRow);
     },
 
@@ -100,8 +100,9 @@ function createActivityService(repository) {
         actorId: actor?.id ?? null,
       });
 
-      // An Incoming enquiry moves to Contacted on its first logged activity.
-      if (enquiry.enquiry_type === 'INCOMING' && enquiry.stage === 'NEW') {
+      // An Incoming enquiry moves to Contacted on its first logged (non-review)
+      // activity.
+      if (!dto.is_review && enquiry.enquiry_type === 'INCOMING' && enquiry.stage === 'NEW') {
         try { await enquiryService.update(enquiryId, { stage: 'CONTACTED' }, actor); }
         catch { /* prerequisites not met yet — leave it at New */ }
       }

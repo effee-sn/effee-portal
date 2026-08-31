@@ -4,9 +4,11 @@ const { requestContext } = require('../../core/http/requestContext');
 
 /** Enquiry activity HTTP controller. */
 
-/** `GET /sales/enquiries/:enquiryId/activities` */
+/** `GET /sales/enquiries/:enquiryId/activities?review=true|false` */
 const listActivities = async (req, res) => {
-  ApiResponse.ok(res, await activityService.listForEnquiry(req.params.enquiryId));
+  const { review } = req.query;
+  const isReview = review === undefined ? undefined : review === 'true';
+  ApiResponse.ok(res, await activityService.listForEnquiry(req.params.enquiryId, isReview));
 };
 
 /** `POST /sales/enquiries/:enquiryId/activities` */

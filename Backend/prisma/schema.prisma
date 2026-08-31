@@ -930,7 +930,12 @@ model EnquiryActivity {
   next_medium     ActivityType?
   temperature     Temperature?
   follow_up_ended Boolean       @default(false)
-  // Set when a due-follow-up reminder has been sent, so it fires only once.
+  // True for internal review entries (participants + MOM + next-review date),
+  // kept separate from the customer interaction timeline. For a review,
+  // follow_up_at is the next-review date and follow_up_ended means "no future
+  // review".
+  is_review       Boolean       @default(false)
+  // Set when a due reminder has been sent, so it fires only once.
   reminded_at     DateTime?
 
   created_at DateTime  @default(now())
