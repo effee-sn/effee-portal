@@ -72,7 +72,7 @@ function ActivityModal({ enquiryId, activity, users, onClose, onSaved }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4">
       <div className="w-full max-w-2xl bg-white rounded-lg shadow-xl flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h2 className="text-base font-semibold text-gray-800">{isEdit ? 'Edit Activity' : 'Log Activity'}</h2>
@@ -176,6 +176,7 @@ export default function EnquiryActivities({ enquiryId, canEdit, users = [], onCh
   const [loading, setLoading] = useState(true);
   const [modal, setModal]     = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
+  const [showAll, setShowAll] = useState(false);
 
   const userName = (id) => users.find((u) => String(u.id) === String(id))?.name || `#${id}`;
 
@@ -195,17 +196,79 @@ export default function EnquiryActivities({ enquiryId, canEdit, users = [], onCh
     catch (err) { alert(err.message); }
   };
 
+  const Item = ({ a }) => (
+    <li className="mb-5 ml-4 group">
+      <span className="absolute -left-1.5 mt-1.5 w-3 h-3 rounded-full border-2 border-white"
+        style={{ backgroundColor: a.temperature ? (TEMPERATURE_STYLE[a.temperature]?.color || '#9CA3AF') : '#9CA3AF' }} />
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{MEDIUM_LABEL[a.type] || a.type}</span>
+            <span className="text-xs text-gray-400">{fmtDateTime(a.activity_at)}</span>
+            {a.duration_min ? <span className="text-xs text-gray-400">· {a.duration_min}m</span> : null}
+            {a.temperature && <TempChip value={a.temperature} />}
+          </div>
+          <p className="text-sm font-medium text-gray-800 mt-0.5">{a.subject}</p>
+          {a.minutes && <p className="text-sm text-gray-600 mt-0.5 whitespace-pre-wrap">{a.minutes}</p>}
+          {a.outcome && <p className="text-xs text-gray-500 mt-1"><span className="font-semibold">Outcome:</span> {a.outcome}</p>}
+          {(a.internal_participants?.length > 0 || a.customer_participants) && (
+            <p className="text-xs text-gray-400 mt-1">
+              {a.internal_participants?.length > 0 && <>With: {a.internal_participants.map(userName).join(', ')}</>}
+              {a.internal_participants?.length > 0 && a.customer_participants && ' · '}
+              {a.customer_participants && <>Customer: {a.customer_participants}</>}
+            </p>
+          )}
+          {(a.follow_up_at || a.next_action) && (
+            <div className="mt-1.5 text-xs flex items-center gap-2 flex-wrap">
+              {a.follow_up_ended ? (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium">Follow-up ended</span>
+              ) : a.follow_up_at ? (
+                <span className={`inline-flex items-center px-1.5 py-0.5 rounded font-medium ${isOverdue(a.follow_up_at, a.follow_up_ended) ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+                  Next: {fmtDate(a.follow_up_at)}{a.next_medium ? ` · ${MEDIUM_LABEL[a.next_medium]}` : ''}{isOverdue(a.follow_up_at, a.follow_up_ended) ? ' · overdue' : ''}
+                </span>
+              ) : null}
+              {a.next_action && <span className="text-gray-500">{a.next_action}</span>}
+            </div>
+          )}
+        </div>
+        {canEdit && (
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+            <button onClick={() => setModal({ type: 'edit', activity: a })}
+              className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-200 cursor-pointer" title="Edit">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
+            <button onClick={() => setConfirmDel(a)}
+              className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 cursor-pointer" title="Delete">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
+    </li>
+  );
+
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
       <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
         <h2 className="text-sm font-semibold text-gray-800">Activity Timeline{items.length ? ` (${items.length})` : ''}</h2>
-        {canEdit && (
-          <button onClick={() => setModal({ type: 'create' })}
-            className="px-2.5 py-1 text-xs font-medium text-white rounded-sm cursor-pointer"
-            style={{ backgroundColor: 'var(--ams-primary)' }}>
-            Log Activity
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {items.length > 0 && (
+            <button onClick={() => setShowAll(true)} className="text-xs text-blue-600 hover:underline cursor-pointer">Show activities</button>
+          )}
+          {canEdit && (
+            <button onClick={() => setModal({ type: 'create' })}
+              className="px-2.5 py-1 text-xs font-medium text-white rounded-sm cursor-pointer"
+              style={{ backgroundColor: 'var(--ams-primary)' }}>
+              Log Activity
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="px-5 py-4">
@@ -214,72 +277,49 @@ export default function EnquiryActivities({ enquiryId, canEdit, users = [], onCh
         ) : items.length === 0 ? (
           <p className="text-sm text-gray-400 py-4 text-center">No activity yet. Log the first interaction.</p>
         ) : (
-          <ol className="relative border-l border-gray-200 ml-2">
-            {items.map((a) => (
-              <li key={a.id} className="mb-5 ml-4 group">
-                <span className="absolute -left-1.5 mt-1.5 w-3 h-3 rounded-full border-2 border-white"
-                  style={{ backgroundColor: a.temperature ? (TEMPERATURE_STYLE[a.temperature]?.color || '#9CA3AF') : '#9CA3AF' }} />
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{MEDIUM_LABEL[a.type] || a.type}</span>
-                      <span className="text-xs text-gray-400">{fmtDateTime(a.activity_at)}</span>
-                      {a.duration_min ? <span className="text-xs text-gray-400">· {a.duration_min}m</span> : null}
-                      {a.temperature && <TempChip value={a.temperature} />}
-                    </div>
-                    <p className="text-sm font-medium text-gray-800 mt-0.5">{a.subject}</p>
-                    {a.minutes && <p className="text-sm text-gray-600 mt-0.5 whitespace-pre-wrap">{a.minutes}</p>}
-                    {a.outcome && <p className="text-xs text-gray-500 mt-1"><span className="font-semibold">Outcome:</span> {a.outcome}</p>}
-                    {(a.internal_participants?.length > 0 || a.customer_participants) && (
-                      <p className="text-xs text-gray-400 mt-1">
-                        {a.internal_participants?.length > 0 && <>With: {a.internal_participants.map(userName).join(', ')}</>}
-                        {a.internal_participants?.length > 0 && a.customer_participants && ' · '}
-                        {a.customer_participants && <>Customer: {a.customer_participants}</>}
-                      </p>
-                    )}
-                    {(a.follow_up_at || a.next_action) && (
-                      <div className="mt-1.5 text-xs flex items-center gap-2 flex-wrap">
-                        {a.follow_up_ended ? (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium">Follow-up ended</span>
-                        ) : a.follow_up_at ? (
-                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded font-medium ${isOverdue(a.follow_up_at, a.follow_up_ended) ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
-                            Next: {fmtDate(a.follow_up_at)}{a.next_medium ? ` · ${MEDIUM_LABEL[a.next_medium]}` : ''}{isOverdue(a.follow_up_at, a.follow_up_ended) ? ' · overdue' : ''}
-                          </span>
-                        ) : null}
-                        {a.next_action && <span className="text-gray-500">{a.next_action}</span>}
-                      </div>
-                    )}
-                  </div>
-                  {canEdit && (
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                      <button onClick={() => setModal({ type: 'edit', activity: a })}
-                        className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-200 cursor-pointer" title="Edit">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                      </button>
-                      <button onClick={() => setConfirmDel(a)}
-                        className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 cursor-pointer" title="Delete">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ol>
+          <>
+            <ol className="relative border-l border-gray-200 ml-2">
+              {items.slice(0, 3).map((a) => <Item key={a.id} a={a} />)}
+            </ol>
+            {items.length > 3 && (
+              <button onClick={() => setShowAll(true)} className="mt-1 text-xs text-blue-600 hover:underline cursor-pointer">
+                + {items.length - 3} more — show all activity
+              </button>
+            )}
+          </>
         )}
       </div>
+
+      {/* All activity — right off-canvas */}
+      {showAll && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowAll(false)} />
+          <div className="relative w-full max-w-md bg-white h-full shadow-xl flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h2 className="text-sm font-semibold text-gray-800">Activity Timeline ({items.length})</h2>
+              <div className="flex items-center gap-3">
+                {canEdit && (
+                  <button onClick={() => setModal({ type: 'create' })}
+                    className="px-2.5 py-1 text-xs font-medium text-white rounded-sm cursor-pointer"
+                    style={{ backgroundColor: 'var(--ams-primary)' }}>Log Activity</button>
+                )}
+                <button onClick={() => setShowAll(false)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none cursor-pointer">&times;</button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              <ol className="relative border-l border-gray-200 ml-2">
+                {items.map((a) => <Item key={a.id} a={a} />)}
+              </ol>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modal?.type === 'create' && <ActivityModal enquiryId={enquiryId} users={users} onClose={() => setModal(null)} onSaved={onSaved} />}
       {modal?.type === 'edit'   && <ActivityModal enquiryId={enquiryId} activity={modal.activity} users={users} onClose={() => setModal(null)} onSaved={onSaved} />}
 
       {confirmDel && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-sm bg-white rounded-lg shadow-xl p-6">
             <h2 className="text-base font-semibold text-gray-800 mb-2">Delete Activity</h2>
             <p className="text-sm text-gray-500 mb-4">Delete “{confirmDel.subject}”? This cannot be undone.</p>
