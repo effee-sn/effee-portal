@@ -34,7 +34,8 @@ export default function EnquiryProcess({ enquiry, canManage, busy, onPick, block
         {flow.map((s, i) => {
           const state = closed || i < curIdx ? 'done' : i === curIdx ? 'current' : 'upcoming';
           const gated = (blocked[s.value] || []).length > 0;
-          const clickable = canManage && !closed && s.value !== enquiry.stage && !gated;
+          // Forward-only: only stages ahead of the current one can be moved to.
+          const clickable = canManage && !closed && i > curIdx && !gated;
           return (
             <div key={s.value} className="flex items-center shrink-0">
               {i > 0 && <div className={`h-0.5 w-5 sm:w-10 ${closed || i <= curIdx ? 'bg-green-300' : 'bg-gray-200'}`} />}

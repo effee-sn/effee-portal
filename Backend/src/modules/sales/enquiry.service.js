@@ -199,7 +199,16 @@ function createEnquiryService(repository) {
       if (!before) throw new NotFoundError('Enquiry');
       assertCanManage(before, actor);
       if (dto.stage) assertStageAllowed(dto.stage, dto.enquiry_type ?? before.enquiry_type);
-      if (dto.stage && dto.stage !== before.stage) await assertStageGate(id, dto.stage);
+      if (dto.stage && dto.stage !== before.stage) {
+        // Forward-only: an enquiry can't step back to an earlier stage.
+        const order = ['NEW', 'CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'OFFER_RELEASED', 'FOLLOW_UP'];
+        const fromIdx = order.indexOf(before.stage);
+        const toIdx = order.indexOf(dto.stage);
+        if (fromIdx !== -1 && toIdx !== -1 && toIdx < fromIdx) {
+          throw new ConflictError('An enquiry cannot move back to a previous stage.');
+        }
+        await assertStageGate(id, dto.stage);
+      }
 
       // Resolve the effective customer for contact validation (new or existing).
       const customer_id = dto.customer_id ?? before.customer_id;
