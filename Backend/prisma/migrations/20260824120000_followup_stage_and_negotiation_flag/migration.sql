@@ -1,0 +1,12 @@
+-- Re-add a Follow-up stage between Offer Released and Negotiation, and add a
+-- per-activity flag that flips a follow-up into the Negotiation stage.
+ALTER TABLE `Enquiry`
+  MODIFY COLUMN `stage` ENUM('NEW', 'CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED', 'FOLLOW_UP', 'NEGOTIATION', 'WON', 'LOST') NOT NULL DEFAULT 'NEW';
+ALTER TABLE `EnquiryStageEvent`
+  MODIFY COLUMN `from_stage` ENUM('NEW', 'CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED', 'FOLLOW_UP', 'NEGOTIATION', 'WON', 'LOST') NULL;
+ALTER TABLE `EnquiryStageEvent`
+  MODIFY COLUMN `to_stage` ENUM('NEW', 'CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED', 'FOLLOW_UP', 'NEGOTIATION', 'WON', 'LOST') NOT NULL;
+ALTER TABLE `EnquiryActivity`
+  MODIFY COLUMN `stage` ENUM('NEW', 'CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED', 'FOLLOW_UP', 'NEGOTIATION', 'WON', 'LOST') NULL;
+ALTER TABLE `EnquiryActivity`
+  ADD COLUMN `needs_negotiation` BOOLEAN NOT NULL DEFAULT false;

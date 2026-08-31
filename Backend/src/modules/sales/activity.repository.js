@@ -23,6 +23,7 @@ function createActivityRepository(db) {
     next_medium: true,
     temperature: true,
     follow_up_ended: true,
+    needs_negotiation: true,
     is_review: true,
     created_at: true,
     created_by: true,

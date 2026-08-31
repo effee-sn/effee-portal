@@ -14,15 +14,14 @@
  * @property {boolean} hasSentOffer An offer document is marked sent to the customer.
  * @property {boolean} hasActivity At least one interaction/activity is logged.
  * @property {boolean} hasConcludedReview A review is marked "no future review".
- * @property {boolean} hasEndedFollowup A (non-review) follow-up logged AT the
- *   Offer Released stage is marked "ended" — the signal that Offer Released is
- *   done (older intake follow-ups don't count).
  */
 
 // The enquiry format is required from Review onward. (Contacted, for Incoming,
 // is reached on the first logged activity — see EXTRA_GATES.CONTACTED — so it
-// doesn't require the format.)
-const FORMAT_STAGES = ['REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED', 'NEGOTIATION', 'WON'];
+// doesn't require the format.) Follow-up and Negotiation aren't listed: they're
+// entered automatically (sending an offer / flagging a follow-up), not via a
+// manual gated move, so they carry no gate of their own.
+const FORMAT_STAGES = ['REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED', 'WON'];
 
 // Additional, stage-specific requirements.
 const EXTRA_GATES = Object.freeze({
@@ -41,14 +40,6 @@ const EXTRA_GATES = Object.freeze({
   COSTING_REVIEW: (f) => (f.hasCosting ? [] : ['a costing document']),
   // Costing Review produces the costing review document.
   OFFER_RELEASED: (f) => (f.hasCostingReview ? [] : ['a costing review document']),
-  // The offer must be sent, and the offer-release follow-ups concluded (a
-  // follow-up marked "ended"), before negotiation begins.
-  NEGOTIATION: (f) => {
-    const missing = [];
-    if (!f.hasSentOffer) missing.push('an offer marked sent to the customer');
-    if (!f.hasEndedFollowup) missing.push('a follow-up marked ended (no more follow-ups)');
-    return missing;
-  },
   WON: (f) => (f.hasSentOffer ? [] : ['an offer marked sent to the customer']),
 });
 

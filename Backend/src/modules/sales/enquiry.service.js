@@ -202,9 +202,12 @@ function createEnquiryService(repository) {
       if (dto.stage && dto.stage !== before.stage) {
         // One step forward at a time, along the enquiry-type's own flow
         // (Generated skips Contacted). No stepping back, no skipping ahead.
+        // The manual flow ends at Offer Released; from there the deal moves on
+        // its own — sending the offer flips it to Follow-up, flagging a
+        // follow-up for negotiation flips it to Negotiation (see setStageAuto).
         const flow = before.enquiry_type === 'GENERATED'
-          ? ['NEW', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED', 'NEGOTIATION']
-          : ['NEW', 'CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED', 'NEGOTIATION'];
+          ? ['NEW', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED']
+          : ['NEW', 'CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED'];
         const fromIdx = flow.indexOf(before.stage);
         const toIdx = flow.indexOf(dto.stage);
         if (fromIdx === -1 || toIdx !== fromIdx + 1) {
@@ -249,6 +252,38 @@ function createEnquiryService(repository) {
 
       // Notify a newly assigned owner.
       if (dto.owner_id !== undefined && dto.owner_id !== before.owner_id) notifyOwner(enquiry, actor);
+      return enquiry;
+    },
+
+    /**
+     * System-driven stage move, bypassing the one-step-forward flow and the
+     * document gates. Used for the Offer Released → Follow-up ⇄ Negotiation
+     * loop, where sending an offer or flagging a follow-up for negotiation moves
+     * the stage as a side effect rather than a manual "move to next" click.
+     * No-op (returns the current row) if already at the target stage.
+     * @param {number} id
+     * @param {'FOLLOW_UP'|'NEGOTIATION'} toStage
+     * @param {import('../../core/http/requestContext').ActorContext} [actor]
+     */
+    async setStageAuto(id, toStage, actor) {
+      const before = await repository.findById(id);
+      if (!before) throw new NotFoundError('Enquiry');
+      if (before.stage === toStage) return before;
+
+      const enquiry = await repository.update(id, {
+        stage: toStage, stage_since: new Date(), updated_by: actor?.id ?? null,
+      });
+      await repository.recordStageEvent({
+        enquiry_id: id, from_stage: before.stage, to_stage: toStage, changed_by: actor?.id ?? null,
+      });
+
+      await auditService.record({
+        action: auditService.Action.UPDATE,
+        entity: 'Enquiry',
+        entityId: id,
+        actor,
+        changes: { stage: { from: before.stage, to: toStage }, auto: true },
+      });
       return enquiry;
     },
 
@@ -329,7 +364,7 @@ function createEnquiryService(repository) {
       return enquiry;
     },
 
-    /** Reopens a won/lost enquiry back into the active pipeline (Negotiation). */
+    /** Reopens a won/lost enquiry back into the active pipeline (Follow-up). */
     async reopen(id, actor) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Enquiry');
@@ -339,21 +374,21 @@ function createEnquiryService(repository) {
       }
 
       const data = {
-        stage: 'NEGOTIATION',
+        stage: 'FOLLOW_UP',
         stage_since: new Date(),
         won_at: null, order_no: null, order_value: null, order_date: null,
         lost_at: null, lost_reason: null,
         updated_by: actor?.id ?? null,
       };
       const enquiry = await repository.update(id, data);
-      await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'NEGOTIATION', changed_by: actor?.id ?? null });
+      await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'FOLLOW_UP', changed_by: actor?.id ?? null });
 
       await auditService.record({
         action: auditService.Action.UPDATE,
         entity: 'Enquiry',
         entityId: id,
         actor,
-        changes: { stage: { from: before.stage, to: 'NEGOTIATION' }, reopened: true },
+        changes: { stage: { from: before.stage, to: 'FOLLOW_UP' }, reopened: true },
       });
 
       return enquiry;

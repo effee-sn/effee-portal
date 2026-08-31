@@ -724,6 +724,7 @@ enum EnquiryStage {
   COSTING
   COSTING_REVIEW
   OFFER_RELEASED
+  FOLLOW_UP
   NEGOTIATION
   WON
   LOST
@@ -935,6 +936,9 @@ model EnquiryActivity {
   next_medium     ActivityType?
   temperature     Temperature?
   follow_up_ended Boolean       @default(false)
+  // Set on a follow-up to signal the deal has moved into price negotiation;
+  // flips the enquiry from Follow-up into the Negotiation stage.
+  needs_negotiation Boolean     @default(false)
   // True for internal review entries (participants + MOM + next-review date),
   // kept separate from the customer interaction timeline. For a review,
   // follow_up_at is the next-review date and follow_up_ended means "no future

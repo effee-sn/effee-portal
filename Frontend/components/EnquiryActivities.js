@@ -27,8 +27,11 @@ function TempChip({ value }) {
 }
 
 // ── Add / edit modal ──────────────────────────────────────────────────────────
-function ActivityModal({ enquiryId, activity, users, onClose, onSaved }) {
+function ActivityModal({ enquiryId, activity, users, stage, onClose, onSaved }) {
   const isEdit = Boolean(activity);
+  // The "needs negotiation" flag only does anything at the Follow-up stage,
+  // where it flips the enquiry into Negotiation.
+  const canNegotiate = stage === 'FOLLOW_UP';
   const [form, setForm] = useState({
     type: activity?.type || 'CALL',
     activity_at: toLocalInput(activity?.activity_at || new Date()),
@@ -43,6 +46,7 @@ function ActivityModal({ enquiryId, activity, users, onClose, onSaved }) {
     next_medium: activity?.next_medium || '',
     temperature: activity?.temperature || '',
     follow_up_ended: activity?.follow_up_ended || false,
+    needs_negotiation: activity?.needs_negotiation || false,
   });
   const [error, setError]   = useState('');
   const [saving, setSaving] = useState(false);
@@ -156,6 +160,12 @@ function ActivityModal({ enquiryId, activity, users, onClose, onSaved }) {
               <input type="checkbox" name="follow_up_ended" checked={form.follow_up_ended} onChange={change} className="rounded" />
               Follow-up ended (no more follow-ups needed)
             </label>
+            {canNegotiate && (
+              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input type="checkbox" name="needs_negotiation" checked={form.needs_negotiation} onChange={change} className="rounded" />
+                <span>Needs negotiation <span className="text-gray-400">— moves the enquiry to the Negotiation stage on save</span></span>
+              </label>
+            )}
           </div>
 
           <div className="flex gap-3 pt-1 pb-1">
@@ -171,7 +181,7 @@ function ActivityModal({ enquiryId, activity, users, onClose, onSaved }) {
 }
 
 // ── Timeline ──────────────────────────────────────────────────────────────────
-export default function EnquiryActivities({ enquiryId, canEdit, users = [], onChanged }) {
+export default function EnquiryActivities({ enquiryId, canEdit, users = [], stage, onChanged }) {
   const [items, setItems]     = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal]     = useState(null);
@@ -224,8 +234,13 @@ export default function EnquiryActivities({ enquiryId, canEdit, users = [], onCh
               {a.customer_participants && <>Customer: {a.customer_participants}</>}
             </p>
           )}
-          {(a.follow_up_at || a.next_action) && (
+          {(a.follow_up_at || a.next_action || a.needs_negotiation) && (
             <div className="mt-1.5 text-xs flex items-center gap-2 flex-wrap">
+              {a.needs_negotiation && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded font-medium" style={{ color: STAGE_STYLE.NEGOTIATION.color, backgroundColor: STAGE_STYLE.NEGOTIATION.bg }}>
+                  Negotiation requested
+                </span>
+              )}
               {a.follow_up_ended ? (
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium">Follow-up ended</span>
               ) : a.follow_up_at ? (
@@ -321,8 +336,8 @@ export default function EnquiryActivities({ enquiryId, canEdit, users = [], onCh
         </div>
       )}
 
-      {modal?.type === 'create' && <ActivityModal enquiryId={enquiryId} users={users} onClose={() => setModal(null)} onSaved={onSaved} />}
-      {modal?.type === 'edit'   && <ActivityModal enquiryId={enquiryId} activity={modal.activity} users={users} onClose={() => setModal(null)} onSaved={onSaved} />}
+      {modal?.type === 'create' && <ActivityModal enquiryId={enquiryId} users={users} stage={stage} onClose={() => setModal(null)} onSaved={onSaved} />}
+      {modal?.type === 'edit'   && <ActivityModal enquiryId={enquiryId} activity={modal.activity} users={users} stage={stage} onClose={() => setModal(null)} onSaved={onSaved} />}
 
       {confirmDel && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4">

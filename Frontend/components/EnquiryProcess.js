@@ -1,6 +1,6 @@
 'use client';
 
-import { stagesForType, stageAgeDays, isAging } from '@/lib/salesOptions';
+import { stagesForType, stageAgeDays, isAging, STAGE_RANK } from '@/lib/salesOptions';
 
 /**
  * Horizontal pipeline tracker for an enquiry — shows where it is now, marks the
@@ -15,8 +15,9 @@ const STAGE_HINT = {
   CONCEPT:        'Prepare and upload the concept document.',
   COSTING:        'Work out and upload the costing.',
   COSTING_REVIEW: 'Review the costing and upload the costing review document.',
-  OFFER_RELEASED: 'Upload the offer and mark it sent to the customer.',
-  NEGOTIATION:    'Follow up (next date + temperature), add revised offer versions and revise costing, until Won or Lost.',
+  OFFER_RELEASED: 'Upload the offer and mark it sent — that moves the enquiry into Follow-up.',
+  FOLLOW_UP:      'Log follow-ups. Tick “Needs negotiation” on one to move into Negotiation, or Win / Lose to close.',
+  NEGOTIATION:    'Add the revised offer version and mark it sent — that returns to Follow-up.',
 };
 
 export default function EnquiryProcess({ enquiry, canManage, busy, onPick, blocked = {} }) {
@@ -27,6 +28,10 @@ export default function EnquiryProcess({ enquiry, canManage, busy, onPick, block
   const age = stageAgeDays(enquiry.stage_since);
   const aging = !closed && isAging(enquiry.stage, enquiry.stage_since);
   const nextMissing = next ? (blocked[next.value] || []) : [];
+  // Manual "move to next" only applies up to Offer Released; from there the
+  // deal advances on its own (send the offer, flag a follow-up for negotiation),
+  // so no step button is shown for Offer Released / Follow-up / Negotiation.
+  const manual = STAGE_RANK[enquiry.stage] < STAGE_RANK.OFFER_RELEASED;
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 px-5 py-4">
@@ -35,8 +40,9 @@ export default function EnquiryProcess({ enquiry, canManage, busy, onPick, block
         {flow.map((s, i) => {
           const state = closed || i < curIdx ? 'done' : i === curIdx ? 'current' : 'upcoming';
           const gated = (blocked[s.value] || []).length > 0;
-          // One step forward only: just the immediate next stage is clickable.
-          const clickable = canManage && !closed && i === curIdx + 1 && !gated;
+          // One step forward only, and only while the flow is still manual
+          // (up to Offer Released): just the immediate next stage is clickable.
+          const clickable = canManage && !closed && manual && i === curIdx + 1 && !gated;
           return (
             <div key={s.value} className="flex items-center shrink-0">
               {i > 0 && <div className={`h-0.5 w-5 sm:w-10 ${closed || i <= curIdx ? 'bg-green-300' : 'bg-gray-200'}`} />}
@@ -79,7 +85,7 @@ export default function EnquiryProcess({ enquiry, canManage, busy, onPick, block
             )}
             {STAGE_HINT[enquiry.stage] ? <span className="block text-gray-500 mt-0.5">{STAGE_HINT[enquiry.stage]}</span> : null}
           </div>
-          {next && canManage && (
+          {next && canManage && manual && (
             <div className="flex flex-col items-end gap-1 shrink-0">
               <button onClick={() => onPick(next.value)} disabled={busy || nextMissing.length > 0}
                 className="px-3 py-1.5 text-sm font-medium text-white rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"

@@ -57,6 +57,7 @@ const createActivityBody = z.object({
   next_medium:           optionalMedium,
   temperature:           optionalTemp,
   follow_up_ended:       optionalBool,
+  needs_negotiation:     optionalBool,
   is_review:             optionalBool,
 });
 
@@ -74,6 +75,7 @@ const updateActivityBody = z.object({
   next_medium:           optionalMedium,
   temperature:           optionalTemp,
   follow_up_ended:       optionalBool,
+  needs_negotiation:     optionalBool,
   is_review:             optionalBool,
 }).refine(
   (data) => Object.values(data).some((v) => v !== undefined),

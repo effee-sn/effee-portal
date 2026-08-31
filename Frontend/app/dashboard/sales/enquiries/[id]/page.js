@@ -231,6 +231,8 @@ const fmtDateTime = (iso) => new Date(iso).toLocaleString(undefined, { day: '2-d
 /** Stage-transition history, in a right off-canvas drawer. */
 function StageHistoryDrawer({ events, users, onClose }) {
   const list = events || [];
+  // Captured once at open, so "days in current stage" stays a pure render.
+  const [now] = useState(() => Date.now());
   const nameFor = (uid) => (uid ? (users.find((u) => String(u.id) === String(uid))?.name || `#${uid}`) : 'system');
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -247,7 +249,7 @@ function StageHistoryDrawer({ events, users, onClose }) {
             <ol className="space-y-3">
               {list.map((e, i) => {
                 const start = new Date(e.created_at).getTime();
-                const end = i < list.length - 1 ? new Date(list[i + 1].created_at).getTime() : Date.now();
+                const end = i < list.length - 1 ? new Date(list[i + 1].created_at).getTime() : now;
                 const days = Math.max(0, Math.round((end - start) / 86400000));
                 const s = STAGE_STYLE[e.to_stage];
                 return (
@@ -452,7 +454,7 @@ export default function EnquiryDetailPage() {
         enquiry.enquiry_type === 'INCOMING' ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
             <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={visibleDocKinds(enquiry.stage)} onChanged={load} />
-            <div id="activity"><EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} /></div>
+            <div id="activity"><EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} stage={enquiry.stage} onChanged={load} /></div>
           </div>
         ) : (
           <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={visibleDocKinds(enquiry.stage)} onChanged={load} />
@@ -460,7 +462,7 @@ export default function EnquiryDetailPage() {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
           <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={visibleDocKinds(enquiry.stage)} onChanged={load} />
-          <div id="activity"><EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} /></div>
+          <div id="activity"><EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} stage={enquiry.stage} onChanged={load} /></div>
         </div>
       )}
 

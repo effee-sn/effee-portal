@@ -39,7 +39,8 @@ function createActivityService(repository) {
   /** Maps a validated DTO to writable columns (serialising participant ids). */
   function pickWritable(dto, data = {}) {
     for (const f of ['type', 'activity_at', 'duration_min', 'subject', 'minutes', 'outcome',
-      'customer_participants', 'next_action', 'follow_up_at', 'next_medium', 'temperature', 'follow_up_ended', 'is_review']) {
+      'customer_participants', 'next_action', 'follow_up_at', 'next_medium', 'temperature',
+      'follow_up_ended', 'needs_negotiation', 'is_review']) {
       if (dto[f] !== undefined) data[f] = dto[f];
     }
     if (dto.internal_participants !== undefined) {
@@ -108,6 +109,12 @@ function createActivityService(repository) {
         catch { /* prerequisites not met yet — leave it at New */ }
       }
 
+      // Flagging a follow-up for negotiation flips the deal from Follow-up into
+      // the Negotiation stage (where a revised offer is added and re-sent).
+      if (!dto.is_review && dto.needs_negotiation && enquiry.stage === 'FOLLOW_UP') {
+        await enquiryService.setStageAuto(enquiryId, 'NEGOTIATION', actor);
+      }
+
       return mapRow(activity);
     },
 
@@ -133,6 +140,11 @@ function createActivityService(repository) {
         actor,
         changes: auditService.diff(before, data, ['internal_participants']),
       });
+
+      // Flagging a follow-up for negotiation flips Follow-up → Negotiation.
+      if (!before.is_review && dto.needs_negotiation && enquiry.stage === 'FOLLOW_UP') {
+        await enquiryService.setStageAuto(before.enquiry_id, 'NEGOTIATION', actor);
+      }
 
       return mapRow(activity);
     },

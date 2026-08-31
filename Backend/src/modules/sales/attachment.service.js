@@ -3,6 +3,7 @@ const path = require('path');
 
 const { attachmentRepository } = require('./attachment.repository');
 const { storageDir } = require('./attachment.upload');
+const { enquiryService } = require('./enquiry.service');
 const { auditService } = require('../audit/audit.service');
 const { NotFoundError, ForbiddenError, BadRequestError, ConflictError } = require('../../core');
 
@@ -130,6 +131,13 @@ function createAttachmentService(repository) {
         actor,
         changes: { sent: { from: Boolean(before.sent_at), to: sent } },
       });
+
+      // Sending an offer moves the deal into follow-up: from Offer Released
+      // (the first offer) or back from Negotiation (a revised offer). The stage
+      // move is a side effect of sending, not a manual step.
+      if (sent && (enquiry.stage === 'OFFER_RELEASED' || enquiry.stage === 'NEGOTIATION')) {
+        await enquiryService.setStageAuto(before.enquiry_id, 'FOLLOW_UP', actor);
+      }
 
       return attachment;
     },
