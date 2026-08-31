@@ -169,6 +169,7 @@ function createEnquiryRepository(db) {
       return {
         hasFormat: rows.some((r) => r.kind === 'FORMAT_PDF' || r.kind === 'FORMAT_EXCEL'),
         hasConcept: rows.some((r) => r.kind === 'CONCEPT'),
+        hasPowerCalc: rows.some((r) => r.kind === 'POWER_CALC'),
         hasCosting: rows.some((r) => r.kind === 'COSTING'),
         hasSentOffer: rows.some((r) => r.kind === 'OFFER' && r.sent_at != null),
         hasActivity: activityCount > 0,

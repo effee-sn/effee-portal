@@ -56,7 +56,7 @@ function createEnquiryService(repository) {
   async function assertStageGate(enquiryId, targetStage) {
     const missing = missingForStage(targetStage, await repository.docFlags(enquiryId));
     if (missing.length) {
-      throw new ConflictError(`This stage needs ${missing.join(' and ')} first.`);
+      throw new ConflictError(`Needs ${missing.join(' and ')} to move to the next stage.`);
     }
   }
 

@@ -753,6 +753,7 @@ enum AttachmentKind {
   FORMAT_PDF
   FORMAT_EXCEL
   CONCEPT
+  POWER_CALC
   COSTING
   OFFER
 }

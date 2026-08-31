@@ -8,6 +8,7 @@
  * @typedef {object} DocFlags
  * @property {boolean} hasFormat   An enquiry-format document (PDF or Excel) exists.
  * @property {boolean} hasConcept  A live concept document exists.
+ * @property {boolean} hasPowerCalc A live costing & power-source calculation exists.
  * @property {boolean} hasCosting  A live costing document exists.
  * @property {boolean} hasSentOffer An offer document is marked sent to the customer.
  * @property {boolean} hasActivity At least one interaction/activity is logged.
@@ -25,6 +26,13 @@ const EXTRA_GATES = Object.freeze({
   CONTACTED: (f) => (f.hasActivity ? [] : ['at least one logged activity']),
   // Review is concluded when a review is marked "no future review".
   CONCEPT: (f) => (f.hasConcludedReview ? [] : ['a review marked “no future review”']),
+  // Concept produces the concept document and the costing & power-source calc.
+  COSTING: (f) => {
+    const missing = [];
+    if (!f.hasConcept) missing.push('a concept document');
+    if (!f.hasPowerCalc) missing.push('the costing & power-source calculation');
+    return missing;
+  },
   OFFER_RELEASED: (f) => {
     const missing = [];
     if (!f.hasConcept) missing.push('a concept document');

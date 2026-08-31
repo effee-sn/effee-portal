@@ -94,7 +94,7 @@ export const STAGE_RANK = {
 export function visibleDocKinds(stage) {
   const r = STAGE_RANK[stage] ?? 0;
   const kinds = ['FORMAT_PDF', 'FORMAT_EXCEL'];
-  if (r >= STAGE_RANK.CONCEPT) kinds.push('CONCEPT');
+  if (r >= STAGE_RANK.CONCEPT) kinds.push('CONCEPT', 'POWER_CALC');
   if (r >= STAGE_RANK.COSTING) kinds.push('COSTING');
   if (r >= STAGE_RANK.OFFER_RELEASED) kinds.push('OFFER');
   return kinds;
