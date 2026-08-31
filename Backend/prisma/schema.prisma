@@ -724,7 +724,6 @@ enum EnquiryStage {
   COSTING
   COSTING_REVIEW
   OFFER_RELEASED
-  FOLLOW_UP
   WON
   LOST
 }

@@ -25,7 +25,6 @@ export const ACTIVE_STAGES = [
   { value: 'COSTING',        label: 'Costing' },
   { value: 'COSTING_REVIEW', label: 'Costing Review' },
   { value: 'OFFER_RELEASED', label: 'Offer Released' },
-  { value: 'FOLLOW_UP',      label: 'Follow-up' },
 ];
 
 /** All stages, for filter dropdowns. */
@@ -84,7 +83,7 @@ export const TEMPERATURE_STYLE = {
 
 /** Ordinal rank of a stage, for "have we reached X yet" comparisons. */
 export const STAGE_RANK = {
-  NEW: 0, CONTACTED: 1, REVIEW: 2, CONCEPT: 3, COSTING: 4, COSTING_REVIEW: 5, OFFER_RELEASED: 6, FOLLOW_UP: 7, WON: 8, LOST: 8,
+  NEW: 0, CONTACTED: 1, REVIEW: 2, CONCEPT: 3, COSTING: 4, COSTING_REVIEW: 5, OFFER_RELEASED: 6, WON: 7, LOST: 7,
 };
 
 /**

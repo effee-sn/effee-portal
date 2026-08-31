@@ -170,10 +170,13 @@ export default function EnquiryAttachments({
                 <p className="text-sm text-gray-300">No offers uploaded yet.</p>
               ) : (
                 <div className="divide-y divide-gray-100">
-                  {offers.map((a) => (
+                  {offers.map((a, idx) => (
                     <div key={a.id} className="flex items-center justify-between gap-2 py-2">
                       <div className="min-w-0">
-                        <FileLine a={a} />
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-semibold text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 shrink-0">v{offers.length - idx}</span>
+                          <FileLine a={a} />
+                        </div>
                         {a.sent_at && <span className="text-[11px] text-green-600">Sent to customer · {fmtDate(a.sent_at)}</span>}
                       </div>
                       {canEdit && (

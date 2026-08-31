@@ -19,7 +19,7 @@
 // The enquiry format is required from Review onward. (Contacted, for Incoming,
 // is reached on the first logged activity — see EXTRA_GATES.CONTACTED — so it
 // doesn't require the format.)
-const FORMAT_STAGES = ['REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED', 'FOLLOW_UP', 'WON'];
+const FORMAT_STAGES = ['REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED', 'WON'];
 
 // Additional, stage-specific requirements.
 const EXTRA_GATES = Object.freeze({
