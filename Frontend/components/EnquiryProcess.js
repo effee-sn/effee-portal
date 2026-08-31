@@ -15,7 +15,8 @@ const STAGE_HINT = {
   CONCEPT:        'Prepare and upload the concept document.',
   COSTING:        'Work out and upload the costing.',
   COSTING_REVIEW: 'Review the costing and upload the costing review document.',
-  OFFER_RELEASED: 'Send the offer, log follow-ups (next date + temperature) and add offer versions, until Won or Lost.',
+  OFFER_RELEASED: 'Upload the offer and mark it sent to the customer.',
+  NEGOTIATION:    'Follow up (next date + temperature), add revised offer versions and revise costing, until Won or Lost.',
 };
 
 export default function EnquiryProcess({ enquiry, canManage, busy, onPick, blocked = {} }) {

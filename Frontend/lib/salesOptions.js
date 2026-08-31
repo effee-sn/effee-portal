@@ -25,6 +25,7 @@ export const ACTIVE_STAGES = [
   { value: 'COSTING',        label: 'Costing' },
   { value: 'COSTING_REVIEW', label: 'Costing Review' },
   { value: 'OFFER_RELEASED', label: 'Offer Released' },
+  { value: 'NEGOTIATION',    label: 'Negotiation' },
 ];
 
 /** All stages, for filter dropdowns. */
@@ -52,7 +53,7 @@ export const STAGE_STYLE = {
   COSTING:        { label: 'Costing',        color: '#0D9488', bg: '#F0FDFA' },
   COSTING_REVIEW: { label: 'Costing Review', color: '#0F766E', bg: '#ECFDF5' },
   OFFER_RELEASED: { label: 'Offer Released', color: '#D97706', bg: '#FFFBEB' },
-  FOLLOW_UP:      { label: 'Follow-up',      color: '#EA580C', bg: '#FFF7ED' },
+  NEGOTIATION:    { label: 'Negotiation',    color: '#EA580C', bg: '#FFF7ED' },
   WON:            { label: 'Won',            color: '#15803D', bg: '#F0FDF4' },
   LOST:           { label: 'Lost',           color: '#DC2626', bg: '#FEF2F2' },
 };
@@ -83,7 +84,7 @@ export const TEMPERATURE_STYLE = {
 
 /** Ordinal rank of a stage, for "have we reached X yet" comparisons. */
 export const STAGE_RANK = {
-  NEW: 0, CONTACTED: 1, REVIEW: 2, CONCEPT: 3, COSTING: 4, COSTING_REVIEW: 5, OFFER_RELEASED: 6, WON: 7, LOST: 7,
+  NEW: 0, CONTACTED: 1, REVIEW: 2, CONCEPT: 3, COSTING: 4, COSTING_REVIEW: 5, OFFER_RELEASED: 6, NEGOTIATION: 7, WON: 8, LOST: 8,
 };
 
 /**
@@ -107,7 +108,7 @@ export function visibleDocKinds(stage) {
  * WON / LOST are terminal and never age.
  */
 export const STAGE_AGING_DAYS = {
-  NEW: 3, CONTACTED: 3, REVIEW: 4, CONCEPT: 5, COSTING: 5, COSTING_REVIEW: 4, OFFER_RELEASED: 7, FOLLOW_UP: 10,
+  NEW: 3, CONTACTED: 3, REVIEW: 4, CONCEPT: 5, COSTING: 5, COSTING_REVIEW: 4, OFFER_RELEASED: 7, NEGOTIATION: 10,
 };
 
 /** Whole days the enquiry has been in its current stage. */

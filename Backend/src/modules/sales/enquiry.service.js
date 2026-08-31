@@ -203,8 +203,8 @@ function createEnquiryService(repository) {
         // One step forward at a time, along the enquiry-type's own flow
         // (Generated skips Contacted). No stepping back, no skipping ahead.
         const flow = before.enquiry_type === 'GENERATED'
-          ? ['NEW', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED']
-          : ['NEW', 'CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED'];
+          ? ['NEW', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED', 'NEGOTIATION']
+          : ['NEW', 'CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED', 'NEGOTIATION'];
         const fromIdx = flow.indexOf(before.stage);
         const toIdx = flow.indexOf(dto.stage);
         if (fromIdx === -1 || toIdx !== fromIdx + 1) {
@@ -339,21 +339,21 @@ function createEnquiryService(repository) {
       }
 
       const data = {
-        stage: 'OFFER_RELEASED',
+        stage: 'NEGOTIATION',
         stage_since: new Date(),
         won_at: null, order_no: null, order_value: null, order_date: null,
         lost_at: null, lost_reason: null,
         updated_by: actor?.id ?? null,
       };
       const enquiry = await repository.update(id, data);
-      await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'OFFER_RELEASED', changed_by: actor?.id ?? null });
+      await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'NEGOTIATION', changed_by: actor?.id ?? null });
 
       await auditService.record({
         action: auditService.Action.UPDATE,
         entity: 'Enquiry',
         entityId: id,
         actor,
-        changes: { stage: { from: before.stage, to: 'OFFER_RELEASED' }, reopened: true },
+        changes: { stage: { from: before.stage, to: 'NEGOTIATION' }, reopened: true },
       });
 
       return enquiry;
