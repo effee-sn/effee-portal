@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { ACTIVITY_MEDIUMS, MEDIUM_LABEL, TEMPERATURES, TEMPERATURE_STYLE } from '@/lib/salesOptions';
+import UserMultiSelect from '@/components/UserMultiSelect';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 
@@ -114,11 +115,8 @@ function ActivityModal({ enquiryId, activity, users, onClose, onSaved }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={label}>Internal participants</label>
-              <select name="internal_participants" multiple value={form.internal_participants} onChange={change}
-                className="ams-input h-24">
-                {users.map((u) => <option key={u.id} value={String(u.id)}>{u.name}</option>)}
-              </select>
-              <p className="text-[11px] text-gray-400 mt-1">Ctrl/Cmd-click for multiple.</p>
+              <UserMultiSelect users={users} value={form.internal_participants}
+                onChange={(ids) => setForm((f) => ({ ...f, internal_participants: ids }))} />
             </div>
             <div>
               <label className={label}>Customer participants</label>

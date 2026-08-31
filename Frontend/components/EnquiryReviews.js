@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
+import UserMultiSelect from '@/components/UserMultiSelect';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 const pad = (n) => String(n).padStart(2, '0');
@@ -79,10 +80,8 @@ function ReviewModal({ enquiryId, review, users, onClose, onSaved }) {
           </div>
           <div>
             <label className={label}>Participants (attended)</label>
-            <select name="internal_participants" multiple value={form.internal_participants} onChange={change} className="ams-input h-24">
-              {users.map((u) => <option key={u.id} value={String(u.id)}>{u.name}</option>)}
-            </select>
-            <p className="text-[11px] text-gray-400 mt-1">Ctrl/Cmd-click for multiple.</p>
+            <UserMultiSelect users={users} value={form.internal_participants}
+              onChange={(ids) => setForm((f) => ({ ...f, internal_participants: ids }))} />
           </div>
           <div>
             <label className={label}>Minutes of Meeting (MOM)</label>
