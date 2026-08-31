@@ -75,13 +75,16 @@ const updateEnquiryBody = z.object({
 );
 
 const winEnquiryBody = z.object({
-  order_no:    optionalText(120),
-  order_value: requiredMoney,
-  order_date:  optionalDate,
+  order_no:        optionalText(120),
+  order_value:     requiredMoney,
+  order_date:      optionalDate,
+  won_declaration: optionalText(5000),
+  won_terms:       optionalText(5000),
 });
 
 const loseEnquiryBody = z.object({
   lost_reason: z.string().trim().min(1, 'A reason is required').max(1000),
+  lost_to:     optionalText(191),
 });
 
 module.exports = {

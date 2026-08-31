@@ -305,9 +305,12 @@ function createEnquiryService(repository) {
         order_no: dto.order_no ?? null,
         order_value: dto.order_value,
         order_date: dto.order_date ?? new Date(),
+        won_declaration: dto.won_declaration ?? null,
+        won_terms: dto.won_terms ?? null,
         // Clear any prior lost close-out.
         lost_at: null,
         lost_reason: null,
+        lost_to: null,
         updated_by: actor?.id ?? null,
       };
       const enquiry = await repository.update(id, data);
@@ -348,6 +351,7 @@ function createEnquiryService(repository) {
         stage_since: new Date(),
         lost_at: new Date(),
         lost_reason: dto.lost_reason,
+        lost_to: dto.lost_to ?? null,
         updated_by: actor?.id ?? null,
       };
       const enquiry = await repository.update(id, data);
@@ -377,7 +381,8 @@ function createEnquiryService(repository) {
         stage: 'FOLLOW_UP',
         stage_since: new Date(),
         won_at: null, order_no: null, order_value: null, order_date: null,
-        lost_at: null, lost_reason: null,
+        won_declaration: null, won_terms: null,
+        lost_at: null, lost_reason: null, lost_to: null,
         updated_by: actor?.id ?? null,
       };
       const enquiry = await repository.update(id, data);

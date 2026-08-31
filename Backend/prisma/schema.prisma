@@ -880,14 +880,18 @@ model Enquiry {
   owner_id Int
 
   // Won close-out (no execution module - we just capture the order).
-  won_at      DateTime?
-  order_no    String?
-  order_value Decimal?  @db.Decimal(14, 2)
-  order_date  DateTime?
+  won_at          DateTime?
+  order_no        String?
+  order_value     Decimal?  @db.Decimal(14, 2)
+  order_date      DateTime?
+  won_declaration String?   @db.Text
+  won_terms       String?   @db.Text
 
   // Lost close-out.
   lost_at     DateTime?
   lost_reason String?   @db.Text
+  // Who the deal went to (competitor / other supplier), when known.
+  lost_to     String?
 
   activities  EnquiryActivity[]
   quotations  Quotation[]

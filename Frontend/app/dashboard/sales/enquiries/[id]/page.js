@@ -49,7 +49,10 @@ function Section({ title, children, right }) {
 
 // ── Win modal ─────────────────────────────────────────────────────────────────
 function WinModal({ enquiryId, onClose, onDone }) {
-  const [form, setForm] = useState({ order_no: '', order_value: '', order_date: toDateInput(new Date().toISOString()) });
+  const [form, setForm] = useState({
+    order_no: '', order_value: '', order_date: toDateInput(new Date().toISOString()),
+    won_declaration: '', won_terms: '',
+  });
   const [error, setError]   = useState('');
   const [saving, setSaving] = useState(false);
   const change = (e) => { setForm({ ...form, [e.target.name]: e.target.value }); setError(''); };
@@ -62,11 +65,13 @@ function WinModal({ enquiryId, onClose, onDone }) {
   };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <form onSubmit={go} className="w-full max-w-md bg-white rounded-lg shadow-xl p-6">
-        <h2 className="text-base font-semibold text-gray-800 mb-1">Mark as Won</h2>
-        <p className="text-sm text-gray-500 mb-4">Record the confirmed order.</p>
-        {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm mb-3">{error}</div>}
-        <div className="space-y-4">
+      <form onSubmit={go} className="w-full max-w-md bg-white rounded-lg shadow-xl flex flex-col max-h-[90vh]">
+        <div className="px-6 pt-6 pb-3">
+          <h2 className="text-base font-semibold text-gray-800 mb-1">Mark as Won</h2>
+          <p className="text-sm text-gray-500">Record the confirmed order.</p>
+        </div>
+        <div className="overflow-y-auto flex-1 px-6 space-y-4">
+          {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm">{error}</div>}
           <div>
             <label className={label}>Order Value (₹)<span className="text-red-500"> *</span></label>
             <input name="order_value" type="number" min="0" step="0.01" value={form.order_value} onChange={change} required placeholder="240000" className="ams-input" />
@@ -81,8 +86,18 @@ function WinModal({ enquiryId, onClose, onDone }) {
               <input name="order_date" type="date" value={form.order_date} onChange={change} className="ams-input" />
             </div>
           </div>
+          <div>
+            <label className={label}>Declaration</label>
+            <textarea name="won_declaration" value={form.won_declaration} onChange={change} rows={3}
+              placeholder="Scope / declaration agreed with the customer…" className="ams-input resize-none" />
+          </div>
+          <div>
+            <label className={label}>Terms &amp; Conditions</label>
+            <textarea name="won_terms" value={form.won_terms} onChange={change} rows={3}
+              placeholder="Payment terms, delivery, warranty…" className="ams-input resize-none" />
+          </div>
         </div>
-        <div className="flex gap-3 mt-5">
+        <div className="flex gap-3 p-6 pt-4">
           <button type="button" onClick={onClose} className="btn-secondary flex-1 justify-center py-2">Cancel</button>
           <button type="submit" disabled={saving} className="btn-primary flex-1 justify-center py-2">{saving ? 'Saving…' : 'Confirm Won'}</button>
         </div>
@@ -93,13 +108,14 @@ function WinModal({ enquiryId, onClose, onDone }) {
 
 // ── Lose modal ────────────────────────────────────────────────────────────────
 function LoseModal({ enquiryId, onClose, onDone }) {
-  const [reason, setReason] = useState('');
+  const [form, setForm] = useState({ lost_reason: '', lost_to: '' });
   const [error, setError]   = useState('');
   const [saving, setSaving] = useState(false);
+  const change = (e) => { setForm({ ...form, [e.target.name]: e.target.value }); setError(''); };
   const go = async (e) => {
     e.preventDefault();
     setSaving(true); setError('');
-    try { const res = await apiPost(`/sales/enquiries/${enquiryId}/lose`, { lost_reason: reason }); onDone(res.data); onClose(); }
+    try { const res = await apiPost(`/sales/enquiries/${enquiryId}/lose`, form); onDone(res.data); onClose(); }
     catch (err) { setError(err.message); }
     finally { setSaving(false); }
   };
@@ -107,10 +123,20 @@ function LoseModal({ enquiryId, onClose, onDone }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
       <form onSubmit={go} className="w-full max-w-md bg-white rounded-lg shadow-xl p-6">
         <h2 className="text-base font-semibold text-gray-800 mb-1">Mark as Lost</h2>
-        <p className="text-sm text-gray-500 mb-4">Why was this enquiry lost?</p>
+        <p className="text-sm text-gray-500 mb-4">Capture why the deal was lost, and to whom.</p>
         {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm mb-3">{error}</div>}
-        <textarea value={reason} onChange={(e) => setReason(e.target.value)} required rows={3}
-          placeholder="Lost to competitor on price…" className="ams-input resize-none" />
+        <div className="space-y-4">
+          <div>
+            <label className={label}>Reason<span className="text-red-500"> *</span></label>
+            <textarea name="lost_reason" value={form.lost_reason} onChange={change} required rows={3}
+              placeholder="Higher price, longer delivery, spec mismatch…" className="ams-input resize-none" />
+          </div>
+          <div>
+            <label className={label}>Lost to (whom)</label>
+            <input name="lost_to" value={form.lost_to} onChange={change}
+              placeholder="Competitor / supplier who won it" className="ams-input" />
+          </div>
+        </div>
         <div className="flex gap-3 mt-5">
           <button type="button" onClick={onClose} className="btn-secondary flex-1 justify-center py-2">Cancel</button>
           <button type="submit" disabled={saving} className="btn-danger flex-1 justify-center py-2">{saving ? 'Saving…' : 'Confirm Lost'}</button>
@@ -404,15 +430,24 @@ export default function EnquiryDetailPage() {
 
       {/* Won / Lost banner */}
       {enquiry.stage === 'WON' && (
-        <div className="rounded-lg border border-green-200 bg-green-50 px-5 py-3 flex flex-wrap gap-x-8 gap-y-2">
-          <Field label="Order Value"><span className="font-semibold text-green-800">{formatINR(enquiry.order_value)}</span></Field>
-          <Field label="PO Number">{enquiry.order_no}</Field>
-          <Field label="Order Date">{fmtDate(enquiry.order_date)}</Field>
+        <div className="rounded-lg border border-green-200 bg-green-50 px-5 py-3 space-y-3">
+          <div className="flex flex-wrap gap-x-8 gap-y-2">
+            <Field label="Order Value"><span className="font-semibold text-green-800">{formatINR(enquiry.order_value)}</span></Field>
+            <Field label="PO Number">{enquiry.order_no}</Field>
+            <Field label="Order Date">{fmtDate(enquiry.order_date)}</Field>
+          </div>
+          {(enquiry.won_declaration || enquiry.won_terms) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 pt-1 border-t border-green-200">
+              {enquiry.won_declaration && <Field label="Declaration"><span className="whitespace-pre-wrap text-gray-700">{enquiry.won_declaration}</span></Field>}
+              {enquiry.won_terms && <Field label="Terms & Conditions"><span className="whitespace-pre-wrap text-gray-700">{enquiry.won_terms}</span></Field>}
+            </div>
+          )}
         </div>
       )}
       {enquiry.stage === 'LOST' && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-3">
+        <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-3 flex flex-wrap gap-x-8 gap-y-2">
           <Field label="Lost Reason"><span className="text-red-800">{enquiry.lost_reason}</span></Field>
+          {enquiry.lost_to && <Field label="Lost To"><span className="text-red-800">{enquiry.lost_to}</span></Field>}
         </div>
       )}
 
