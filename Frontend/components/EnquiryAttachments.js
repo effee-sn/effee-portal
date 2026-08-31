@@ -10,7 +10,7 @@ const SLOTS = [
   { kind: 'FORMAT_PDF',   label: 'Enquiry Format (PDF)' },
   { kind: 'FORMAT_EXCEL', label: 'Enquiry Format (Excel)' },
   { kind: 'CONCEPT',      label: 'Concept Document' },
-  { kind: 'POWER_CALC',   label: 'Costing & Power Source Calc (Excel)' },
+  { kind: 'POWER_CALC',   label: 'Power Source Calculation (Excel)' },
   { kind: 'COSTING',      label: 'Costing Document' },
 ];
 

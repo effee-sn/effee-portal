@@ -30,7 +30,7 @@ const EXTRA_GATES = Object.freeze({
   COSTING: (f) => {
     const missing = [];
     if (!f.hasConcept) missing.push('a concept document');
-    if (!f.hasPowerCalc) missing.push('the costing & power-source calculation');
+    if (!f.hasPowerCalc) missing.push('the power-source calculation');
     return missing;
   },
   OFFER_RELEASED: (f) => {
