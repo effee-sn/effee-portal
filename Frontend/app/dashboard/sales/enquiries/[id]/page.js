@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
-import { ENQUIRY_TYPES, STAGE_STYLE, TYPE_LABEL, TEMPERATURE_STYLE, stagesForType, formatINR } from '@/lib/salesOptions';
+import { ENQUIRY_TYPES, STAGE_STYLE, TYPE_LABEL, TEMPERATURE_STYLE, stagesForType, visibleDocKinds, formatINR } from '@/lib/salesOptions';
 import EnquiryCustomerContact from '@/components/EnquiryCustomerContact';
 import EnquiryActivities from '@/components/EnquiryActivities';
 import EnquiryProcess from '@/components/EnquiryProcess';
@@ -446,15 +446,15 @@ export default function EnquiryDetailPage() {
       {enquiry.stage === 'NEW' ? (
         enquiry.enquiry_type === 'INCOMING' ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-            <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={['FORMAT_PDF', 'FORMAT_EXCEL']} onChanged={load} />
+            <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={visibleDocKinds(enquiry.stage)} onChanged={load} />
             <div id="activity"><EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} /></div>
           </div>
         ) : (
-          <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={['FORMAT_PDF', 'FORMAT_EXCEL']} onChanged={load} />
+          <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={visibleDocKinds(enquiry.stage)} onChanged={load} />
         )
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-          <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} onChanged={load} />
+          <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={visibleDocKinds(enquiry.stage)} onChanged={load} />
           <div id="activity"><EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} /></div>
         </div>
       )}

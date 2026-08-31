@@ -80,6 +80,26 @@ export const TEMPERATURE_STYLE = {
   COLD: { label: 'Cold', color: '#2563EB', bg: '#EFF6FF' },
 };
 
+/** Ordinal rank of a stage, for "have we reached X yet" comparisons. */
+export const STAGE_RANK = {
+  NEW: 0, CONTACTED: 1, REVIEW: 2, CONCEPT: 3, COSTING: 4, OFFER_RELEASED: 5, FOLLOW_UP: 6, WON: 7, LOST: 7,
+};
+
+/**
+ * Which document kinds are relevant by a given stage — the format is always
+ * available; concept, costing and offers appear once the enquiry reaches those
+ * stages, so earlier stages aren't cluttered with documents that don't apply yet.
+ * @param {string} stage
+ */
+export function visibleDocKinds(stage) {
+  const r = STAGE_RANK[stage] ?? 0;
+  const kinds = ['FORMAT_PDF', 'FORMAT_EXCEL'];
+  if (r >= STAGE_RANK.CONCEPT) kinds.push('CONCEPT');
+  if (r >= STAGE_RANK.COSTING) kinds.push('COSTING');
+  if (r >= STAGE_RANK.OFFER_RELEASED) kinds.push('OFFER');
+  return kinds;
+}
+
 /**
  * How many days an enquiry may sit in a stage before it's flagged as aging.
  * WON / LOST are terminal and never age.
