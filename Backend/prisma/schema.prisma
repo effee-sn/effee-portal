@@ -910,15 +910,17 @@ model Enquiry {
 /// visit or email - with its minutes (MOM) and an optional follow-up. Many per
 /// enquiry, shown as a chronological timeline.
 model EnquiryActivity {
-  id           Int          @id @default(autoincrement())
-  enquiry      Enquiry      @relation(fields: [enquiry_id], references: [id])
+  id           Int           @id @default(autoincrement())
+  enquiry      Enquiry       @relation(fields: [enquiry_id], references: [id])
   enquiry_id   Int
   type         ActivityType
+  // The enquiry's stage when this activity/review was logged (for analysis).
+  stage        EnquiryStage?
   activity_at  DateTime
   duration_min Int?
   subject      String
-  minutes      String?      @db.Text
-  outcome      String?      @db.Text
+  minutes      String?       @db.Text
+  outcome      String?       @db.Text
 
   // Participants: internal = JSON array of user ids; customer = free text.
   internal_participants String? @db.Text

@@ -10,6 +10,7 @@ function createActivityRepository(db) {
     id: true,
     enquiry_id: true,
     type: true,
+    stage: true,
     activity_at: true,
     duration_min: true,
     subject: true,

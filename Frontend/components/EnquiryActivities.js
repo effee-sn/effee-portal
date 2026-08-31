@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
-import { ACTIVITY_MEDIUMS, MEDIUM_LABEL, TEMPERATURES, TEMPERATURE_STYLE } from '@/lib/salesOptions';
+import { ACTIVITY_MEDIUMS, MEDIUM_LABEL, TEMPERATURES, TEMPERATURE_STYLE, STAGE_STYLE } from '@/lib/salesOptions';
 import UserMultiSelect from '@/components/UserMultiSelect';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
@@ -207,6 +207,12 @@ export default function EnquiryActivities({ enquiryId, canEdit, users = [], onCh
             <span className="text-xs text-gray-400">{fmtDateTime(a.activity_at)}</span>
             {a.duration_min ? <span className="text-xs text-gray-400">· {a.duration_min}m</span> : null}
             {a.temperature && <TempChip value={a.temperature} />}
+            {a.stage && STAGE_STYLE[a.stage] && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium"
+                style={{ color: STAGE_STYLE[a.stage].color, backgroundColor: STAGE_STYLE[a.stage].bg }}>
+                {STAGE_STYLE[a.stage].label}
+              </span>
+            )}
           </div>
           <p className="text-sm font-medium text-gray-800 mt-0.5">{a.subject}</p>
           {a.minutes && <p className="text-sm text-gray-600 mt-0.5 whitespace-pre-wrap">{a.minutes}</p>}

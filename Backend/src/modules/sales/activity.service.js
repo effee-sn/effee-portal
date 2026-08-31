@@ -74,6 +74,7 @@ function createActivityService(repository) {
 
       const data = pickWritable(dto, {
         enquiry_id: enquiryId,
+        stage: enquiry.stage, // stamp the stage this activity was logged in
         created_by: actor?.id ?? null,
         updated_by: actor?.id ?? null,
       });
