@@ -14,6 +14,7 @@ function createAttachmentRepository(db) {
     mime_type: true,
     size_bytes: true,
     note: true,
+    stage: true,
     sent_at: true,
     sent_by: true,
     created_at: true,

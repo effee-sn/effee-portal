@@ -2,6 +2,17 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiGet, apiPost, apiDelete, apiPostForm, downloadFile } from '@/lib/api';
+import { STAGE_STYLE } from '@/lib/salesOptions';
+
+/** Small chip naming the stage a document was uploaded in. */
+function StageTag({ stage }) {
+  const s = STAGE_STYLE[stage];
+  if (!s) return null;
+  return (
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0"
+      style={{ color: s.color, backgroundColor: s.bg }}>Added at {s.label}</span>
+  );
+}
 
 const ACCEPT = '.pdf,.xls,.xlsx,.doc,.docx,.csv,.png,.jpg,.jpeg';
 
@@ -175,9 +186,10 @@ export default function EnquiryAttachments({
                   {offers.map((a, idx) => (
                     <div key={a.id} className="flex items-center justify-between gap-2 py-2">
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-[10px] font-semibold text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 shrink-0">v{offers.length - idx}</span>
                           <FileLine a={a} />
+                          <StageTag stage={a.stage} />
                         </div>
                         {a.sent_at && <span className="text-[11px] text-green-600">Sent to customer · {fmtDate(a.sent_at)}</span>}
                       </div>

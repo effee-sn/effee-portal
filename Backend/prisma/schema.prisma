@@ -989,6 +989,9 @@ model EnquiryAttachment {
   mime_type   String
   size_bytes  Int
   note        String?        @db.Text
+  // The enquiry's stage when this document was uploaded (for analysis — e.g.
+  // whether an offer version was added at Offer Released or during Negotiation).
+  stage       EnquiryStage?
 
   // Offer send record.
   sent_at DateTime?

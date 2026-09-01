@@ -74,6 +74,7 @@ function createAttachmentService(repository) {
         mime_type: file.mimetype,
         size_bytes: file.size,
         note: dto.note ?? null,
+        stage: enquiry.stage, // stamp the stage this document was uploaded in
         created_by: actor?.id ?? null,
         updated_by: actor?.id ?? null,
       });
