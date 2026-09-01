@@ -6,7 +6,7 @@ const { schemas } = require('../../core');
 const TYPES = ['GENERATED', 'INCOMING'];
 // Stages a user may set directly. WON / LOST are reached only through the
 // dedicated win / lose actions so their close-out fields are captured.
-const ACTIVE_STAGES = ['NEW', 'CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED', 'FOLLOW_UP', 'NEGOTIATION'];
+const ACTIVE_STAGES = ['NEW', 'CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED', 'FOLLOW_UP', 'NEGOTIATION', 'NEGOTIATION_FOLLOW_UP'];
 const ALL_STAGES = [...ACTIVE_STAGES, 'WON', 'LOST'];
 
 const optionalText = (max) =>

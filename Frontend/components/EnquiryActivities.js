@@ -29,9 +29,9 @@ function TempChip({ value }) {
 // ── Add / edit modal ──────────────────────────────────────────────────────────
 function ActivityModal({ enquiryId, activity, users, stage, onClose, onSaved }) {
   const isEdit = Boolean(activity);
-  // The "needs negotiation" flag only does anything at the Follow-up stage,
-  // where it flips the enquiry into Negotiation.
-  const canNegotiate = stage === 'FOLLOW_UP';
+  // The "needs negotiation" flag applies at either follow-up stage, where it
+  // moves the enquiry into Negotiation (a first round, or a further one).
+  const canNegotiate = stage === 'FOLLOW_UP' || stage === 'NEGOTIATION_FOLLOW_UP';
   const [form, setForm] = useState({
     type: activity?.type || 'CALL',
     activity_at: toLocalInput(activity?.activity_at || new Date()),

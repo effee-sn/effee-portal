@@ -15,9 +15,10 @@ const STAGE_HINT = {
   CONCEPT:        'Prepare and upload the concept document.',
   COSTING:        'Work out and upload the costing.',
   COSTING_REVIEW: 'Review the costing and upload the costing review document.',
-  OFFER_RELEASED: 'Upload the offer and mark it sent — that moves the enquiry into Follow-up.',
-  FOLLOW_UP:      'Log follow-ups. Tick “Needs negotiation” on one to move into Negotiation, or Win / Lose to close.',
-  NEGOTIATION:    'Add the revised offer version and mark it sent — that returns to Follow-up.',
+  OFFER_RELEASED:        'Upload the offer and mark it sent — that moves the enquiry into Follow-up.',
+  FOLLOW_UP:             'Log follow-ups. Tick “Needs negotiation” on one to move into Negotiation, or Win / Lose to close.',
+  NEGOTIATION:           'Add the revised offer version and mark it sent — that moves forward to Negotiation Follow-up.',
+  NEGOTIATION_FOLLOW_UP: 'Log negotiation follow-ups. Tick “Needs negotiation” for another round, or Win / Lose to close.',
 };
 
 export default function EnquiryProcess({ enquiry, canManage, busy, onPick, blocked = {} }) {

@@ -133,11 +133,14 @@ function createAttachmentService(repository) {
         changes: { sent: { from: Boolean(before.sent_at), to: sent } },
       });
 
-      // Sending an offer moves the deal into follow-up: from Offer Released
-      // (the first offer) or back from Negotiation (a revised offer). The stage
-      // move is a side effect of sending, not a manual step.
-      if (sent && (enquiry.stage === 'OFFER_RELEASED' || enquiry.stage === 'NEGOTIATION')) {
+      // Sending an offer moves the deal forward into a follow-up: the first
+      // offer (Offer Released) → Follow-up; a revised offer (Negotiation) →
+      // Negotiation Follow-up, its own forward stage. The move is a side effect
+      // of sending, not a manual step.
+      if (sent && enquiry.stage === 'OFFER_RELEASED') {
         await enquiryService.setStageAuto(before.enquiry_id, 'FOLLOW_UP', actor);
+      } else if (sent && enquiry.stage === 'NEGOTIATION') {
+        await enquiryService.setStageAuto(before.enquiry_id, 'NEGOTIATION_FOLLOW_UP', actor);
       }
 
       return attachment;

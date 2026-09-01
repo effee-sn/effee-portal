@@ -262,7 +262,7 @@ function createEnquiryService(repository) {
      * the stage as a side effect rather than a manual "move to next" click.
      * No-op (returns the current row) if already at the target stage.
      * @param {number} id
-     * @param {'FOLLOW_UP'|'NEGOTIATION'} toStage
+     * @param {'FOLLOW_UP'|'NEGOTIATION'|'NEGOTIATION_FOLLOW_UP'} toStage
      * @param {import('../../core/http/requestContext').ActorContext} [actor]
      */
     async setStageAuto(id, toStage, actor) {
