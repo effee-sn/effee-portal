@@ -304,6 +304,11 @@ export default function FlowBuilderPage() {
   const [rows, setRows]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal]     = useState(null);
+  const [tab, setTab]         = useState('service');
+
+  // Step workflows belong to the service module; Sales uses its own handler
+  // config (the Sales tab), not step workflows.
+  const serviceRows = rows.filter((w) => (w.module || 'service') === 'service');
 
   const canView   = me?.is_system || can('FLOW_VIEW');
   const canCreate = me?.is_system || can('FLOW_CREATE');
@@ -347,7 +352,20 @@ export default function FlowBuilderPage() {
 
   return (
     <div>
-      <SalesWorkflowCard canEdit={me?.is_system || can('SALES_EDIT')} />
+      {/* Module tabs — each module's flow is configured on its own tab. */}
+      <div className="flex items-center gap-1 mb-4 border-b border-gray-200">
+        {[{ key: 'service', label: 'Services' }, { key: 'sales', label: 'Sales' }].map((t) => (
+          <button key={t.key} type="button" onClick={() => setTab(t.key)}
+            className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 cursor-pointer ${tab === t.key ? 'text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            style={tab === t.key ? { borderColor: 'var(--ams-primary)' } : undefined}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'sales' && <SalesWorkflowCard canEdit={me?.is_system || can('SALES_EDIT')} />}
+
+      {tab === 'service' && (
       <div className="bg-white rounded border border-gray-200 overflow-hidden">
         <div className="flex items-center gap-2 px-3 py-3 border-b border-gray-200 bg-white">
           {canCreate && (
@@ -357,18 +375,17 @@ export default function FlowBuilderPage() {
               New Workflow
             </button>
           )}
-          <span className="text-sm font-medium text-gray-700 shrink-0 px-1">Workflows</span>
+          <span className="text-sm font-medium text-gray-700 shrink-0 px-1">Service Workflows</span>
         </div>
 
-        {rows.length === 0 ? (
+        {serviceRows.length === 0 ? (
           <div className="py-20 text-center text-sm text-gray-400">No workflows yet. Create one to define a flow.</div>
         ) : (
           <div className="divide-y divide-gray-100">
-            {rows.map((w) => (
+            {serviceRows.map((w) => (
               <div key={w.id} className="px-5 py-4">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="font-medium text-gray-800">{w.name}</span>
-                  <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 uppercase">{w.module}</span>
                   {w.is_active && (
                     <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200">Active</span>
                   )}
@@ -413,6 +430,7 @@ export default function FlowBuilderPage() {
           </div>
         )}
       </div>
+      )}
 
       {modal?.type === 'create' && <WorkflowModal onClose={() => setModal(null)} onSaved={onSaved} />}
       {modal?.type === 'edit'   && <WorkflowModal workflow={modal.workflow} onClose={() => setModal(null)} onSaved={onSaved} />}
