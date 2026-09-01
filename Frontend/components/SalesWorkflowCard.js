@@ -59,7 +59,7 @@ export default function SalesWorkflowCard({ canEdit = false }) {
                 <li><span className="font-medium text-gray-800">Field</span> follows up</li>
                 <li><span className="font-medium text-gray-800">Internal</span> prepares &amp; sends each revised (negotiation) offer</li>
                 <li><span className="font-medium text-gray-800">Field</span> follows up — loops until the follow-up is ended</li>
-                <li><span className="font-medium text-gray-800">Internal</span> marks it Won / Lost</li>
+                <li><span className="font-medium text-gray-800">Field</span> marks it Won / Lost</li>
               </ol>
               <p className="text-xs text-gray-400 mt-3">
                 The <span className="font-medium">Field</span> person is whoever raises each enquiry. The

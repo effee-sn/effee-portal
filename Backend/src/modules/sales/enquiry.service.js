@@ -8,8 +8,8 @@ const { NotFoundError, ConflictError, ValidationError, ForbiddenError, buildSear
 /**
  * Which role holds the enquiry at a given stage. FIELD = the initiator who
  * raised it; INTERNAL = the configured Internal Sales handler. The initiator
- * owns intake and every follow-up; Internal owns Review→offer, negotiation
- * sends, and the close.
+ * owns intake, every follow-up, and the close (Won/Lost); Internal owns
+ * Review→offer and the negotiation sends.
  * @param {string} stage
  * @returns {'FIELD'|'INTERNAL'}
  */
@@ -19,10 +19,12 @@ function phaseRole(stage) {
     case 'CONTACTED':
     case 'FOLLOW_UP':
     case 'NEGOTIATION_FOLLOW_UP':
+    case 'WON':
+    case 'LOST':
       return 'FIELD';
     default:
-      // REVIEW, CONCEPT, COSTING, COSTING_REVIEW, OFFER_RELEASED, NEGOTIATION,
-      // WON, LOST — the internal preparation / negotiation-send / close phases.
+      // REVIEW, CONCEPT, COSTING, COSTING_REVIEW, OFFER_RELEASED, NEGOTIATION —
+      // the internal preparation / negotiation-send phases.
       return 'INTERNAL';
   }
 }
@@ -352,25 +354,6 @@ function createEnquiryService(repository) {
         actor,
         changes: { stage: { from: before.stage, to: toStage }, auto: true },
       });
-      return enquiry;
-    },
-
-    /**
-     * Hands the enquiry to the Internal Sales handler without changing the
-     * stage — used when the field person ends the follow-up (at Follow-up or
-     * Negotiation Follow-up), the signal to close it out. No-op if already held
-     * by that handler, or if no internal handler is configured.
-     * @param {number} id
-     * @param {import('../../core/http/requestContext').ActorContext} [actor]
-     */
-    async handoffToInternal(id, actor) {
-      const internalId = await internalHandlerId();
-      if (!internalId) return null;
-      const before = await repository.findById(id);
-      if (!before || before.handler_id === internalId) return before;
-
-      const enquiry = await repository.update(id, { handler_id: internalId, updated_by: actor?.id ?? null });
-      notifyHandoff(enquiry, internalId, actor);
       return enquiry;
     },
 
