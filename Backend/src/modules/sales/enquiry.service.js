@@ -490,6 +490,59 @@ function createEnquiryService(repository) {
     },
 
     /**
+     * Supervisory reassignment: change the field owner (the persistent
+     * initiator) and/or the current handler. Not gated to the handler — it's a
+     * lead/admin action (route-authorised by SALES_EDIT) for covering someone
+     * who's out. Moving the owner also moves the baton when the field owner
+     * currently holds it (unless a handler is given explicitly).
+     * @param {number} id
+     * @param {{ owner_id?: number, handler_id?: number }} dto
+     * @param {import('../../core/http/requestContext').ActorContext} [actor]
+     */
+    async reassign(id, dto, actor) {
+      const before = await repository.findById(id);
+      if (!before) throw new NotFoundError('Enquiry');
+
+      const data = { updated_by: actor?.id ?? null };
+      if (dto.owner_id !== undefined && dto.owner_id !== before.owner_id) {
+        if (!(await repository.userExists(dto.owner_id))) {
+          throw new ValidationError('Validation failed', [{ field: 'owner_id', message: 'Selected owner does not exist' }]);
+        }
+        data.owner_id = dto.owner_id;
+        // If the field initiator currently holds the baton, it follows them.
+        if (before.handler_id === before.owner_id && dto.handler_id === undefined) {
+          data.handler_id = dto.owner_id;
+        }
+      }
+      if (dto.handler_id !== undefined && dto.handler_id !== before.handler_id) {
+        if (!(await repository.userExists(dto.handler_id))) {
+          throw new ValidationError('Validation failed', [{ field: 'handler_id', message: 'Selected handler does not exist' }]);
+        }
+        data.handler_id = dto.handler_id;
+      }
+      if (data.owner_id === undefined && data.handler_id === undefined) return before;
+
+      const enquiry = await repository.update(id, data);
+      if (data.handler_id !== undefined && data.handler_id !== before.handler_id) {
+        notifyHandoff(enquiry, data.handler_id, actor);
+      }
+
+      await auditService.record({
+        action: auditService.Action.UPDATE,
+        entity: 'Enquiry',
+        entityId: id,
+        actor,
+        changes: {
+          ...(data.owner_id !== undefined ? { owner_id: { from: before.owner_id, to: data.owner_id } } : {}),
+          ...(data.handler_id !== undefined ? { handler_id: { from: before.handler_id, to: data.handler_id } } : {}),
+          reassigned: true,
+        },
+      });
+
+      return enquiry;
+    },
+
+    /**
      * @param {number} id
      * @param {import('../../core/http/requestContext').ActorContext} [actor]
      */

@@ -56,6 +56,12 @@ const reopenEnquiry = async (req, res) => {
   ApiResponse.ok(res, enquiry);
 };
 
+/** `POST /sales/enquiries/:id/reassign` */
+const reassignEnquiry = async (req, res) => {
+  const enquiry = await enquiryService.reassign(req.params.id, req.body, requestContext(req));
+  ApiResponse.ok(res, enquiry);
+};
+
 /** `DELETE /sales/enquiries/:id` */
 const deleteEnquiry = async (req, res) => {
   await enquiryService.remove(req.params.id, requestContext(req));
@@ -71,5 +77,6 @@ module.exports = {
   winEnquiry,
   loseEnquiry,
   reopenEnquiry,
+  reassignEnquiry,
   deleteEnquiry,
 };

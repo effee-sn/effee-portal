@@ -146,6 +146,57 @@ function LoseModal({ enquiryId, onClose, onDone }) {
   );
 }
 
+// ── Reassign modal ────────────────────────────────────────────────────────────
+function ReassignModal({ enquiry, users, onClose, onDone }) {
+  const [form, setForm] = useState({
+    owner_id:   enquiry.owner_id ? String(enquiry.owner_id) : '',
+    handler_id: (enquiry.handler_id ?? enquiry.owner_id) ? String(enquiry.handler_id ?? enquiry.owner_id) : '',
+  });
+  const [error, setError]   = useState('');
+  const [saving, setSaving] = useState(false);
+  const change = (e) => { setForm({ ...form, [e.target.name]: e.target.value }); setError(''); };
+  const go = async (e) => {
+    e.preventDefault();
+    setSaving(true); setError('');
+    try {
+      const res = await apiPost(`/sales/enquiries/${enquiry.id}/reassign`, {
+        owner_id: form.owner_id ? Number(form.owner_id) : undefined,
+        handler_id: form.handler_id ? Number(form.handler_id) : undefined,
+      });
+      onDone(res.data); onClose();
+    } catch (err) { setError(err.message); }
+    finally { setSaving(false); }
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <form onSubmit={go} className="w-full max-w-md bg-white rounded-lg shadow-xl p-6">
+        <h2 className="text-base font-semibold text-gray-800 mb-1">Reassign Enquiry</h2>
+        <p className="text-sm text-gray-500 mb-4">Cover for someone who’s out. The owner is the field initiator; the handler is who holds it right now.</p>
+        {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm mb-3">{error}</div>}
+        <div className="space-y-4">
+          <div>
+            <label className={label}>Field owner (initiator)</label>
+            <select name="owner_id" value={form.owner_id} onChange={change} className="ams-input">
+              {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={label}>Current handler</label>
+            <select name="handler_id" value={form.handler_id} onChange={change} className="ams-input">
+              {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">Reverts to the phase’s role at the next handoff.</p>
+          </div>
+        </div>
+        <div className="flex gap-3 mt-5">
+          <button type="button" onClick={onClose} className="btn-secondary flex-1 justify-center py-2">Cancel</button>
+          <button type="submit" disabled={saving} className="btn-primary flex-1 justify-center py-2">{saving ? 'Saving…' : 'Reassign'}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 // ── Edit modal ────────────────────────────────────────────────────────────────
 function EditModal({ enquiry, users, onClose, onDone }) {
   const [form, setForm] = useState({
@@ -315,6 +366,9 @@ export default function EnquiryDetailPage() {
   const [showHistory, setShowHistory] = useState(false);
 
   const canDelete = me?.is_system || can('SALES_DELETE');
+  // Reassignment is a supervisory action — any SALES_EDIT user, not only the
+  // current handler.
+  const canReassign = me?.is_system || can('SALES_EDIT');
 
   const loadReadiness = useCallback(() => {
     apiGet(`/sales/enquiries/${id}/readiness`, { silent: true }).then((r) => setReadiness(r.data)).catch(() => {});
@@ -405,7 +459,7 @@ export default function EnquiryDetailPage() {
               {enquiry.expected_value != null && <span>Value: {formatINR(enquiry.expected_value)}</span>}
             </div>
           </div>
-          {(canManage || canDelete) && (
+          {(canManage || canDelete || canReassign) && (
             <div className="flex items-center gap-2 shrink-0">
               {canManage && (
                 <>
@@ -422,6 +476,9 @@ export default function EnquiryDetailPage() {
                     <button onClick={reopen} disabled={busy} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Reopen</button>
                   )}
                 </>
+              )}
+              {canReassign && !isClosed && (
+                <button onClick={() => setModal('reassign')} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Reassign</button>
               )}
               {canDelete && (
                 <button onClick={() => setModal('delete')} title="Delete enquiry"
@@ -514,6 +571,7 @@ export default function EnquiryDetailPage() {
       {showHistory && <StageHistoryDrawer events={enquiry.stageEvents} users={users} onClose={() => setShowHistory(false)} />}
 
       {modal === 'edit'  && <EditModal enquiry={enquiry} users={users} onClose={() => setModal(null)} onDone={setEnquiry} />}
+      {modal === 'reassign' && <ReassignModal enquiry={enquiry} users={users} onClose={() => setModal(null)} onDone={setEnquiry} />}
       {modal === 'win'   && <WinModal enquiryId={enquiry.id} onClose={() => setModal(null)} onDone={setEnquiry} />}
       {modal === 'lose'  && <LoseModal enquiryId={enquiry.id} onClose={() => setModal(null)} onDone={setEnquiry} />}
       {modal === 'delete' && (

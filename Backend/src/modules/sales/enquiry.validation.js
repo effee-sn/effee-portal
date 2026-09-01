@@ -87,6 +87,16 @@ const loseEnquiryBody = z.object({
   lost_to:     optionalText(191),
 });
 
+// Supervisory reassignment: change the field owner and/or the current handler.
+// At least one must be supplied.
+const reassignEnquiryBody = z.object({
+  owner_id:   optionalOwner,
+  handler_id: optionalOwner,
+}).refine(
+  (d) => d.owner_id !== undefined || d.handler_id !== undefined,
+  { message: 'Choose a new owner or handler' }
+);
+
 module.exports = {
   TYPES,
   ACTIVE_STAGES,
@@ -97,4 +107,5 @@ module.exports = {
   updateEnquiryBody,
   winEnquiryBody,
   loseEnquiryBody,
+  reassignEnquiryBody,
 };

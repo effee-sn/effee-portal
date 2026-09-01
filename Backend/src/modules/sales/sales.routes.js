@@ -19,11 +19,11 @@ const {
 
 const {
   listEnquiriesQuery, enquiryIdParam, createEnquiryBody, updateEnquiryBody,
-  winEnquiryBody, loseEnquiryBody,
+  winEnquiryBody, loseEnquiryBody, reassignEnquiryBody,
 } = require('./enquiry.validation');
 const {
   getEnquiries, getEnquiryById, getEnquiryReadiness, createEnquiry, updateEnquiry,
-  winEnquiry, loseEnquiry, reopenEnquiry, deleteEnquiry,
+  winEnquiry, loseEnquiry, reopenEnquiry, reassignEnquiry, deleteEnquiry,
 } = require('./enquiry.controller');
 
 const activityValidation = require('./activity.validation');
@@ -180,6 +180,13 @@ router.post(
   authorize('SALES_EDIT'),
   validate({ params: enquiryIdParam }),
   asyncHandler(reopenEnquiry)
+);
+
+router.post(
+  '/enquiries/:id/reassign',
+  authorize('SALES_EDIT'),
+  validate({ params: enquiryIdParam, body: reassignEnquiryBody }),
+  asyncHandler(reassignEnquiry)
 );
 
 router.delete(
