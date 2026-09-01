@@ -5,6 +5,7 @@ import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
+import SalesWorkflowCard from '@/components/SalesWorkflowCard';
 
 // `ORIGINATING_HEAD` is a builder-only convenience: it maps to the backend's
 // DEPARTMENT_HEAD type with no fixed department, which the engine resolves to
@@ -346,6 +347,7 @@ export default function FlowBuilderPage() {
 
   return (
     <div>
+      <SalesWorkflowCard canEdit={me?.is_system || can('SALES_EDIT')} />
       <div className="bg-white rounded border border-gray-200 overflow-hidden">
         <div className="flex items-center gap-2 px-3 py-3 border-b border-gray-200 bg-white">
           {canCreate && (
