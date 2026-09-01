@@ -37,9 +37,21 @@ const {
   listAttachments, uploadAttachment, downloadAttachment, markSent, deleteAttachment,
 } = require('./attachment.controller');
 
+const { updateWorkflowBody } = require('./workflow.validation');
+const { getWorkflow, updateWorkflow } = require('./workflow.controller');
+
 const router = Router();
 
 router.use(authenticate);
+
+// ── Sales workflow config (the selected Internal Sales handler) ───────────────
+router.get('/workflow', authorize('SALES_VIEW'), asyncHandler(getWorkflow));
+router.put(
+  '/workflow',
+  authorize('SALES_EDIT'),
+  validate({ body: updateWorkflowBody }),
+  asyncHandler(updateWorkflow)
+);
 
 // ── Customers ────────────────────────────────────────────────────────────────
 router.get(

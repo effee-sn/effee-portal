@@ -1,8 +1,31 @@
 const { enquiryRepository } = require('./enquiry.repository');
+const { workflowRepository } = require('./workflow.repository');
 const { auditService } = require('../audit/audit.service');
 const { notificationService } = require('../notification/notification.service');
 const { missingForStage, GATED_STAGES } = require('./stageGate');
 const { NotFoundError, ConflictError, ValidationError, ForbiddenError, buildSearchClause } = require('../../core');
+
+/**
+ * Which role holds the enquiry at a given stage. FIELD = the initiator who
+ * raised it; INTERNAL = the configured Internal Sales handler. The initiator
+ * owns intake and every follow-up; Internal owns Review→offer, negotiation
+ * sends, and the close.
+ * @param {string} stage
+ * @returns {'FIELD'|'INTERNAL'}
+ */
+function phaseRole(stage) {
+  switch (stage) {
+    case 'NEW':
+    case 'CONTACTED':
+    case 'FOLLOW_UP':
+    case 'NEGOTIATION_FOLLOW_UP':
+      return 'FIELD';
+    default:
+      // REVIEW, CONCEPT, COSTING, COSTING_REVIEW, OFFER_RELEASED, NEGOTIATION,
+      // WON, LOST — the internal preparation / negotiation-send / close phases.
+      return 'INTERNAL';
+  }
+}
 
 /**
  * Enquiry business logic — the opportunity pipeline. WON / LOST are reached
@@ -104,6 +127,39 @@ function createEnquiryService(repository) {
     return data;
   }
 
+  /**
+   * The user who should hold the enquiry at `stage`: the field initiator
+   * (owner) or the configured Internal Sales handler. Falls back to the owner
+   * when no internal handler is configured, so an enquiry is never left with
+   * nobody able to act.
+   * @param {string} stage
+   * @param {number} ownerId
+   * @param {number|null} internalId
+   */
+  function resolveHandler(stage, ownerId, internalId) {
+    return phaseRole(stage) === 'INTERNAL' ? (internalId ?? ownerId) : ownerId;
+  }
+
+  /** The configured Internal Sales handler id (or null). */
+  function internalHandlerId() {
+    return workflowRepository.internalUserId();
+  }
+
+  /** Notifies whoever the enquiry has just been handed to (never the actor). */
+  function notifyHandoff(enquiry, handlerId, actor) {
+    if (!handlerId || handlerId === actor?.id) return;
+    notificationService.notify({
+      userIds: [handlerId],
+      type: notificationService.Type.ENQUIRY_ASSIGNED,
+      title: `Enquiry handed to you: ${enquiry.ref_no}`,
+      body: `${enquiry.title} — now at ${enquiry.stage}`,
+      entityType: 'Enquiry',
+      entityId: String(enquiry.id),
+      link: `/dashboard/sales/enquiries/${enquiry.id}`,
+      actorId: actor?.id ?? null,
+    });
+  }
+
   /** Notifies a newly assigned owner (never the actor themselves). */
   function notifyOwner(enquiry, actor) {
     notificationService.notify({
@@ -167,6 +223,8 @@ function createEnquiryService(repository) {
 
       const data = pickWritable(dto, {
         owner_id,
+        // The raiser is both the field initiator (owner) and the first handler.
+        handler_id: resolveHandler(dto.stage || 'NEW', owner_id, null),
         ref_no: await nextRefNo(),
         created_by: actor?.id ?? null,
         updated_by: actor?.id ?? null,
@@ -234,12 +292,17 @@ function createEnquiryService(repository) {
 
       const stageChanged = dto.stage !== undefined && dto.stage !== before.stage;
       const data = pickWritable(dto, { updated_by: actor?.id ?? null });
-      if (stageChanged) data.stage_since = new Date();
+      if (stageChanged) {
+        data.stage_since = new Date();
+        // Hand the baton to whoever owns the new stage's phase.
+        data.handler_id = resolveHandler(dto.stage, before.owner_id, await internalHandlerId());
+      }
       const enquiry = await repository.update(id, data);
       if (stageChanged) {
         await repository.recordStageEvent({
           enquiry_id: id, from_stage: before.stage, to_stage: dto.stage, changed_by: actor?.id ?? null,
         });
+        if (data.handler_id !== before.handler_id) notifyHandoff(enquiry, data.handler_id, actor);
       }
 
       await auditService.record({
@@ -270,12 +333,14 @@ function createEnquiryService(repository) {
       if (!before) throw new NotFoundError('Enquiry');
       if (before.stage === toStage) return before;
 
+      const handler_id = resolveHandler(toStage, before.owner_id, await internalHandlerId());
       const enquiry = await repository.update(id, {
-        stage: toStage, stage_since: new Date(), updated_by: actor?.id ?? null,
+        stage: toStage, stage_since: new Date(), handler_id, updated_by: actor?.id ?? null,
       });
       await repository.recordStageEvent({
         enquiry_id: id, from_stage: before.stage, to_stage: toStage, changed_by: actor?.id ?? null,
       });
+      if (handler_id !== before.handler_id) notifyHandoff(enquiry, handler_id, actor);
 
       await auditService.record({
         action: auditService.Action.UPDATE,
@@ -284,6 +349,25 @@ function createEnquiryService(repository) {
         actor,
         changes: { stage: { from: before.stage, to: toStage }, auto: true },
       });
+      return enquiry;
+    },
+
+    /**
+     * Hands the enquiry to the Internal Sales handler without changing the
+     * stage — used when the field person ends the follow-up (at Follow-up or
+     * Negotiation Follow-up), the signal to close it out. No-op if already held
+     * by that handler, or if no internal handler is configured.
+     * @param {number} id
+     * @param {import('../../core/http/requestContext').ActorContext} [actor]
+     */
+    async handoffToInternal(id, actor) {
+      const internalId = await internalHandlerId();
+      if (!internalId) return null;
+      const before = await repository.findById(id);
+      if (!before || before.handler_id === internalId) return before;
+
+      const enquiry = await repository.update(id, { handler_id: internalId, updated_by: actor?.id ?? null });
+      notifyHandoff(enquiry, internalId, actor);
       return enquiry;
     },
 
@@ -307,6 +391,7 @@ function createEnquiryService(repository) {
         order_date: dto.order_date ?? new Date(),
         won_declaration: dto.won_declaration ?? null,
         won_terms: dto.won_terms ?? null,
+        handler_id: resolveHandler('WON', before.owner_id, await internalHandlerId()),
         // Clear any prior lost close-out.
         lost_at: null,
         lost_reason: null,
@@ -352,6 +437,7 @@ function createEnquiryService(repository) {
         lost_at: new Date(),
         lost_reason: dto.lost_reason,
         lost_to: dto.lost_to ?? null,
+        handler_id: resolveHandler('LOST', before.owner_id, await internalHandlerId()),
         updated_by: actor?.id ?? null,
       };
       const enquiry = await repository.update(id, data);
@@ -380,6 +466,7 @@ function createEnquiryService(repository) {
       const data = {
         stage: 'FOLLOW_UP',
         stage_since: new Date(),
+        handler_id: before.owner_id, // Follow-up is the field initiator's phase
         won_at: null, order_no: null, order_value: null, order_date: null,
         won_declaration: null, won_terms: null,
         lost_at: null, lost_reason: null, lost_to: null,

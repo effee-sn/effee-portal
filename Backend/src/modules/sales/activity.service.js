@@ -116,6 +116,10 @@ function createActivityService(repository) {
       if (!dto.is_review && dto.needs_negotiation
         && (enquiry.stage === 'FOLLOW_UP' || enquiry.stage === 'NEGOTIATION_FOLLOW_UP')) {
         await enquiryService.setStageAuto(enquiryId, 'NEGOTIATION', actor);
+      } else if (!dto.is_review && dto.follow_up_ended
+        && (enquiry.stage === 'FOLLOW_UP' || enquiry.stage === 'NEGOTIATION_FOLLOW_UP')) {
+        // Ending the follow-up hands it to Internal Sales to close (Won/Lost).
+        await enquiryService.handoffToInternal(enquiryId, actor);
       }
 
       return mapRow(activity);
@@ -145,10 +149,13 @@ function createActivityService(repository) {
       });
 
       // Flagging a follow-up for negotiation moves either follow-up →
-      // Negotiation.
+      // Negotiation; ending it hands off to Internal Sales to close.
       if (!before.is_review && dto.needs_negotiation
         && (enquiry.stage === 'FOLLOW_UP' || enquiry.stage === 'NEGOTIATION_FOLLOW_UP')) {
         await enquiryService.setStageAuto(before.enquiry_id, 'NEGOTIATION', actor);
+      } else if (!before.is_review && dto.follow_up_ended
+        && (enquiry.stage === 'FOLLOW_UP' || enquiry.stage === 'NEGOTIATION_FOLLOW_UP')) {
+        await enquiryService.handoffToInternal(before.enquiry_id, actor);
       }
 
       return mapRow(activity);

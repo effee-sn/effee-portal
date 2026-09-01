@@ -77,8 +77,10 @@ model User {
   workflowSteps       WorkflowStep[]       @relation("StepAssigneeUser")
 
   // Sales module ownership.
-  ownedCustomers Customer[] @relation("CustomerOwner")
-  ownedEnquiries Enquiry[]  @relation("EnquiryOwner")
+  ownedCustomers   Customer[] @relation("CustomerOwner")
+  ownedEnquiries   Enquiry[]  @relation("EnquiryOwner")
+  handledEnquiries Enquiry[]  @relation("EnquiryHandler")
+  salesWorkflows   SalesWorkflowConfig[] @relation("SalesWorkflowInternal")
 
   // `email` and `phone` remain globally unique, including across soft-deleted
   // rows. That is intentional: reusing a departed user's address would make
@@ -876,9 +878,16 @@ model Enquiry {
   expected_value Decimal?  @db.Decimal(14, 2)
   expected_close DateTime?
 
-  // The assigned salesperson. Performs the stage work (review -> offer -> close).
+  // The field initiator — the salesperson who raised it and owns the customer
+  // relationship. Persistent for the life of the enquiry.
   owner    User @relation("EnquiryOwner", fields: [owner_id], references: [id])
   owner_id Int
+
+  // The current handler (the workflow "baton"): the person who may act right
+  // now. Moves between the field initiator and the internal handler as the
+  // enquiry crosses phase boundaries. Null until the workflow first assigns it.
+  handler    User? @relation("EnquiryHandler", fields: [handler_id], references: [id])
+  handler_id Int?
 
   // Won close-out (no execution module - we just capture the order).
   won_at          DateTime?
@@ -907,10 +916,24 @@ model Enquiry {
 
   @@index([customer_id])
   @@index([owner_id])
+  @@index([handler_id])
   @@index([stage])
   @@index([enquiry_type])
   @@index([deleted_at])
   @@index([created_at])
+}
+
+/// Sales workflow configuration (single row). Holds the selected Internal Sales
+/// handler — the person the enquiry hands off to for the preparation,
+/// negotiation and close phases. Chosen and saved in the Sales Workflow screen.
+model SalesWorkflowConfig {
+  id               Int   @id @default(autoincrement())
+  internal_user    User? @relation("SalesWorkflowInternal", fields: [internal_user_id], references: [id])
+  internal_user_id Int?
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  updated_by Int?
 }
 
 /// One customer interaction on an enquiry - a call, meeting, Teams call, site

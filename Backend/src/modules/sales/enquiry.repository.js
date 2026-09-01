@@ -21,6 +21,8 @@ function createEnquiryRepository(db) {
     customer: { select: { id: true, name: true } },
     owner_id: true,
     owner: { select: { id: true, name: true } },
+    handler_id: true,
+    handler: { select: { id: true, name: true } },
     created_at: true,
     _count: {
       select: {
@@ -57,6 +59,8 @@ function createEnquiryRepository(db) {
     contact: { select: { id: true, name: true, designation: true, email: true, phone: true } },
     owner_id: true,
     owner: { select: { id: true, name: true } },
+    handler_id: true,
+    handler: { select: { id: true, name: true, email: true } },
     created_at: true,
     updated_at: true,
     created_by: true,
