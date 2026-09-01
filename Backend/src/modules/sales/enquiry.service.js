@@ -53,8 +53,11 @@ function createEnquiryService(repository) {
    */
   function assertCanManage(enquiry, actor) {
     if (actor?.is_system) return;
-    if (actor?.id && actor.id === enquiry.owner_id) return;
-    throw new ForbiddenError('Only the assigned owner can update this enquiry');
+    // Only the current handler (the workflow baton) may act. Falls back to the
+    // field initiator when no handler is set (e.g. legacy rows).
+    const gateId = enquiry.handler_id ?? enquiry.owner_id;
+    if (actor?.id && actor.id === gateId) return;
+    throw new ForbiddenError('Only the current handler can update this enquiry');
   }
 
   /**

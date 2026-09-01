@@ -27,8 +27,9 @@ function createAttachmentService(repository) {
 
   function assertCanManage(enquiry, actor) {
     if (actor?.is_system) return;
-    if (actor?.id && actor.id === enquiry.owner_id) return;
-    throw new ForbiddenError('Only the assigned owner can manage documents on this enquiry');
+    const gateId = enquiry.handler_id ?? enquiry.owner_id;
+    if (actor?.id && actor.id === gateId) return;
+    throw new ForbiddenError('Only the current handler can manage documents on this enquiry');
   }
 
   /** Best-effort removal of an orphaned upload when the request is rejected. */

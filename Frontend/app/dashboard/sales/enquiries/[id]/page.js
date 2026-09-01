@@ -364,8 +364,10 @@ export default function EnquiryDetailPage() {
   }
 
   const isClosed = enquiry.stage === 'WON' || enquiry.stage === 'LOST';
-  // Stage work is the assigned owner's (or a system user's) — matches the API gate.
-  const canManage = me?.is_system || (me?.id != null && me.id === enquiry.owner_id);
+  // Stage work belongs to the current handler (the workflow baton), falling
+  // back to the field initiator — matches the API gate.
+  const handlerId = enquiry.handler_id ?? enquiry.owner_id;
+  const canManage = me?.is_system || (me?.id != null && me.id === handlerId);
   const wonBlocked = readiness?.blocked?.WON || [];
 
   return (
@@ -393,6 +395,13 @@ export default function EnquiryDetailPage() {
               <button onClick={() => router.push(`/dashboard/sales/customers/${enquiry.customer_id}`)}
                 className="hover:underline text-blue-600 cursor-pointer">{enquiry.customer?.name}</button>
               <span>Owner: {enquiry.owner?.name || '—'}</span>
+              {!isClosed && (
+                <span className="inline-flex items-center gap-1">
+                  With:
+                  <span className="font-medium text-gray-700">{enquiry.handler?.name || enquiry.owner?.name || '—'}</span>
+                  {canManage && <span className="text-[10px] font-semibold text-green-700 bg-green-50 rounded px-1 py-0.5">you</span>}
+                </span>
+              )}
               {enquiry.expected_value != null && <span>Value: {formatINR(enquiry.expected_value)}</span>}
             </div>
           </div>

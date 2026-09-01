@@ -23,8 +23,9 @@ function createActivityService(repository) {
   /** @throws {ForbiddenError} */
   function assertCanManage(enquiry, actor) {
     if (actor?.is_system) return;
-    if (actor?.id && actor.id === enquiry.owner_id) return;
-    throw new ForbiddenError('Only the assigned owner can log activity on this enquiry');
+    const gateId = enquiry.handler_id ?? enquiry.owner_id;
+    if (actor?.id && actor.id === gateId) return;
+    throw new ForbiddenError('Only the current handler can log activity on this enquiry');
   }
 
   /** Parses the stored JSON participant ids back into an array for the API. */
