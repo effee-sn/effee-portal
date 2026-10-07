@@ -94,23 +94,37 @@ function DeleteRoleModal({ role, onClose, onDeleted }) {
   );
 }
 
-// ── Permission Toggle Panel ───────────────────────────────────────────────────
+// ── Permission Matrix Panel ───────────────────────────────────────────────────
+const ACTION_ORDER = ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE', 'FINANCE'];
+const titleCase = (s) => s.charAt(0) + s.slice(1).toLowerCase();
+
 function PermissionPanel({ role, onClose, canEdit }) {
   const [permissions, setPermissions] = useState(role.rolePermissions);
   const [saving, setSaving]           = useState(false);
   const [saved, setSaved]             = useState(false);
   const [error, setError]             = useState('');
 
-  const groupByModule = (perms) => perms.reduce((g, rp) => {
-    const mod = rp.permission.module.name;
-    (g[mod] = g[mod] || []).push(rp);
-    return g;
-  }, {});
+  // Rows = modules (in their natural order); columns = the actions that exist.
+  const modules = [];
+  const byModule = {};
+  for (const rp of permissions) {
+    const m = rp.permission.module.name;
+    if (!byModule[m]) { byModule[m] = {}; modules.push(m); }
+    byModule[m][rp.permission.action] = rp;
+  }
+  const actions = ACTION_ORDER.filter((a) => permissions.some((rp) => rp.permission.action === a));
 
-  const toggle = (permId) => {
-    setPermissions((prev) => prev.map((rp) => rp.permission.id === permId ? { ...rp, allowed: !rp.allowed } : rp));
+  const grantedCount = permissions.filter((rp) => rp.allowed).length;
+  const allOn = permissions.length > 0 && grantedCount === permissions.length;
+
+  const setMany = (match, value) => {
+    setPermissions((prev) => prev.map((rp) => (match(rp) ? { ...rp, allowed: value } : rp)));
     setSaved(false); setError('');
   };
+  const toggle       = (permId) => { setMany((rp) => rp.permission.id === permId, !permissions.find((rp) => rp.permission.id === permId).allowed); };
+  const toggleModule = (m) => { const on = permissions.filter((rp) => rp.permission.module.name === m).every((rp) => rp.allowed); setMany((rp) => rp.permission.module.name === m, !on); };
+  const toggleColumn = (a) => { const on = permissions.filter((rp) => rp.permission.action === a).every((rp) => rp.allowed); setMany((rp) => rp.permission.action === a, !on); };
+  const toggleAll    = () => setMany(() => true, !allOn);
 
   const handleSave = async () => {
     setSaving(true); setError('');
@@ -123,15 +137,15 @@ function PermissionPanel({ role, onClose, canEdit }) {
     finally { setSaving(false); }
   };
 
-  const groups = groupByModule(permissions);
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-lg bg-white rounded-lg shadow-xl flex flex-col max-h-[85vh]">
+      <div className="w-full max-w-xl bg-white rounded-lg shadow-xl flex flex-col max-h-[85vh]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div>
             <h2 className="text-base font-semibold text-gray-800">{role.name}</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Permissions</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Permissions{!role.is_system ? ` · ${grantedCount}/${permissions.length} granted` : ''}
+            </p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
         </div>
@@ -142,30 +156,67 @@ function PermissionPanel({ role, onClose, canEdit }) {
           </div>
         ) : (
           <>
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
-              {Object.entries(groups).map(([module, perms]) => (
-                <div key={module}>
-                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{module}</h3>
-                  <div className="space-y-1.5">
-                    {perms.map((rp) => (
-                      <label key={rp.permission.id}
-                        className={`flex items-center justify-between px-4 py-2.5 rounded border cursor-pointer transition-colors ${
-                          rp.allowed ? 'border-[#c9afc3]' : 'border-gray-200 hover:bg-gray-50'
-                        } ${!canEdit ? 'cursor-default' : ''}`}
-                        style={rp.allowed ? { backgroundColor: 'var(--ams-primary-mid)' } : {}}>
-                        <div>
-                          <span className="text-sm font-medium text-gray-700">{rp.permission.action}</span>
-                          <span className="ml-2 text-xs text-gray-400 font-mono">{rp.permission.code}</span>
-                        </div>
-                        <input type="checkbox" checked={rp.allowed}
-                          onChange={() => canEdit && toggle(rp.permission.id)}
-                          className="w-4 h-4" style={{ accentColor: 'var(--ams-primary)' }}
-                          disabled={!canEdit} />
-                      </label>
+            {canEdit && (
+              <div className="px-6 pt-3 flex items-center gap-3">
+                <button type="button" onClick={toggleAll}
+                  className="text-xs font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
+                  {allOn ? 'Clear all' : 'Select all'}
+                </button>
+                <span className="text-xs text-gray-300">·</span>
+                <span className="text-xs text-gray-400">Tip: click a module or a column header to toggle its whole row/column.</span>
+              </div>
+            )}
+            <div className="flex-1 overflow-auto px-6 py-4">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left font-normal text-xs uppercase tracking-wider text-gray-400 py-2 pr-2">Module</th>
+                    {actions.map((a) => (
+                      <th key={a} className="py-2 px-1 text-center">
+                        <button type="button" onClick={() => canEdit && toggleColumn(a)}
+                          disabled={!canEdit}
+                          className={`text-[11px] font-semibold uppercase tracking-wide text-gray-500 ${canEdit ? 'hover:text-gray-900 cursor-pointer' : 'cursor-default'}`}
+                          title={canEdit ? `Toggle all ${titleCase(a)}` : a}>
+                          {titleCase(a)}
+                        </button>
+                      </th>
                     ))}
-                  </div>
-                </div>
-              ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {modules.map((m) => {
+                    const rowOn = Object.values(byModule[m]).every((rp) => rp.allowed);
+                    return (
+                      <tr key={m} className="border-b border-gray-100 last:border-0">
+                        <td className="py-2 pr-2">
+                          <button type="button" onClick={() => canEdit && toggleModule(m)}
+                            disabled={!canEdit}
+                            className={`font-medium ${rowOn ? 'text-gray-900' : 'text-gray-700'} ${canEdit ? 'hover:underline cursor-pointer' : 'cursor-default'}`}
+                            title={canEdit ? 'Toggle whole module' : m}>
+                            {titleCase(m)}
+                          </button>
+                        </td>
+                        {actions.map((a) => {
+                          const rp = byModule[m][a];
+                          return (
+                            <td key={a} className="py-2 px-1 text-center">
+                              {rp ? (
+                                <input type="checkbox" checked={rp.allowed}
+                                  onChange={() => canEdit && toggle(rp.permission.id)}
+                                  disabled={!canEdit} title={rp.permission.code}
+                                  className="w-4 h-4 align-middle cursor-pointer disabled:cursor-default"
+                                  style={{ accentColor: 'var(--ams-primary)' }} />
+                              ) : (
+                                <span className="text-gray-300">–</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
             <div className="px-6 py-4 border-t border-gray-100 flex items-center gap-3">
               {error && <p className="flex-1 text-sm text-red-600">{error}</p>}
@@ -280,9 +331,16 @@ export default function RolesPage() {
   const canDelete = me?.is_system || can('ROLE_DELETE');
 
   useEffect(() => {
-    if (permLoading) return;
-    if (!canView) { setLoading(false); return; }
-    apiGet('/roles').then(setRoles).catch(() => setRoles([])).finally(() => setLoading(false));
+    if (permLoading) return undefined;
+    let cancelled = false;
+    (async () => {
+      if (canView) {
+        try { const r = await apiGet('/roles'); if (!cancelled) setRoles(r); }
+        catch { if (!cancelled) setRoles([]); }
+      }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
   }, [permLoading]);
 
   const handleCreated = (role) => setRoles((prev) => [...prev, role]);
