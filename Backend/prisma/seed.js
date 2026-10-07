@@ -53,6 +53,7 @@ const MODULES = [
   { name: 'FLOW',       slug: 'flow',       description: 'Workflow / flow builder' },
   { name: 'DEPARTMENT', slug: 'department', description: 'Departments' },
   { name: 'PROJECT',    slug: 'project',    description: 'Projects' },
+  { name: 'CUSTOMER',   slug: 'customer',   description: 'Master data — customers & contacts' },
 ];
 
 /** Default departments, so the user form's dropdown is not empty on first run. */
@@ -110,6 +111,12 @@ const PERMISSIONS = [
   { module: 'project', action: 'CREATE', code: 'PROJECT_CREATE' },
   { module: 'project', action: 'EDIT',   code: 'PROJECT_EDIT' },
   { module: 'project', action: 'DELETE', code: 'PROJECT_DELETE' },
+
+  // Master data — customers & contacts.
+  { module: 'customer', action: 'VIEW',   code: 'CUSTOMER_VIEW' },
+  { module: 'customer', action: 'CREATE', code: 'CUSTOMER_CREATE' },
+  { module: 'customer', action: 'EDIT',   code: 'CUSTOMER_EDIT' },
+  { module: 'customer', action: 'DELETE', code: 'CUSTOMER_DELETE' },
 ];
 
 /**

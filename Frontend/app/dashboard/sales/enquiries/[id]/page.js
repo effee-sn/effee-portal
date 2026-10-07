@@ -446,7 +446,7 @@ export default function EnquiryDetailPage() {
             </div>
             <h1 className="text-xl font-semibold text-gray-800 mt-0.5 break-words">{enquiry.title}</h1>
             <div className="text-xs text-gray-500 mt-1 flex items-center gap-x-4 gap-y-1 flex-wrap">
-              <button onClick={() => router.push(`/dashboard/sales/customers/${enquiry.customer_id}`)}
+              <button onClick={() => router.push(`/dashboard/master-data/customers/${enquiry.customer_id}`)}
                 className="hover:underline text-blue-600 cursor-pointer">{enquiry.customer?.name}</button>
               <span>Owner: {enquiry.owner?.name || '—'}</span>
               {!isClosed && (
@@ -522,7 +522,7 @@ export default function EnquiryDetailPage() {
 
       {/* Customer + details — a single full-width card */}
       <Section title="Customer & Details" right={
-        <button onClick={() => router.push(`/dashboard/sales/customers/${enquiry.customer_id}`)}
+        <button onClick={() => router.push(`/dashboard/master-data/customers/${enquiry.customer_id}`)}
           className="text-xs text-blue-600 hover:underline cursor-pointer">Open customer</button>
       }>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-3">

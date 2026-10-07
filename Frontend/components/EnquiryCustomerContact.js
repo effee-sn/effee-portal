@@ -59,7 +59,7 @@ export default function EnquiryCustomerContact({ initialCustomer = null, initial
     const t = setTimeout(async () => {
       setSearching(true);
       try {
-        const res = await apiGet(`/sales/customers?search=${encodeURIComponent(query)}&limit=20`, { silent: true });
+        const res = await apiGet(`/customers?search=${encodeURIComponent(query)}&limit=20`, { silent: true });
         setResults(res.data || []);
       } catch { setResults([]); }
       finally { setSearching(false); }
@@ -71,7 +71,7 @@ export default function EnquiryCustomerContact({ initialCustomer = null, initial
   useEffect(() => {
     let cancelled = false;
     if (!selected?.id) { setContacts([]); setContactId(''); setAddingContact(false); return; }
-    apiGet(`/sales/customers/${selected.id}`, { silent: true })
+    apiGet(`/customers/${selected.id}`, { silent: true })
       .then((res) => {
         if (cancelled) return;
         const list = res.data?.contacts || [];
@@ -92,7 +92,7 @@ export default function EnquiryCustomerContact({ initialCustomer = null, initial
     if (!name) return;
     setCreating(true); setError('');
     try {
-      const res = await apiPost('/sales/customers', { name });
+      const res = await apiPost('/customers', { name });
       pickCustomer(res.data);
     } catch (e) { setError(e.message); }
     finally { setCreating(false); }
@@ -102,7 +102,7 @@ export default function EnquiryCustomerContact({ initialCustomer = null, initial
     if (!selected?.id || !newContact.name.trim()) return;
     setSavingContact(true); setError('');
     try {
-      const res = await apiPost(`/sales/customers/${selected.id}/contacts`, {
+      const res = await apiPost(`/customers/${selected.id}/contacts`, {
         name: newContact.name.trim(),
         phone: newContact.phone.trim(),
       });
@@ -138,7 +138,6 @@ export default function EnquiryCustomerContact({ initialCustomer = null, initial
               <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
-              {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
               <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)}
                 placeholder="Type a customer name…"
                 className="flex-1 min-w-0 py-2 px-2 text-sm text-gray-700 outline-none" />

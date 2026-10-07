@@ -38,8 +38,8 @@ function CustomerModal({ customer, users, onClose, onSaved }) {
     setSaving(true); setError('');
     try {
       const res = isEdit
-        ? await apiPut(`/sales/customers/${customer.id}`, form)
-        : await apiPost('/sales/customers', form);
+        ? await apiPut(`/customers/${customer.id}`, form)
+        : await apiPost('/customers', form);
       onSaved(res.data, isEdit);
       onClose();
     } catch (err) { setError(err.message); }
@@ -144,7 +144,7 @@ function DeleteModal({ customer, onClose, onDeleted }) {
 
   const del = async () => {
     setSaving(true); setError('');
-    try { await apiDelete(`/sales/customers/${customer.id}`); onDeleted(customer.id); onClose(); }
+    try { await apiDelete(`/customers/${customer.id}`); onDeleted(customer.id); onClose(); }
     catch (err) { setError(err.message); }
     finally { setSaving(false); }
   };
@@ -184,15 +184,15 @@ export default function CustomersPage() {
 
   const limit = 10;
 
-  const canView   = me?.is_system || can('SALES_VIEW');
-  const canCreate = me?.is_system || can('SALES_CREATE');
-  const canEdit   = me?.is_system || can('SALES_EDIT');
-  const canDelete = me?.is_system || can('SALES_DELETE');
+  const canView   = me?.is_system || can('CUSTOMER_VIEW');
+  const canCreate = me?.is_system || can('CUSTOMER_CREATE');
+  const canEdit   = me?.is_system || can('CUSTOMER_EDIT');
+  const canDelete = me?.is_system || can('CUSTOMER_DELETE');
 
   const fetchRows = async (p = page, s = search) => {
     setLoading(true);
     try {
-      const res = await apiGet(`/sales/customers?page=${p}&limit=${limit}&search=${encodeURIComponent(s)}`);
+      const res = await apiGet(`/customers?page=${p}&limit=${limit}&search=${encodeURIComponent(s)}`);
       setRows(res.data); setTotal(res.meta.pagination.total);
     } catch { setRows([]); }
     finally { setLoading(false); }
@@ -295,7 +295,7 @@ export default function CustomersPage() {
               </thead>
               <tbody>
                 {rows.map((c) => (
-                  <tr key={c.id} onClick={() => router.push(`/dashboard/sales/customers/${c.id}`)}
+                  <tr key={c.id} onClick={() => router.push(`/dashboard/master-data/customers/${c.id}`)}
                     className="border-b border-gray-100 hover:bg-gray-50 group cursor-pointer">
                     <td className="px-3 py-3">
                       <div className="font-medium text-gray-800">{c.name}</div>

@@ -59,7 +59,6 @@ export const AREAS = [
     subtitle: 'Enquiries to orders',
     items: [
       { label: 'Enquiries', href: '/dashboard/sales/enquiries', perm: 'SALES_VIEW' },
-      { label: 'Customers', href: '/dashboard/sales/customers', perm: 'SALES_VIEW' },
     ],
   },
   {
@@ -68,6 +67,14 @@ export const AREAS = [
     subtitle: 'Project tracking',
     items: [
       { label: 'Projects', href: '/dashboard/projects', perm: 'PROJECT_VIEW' },
+    ],
+  },
+  {
+    key: 'master-data',
+    label: 'Master Data',
+    subtitle: 'Shared reference data',
+    items: [
+      { label: 'Customers', href: '/dashboard/master-data/customers', perm: 'CUSTOMER_VIEW' },
     ],
   },
   {

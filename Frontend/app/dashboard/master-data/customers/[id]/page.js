@@ -54,8 +54,8 @@ function ContactModal({ customerId, contact, onClose, onSaved }) {
     setSaving(true); setError('');
     try {
       const res = isEdit
-        ? await apiPut(`/sales/contacts/${contact.id}`, form)
-        : await apiPost(`/sales/customers/${customerId}/contacts`, form);
+        ? await apiPut(`/contacts/${contact.id}`, form)
+        : await apiPost(`/customers/${customerId}/contacts`, form);
       onSaved();
       onClose();
     } catch (err) { setError(err.message); }
@@ -114,7 +114,7 @@ function DeleteContactModal({ contact, onClose, onDeleted }) {
   const [error, setError]   = useState('');
   const del = async () => {
     setSaving(true); setError('');
-    try { await apiDelete(`/sales/contacts/${contact.id}`); onDeleted(); onClose(); }
+    try { await apiDelete(`/contacts/${contact.id}`); onDeleted(); onClose(); }
     catch (err) { setError(err.message); }
     finally { setSaving(false); }
   };
@@ -145,14 +145,14 @@ export default function CustomerDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [modal, setModal]       = useState(null);
 
-  const canEdit   = me?.is_system || can('SALES_EDIT');
-  const canCreate = me?.is_system || can('SALES_CREATE');
-  const canDelete = me?.is_system || can('SALES_DELETE');
+  const canEdit   = me?.is_system || can('CUSTOMER_EDIT');
+  const canCreate = me?.is_system || can('CUSTOMER_CREATE');
+  const canDelete = me?.is_system || can('CUSTOMER_DELETE');
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiGet(`/sales/customers/${id}`);
+      const res = await apiGet(`/customers/${id}`);
       setCustomer(res.data);
     } catch { setNotFound(true); }
     finally { setLoading(false); }
@@ -167,7 +167,7 @@ export default function CustomerDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-center">
         <p className="text-sm font-semibold text-gray-700 mb-1">Customer not found</p>
-        <button onClick={() => router.push('/dashboard/sales/customers')} className="text-sm text-blue-600 hover:underline">Back to customers</button>
+        <button onClick={() => router.push('/dashboard/master-data/customers')} className="text-sm text-blue-600 hover:underline">Back to customers</button>
       </div>
     );
   }
@@ -178,7 +178,7 @@ export default function CustomerDetailPage() {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <button onClick={() => router.push('/dashboard/sales/customers')}
+        <button onClick={() => router.push('/dashboard/master-data/customers')}
           className="p-1.5 rounded hover:bg-gray-100 text-gray-500 cursor-pointer" title="Back">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -301,7 +301,7 @@ function EditCustomerInline({ customer, onClose, onSaved }) {
   const submit = async (e) => {
     e.preventDefault();
     setSaving(true); setError('');
-    try { await apiPut(`/sales/customers/${customer.id}`, form); onSaved(); onClose(); }
+    try { await apiPut(`/customers/${customer.id}`, form); onSaved(); onClose(); }
     catch (err) { setError(err.message); }
     finally { setSaving(false); }
   };
