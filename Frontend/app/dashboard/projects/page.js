@@ -5,6 +5,7 @@ import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
+import EnquiryPicker from '@/components/EnquiryPicker';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 
@@ -33,7 +34,7 @@ function StatusBadge({ status }) {
 }
 
 // ── Create / edit modal ─────────────────────────────────────────────────────────
-function ProjectModal({ project, users, enquiries, onClose, onSaved }) {
+function ProjectModal({ project, users, onClose, onSaved }) {
   const isEdit = Boolean(project);
   const [form, setForm] = useState({
     name:        project?.name || '',
@@ -94,10 +95,10 @@ function ProjectModal({ project, users, enquiries, onClose, onSaved }) {
 
           <div>
             <label className={label}>Linked enquiry <span className="normal-case font-normal text-gray-400">(optional)</span></label>
-            <select name="enquiry_id" value={form.enquiry_id} onChange={change} className="ams-input">
-              <option value="">— None —</option>
-              {enquiries.map((en) => <option key={en.id} value={en.id}>{en.ref_no} — {en.title}</option>)}
-            </select>
+            <EnquiryPicker
+              initialEnquiry={project?.enquiry || null}
+              onChange={(id) => setForm((f) => ({ ...f, enquiry_id: id ? String(id) : '' }))}
+            />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -163,7 +164,6 @@ export default function ProjectsPage() {
   const [search, setSearch]   = useState('');
   const [loading, setLoading] = useState(true);
   const [users, setUsers]     = useState([]);
-  const [enquiries, setEnquiries] = useState([]);
   const [modal, setModal]     = useState(null);
 
   const limit = 10;
@@ -186,8 +186,6 @@ export default function ProjectsPage() {
     if (!permLoading && canView) {
       fetchRows();
       apiGet('/lookup/users').then(setUsers).catch(() => {});
-      // Enquiries power the optional link; needs SALES_VIEW — degrade quietly.
-      apiGet('/sales/enquiries?limit=100').then((r) => setEnquiries(r.data || [])).catch(() => {});
     } else if (!permLoading) setLoading(false);
   }, [permLoading]);
 
@@ -309,8 +307,8 @@ export default function ProjectsPage() {
         </div>
       </div>
 
-      {modal?.type === 'create' && <ProjectModal users={users} enquiries={enquiries} onClose={() => setModal(null)} onSaved={onSaved} />}
-      {modal?.type === 'edit'   && <ProjectModal project={modal.project} users={users} enquiries={enquiries} onClose={() => setModal(null)} onSaved={onSaved} />}
+      {modal?.type === 'create' && <ProjectModal users={users} onClose={() => setModal(null)} onSaved={onSaved} />}
+      {modal?.type === 'edit'   && <ProjectModal project={modal.project} users={users} onClose={() => setModal(null)} onSaved={onSaved} />}
       {modal?.type === 'delete' && <DeleteModal project={modal.project} onClose={() => setModal(null)} onDeleted={onDeleted} />}
     </div>
   );

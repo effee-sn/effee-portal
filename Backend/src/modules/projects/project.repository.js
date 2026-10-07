@@ -84,9 +84,38 @@ function createProjectRepository(db) {
       });
     },
 
+    /**
+     * Won enquiries available to link to a project: stage WON, not already
+     * linked to a live project. `allowId` keeps one enquiry in the list even if
+     * it is linked — the project being edited passes its own current link so it
+     * still appears.
+     * @param {{ search?: string, allowId?: number, take?: number }} params
+     */
+    availableWonEnquiries({ search, allowId, take = 20 }) {
+      const notLinked = { projects: { none: { deleted_at: null } } };
+      const and = [{ deleted_at: null, stage: 'WON' }];
+      if (search) {
+        and.push({ OR: [{ ref_no: { contains: search } }, { title: { contains: search } }] });
+      }
+      and.push(allowId ? { OR: [notLinked, { id: allowId }] } : notLinked);
+      return db.enquiry.findMany({
+        where: { AND: and },
+        select: { id: true, ref_no: true, title: true, stage: true, customer: { select: { name: true } } },
+        orderBy: { created_at: 'desc' },
+        take,
+      });
+    },
+
     // ── Foreign-key existence checks ──────────────────────────────────────────
-    async enquiryExists(id) {
-      const row = await db.enquiry.findFirst({ where: { id, deleted_at: null }, select: { id: true } });
+
+    /** True when the enquiry is WON and not already linked to a live project
+     * (unless it is the one `allowId` permits — the edited project's own link). */
+    async enquiryLinkable(id, allowId) {
+      if (allowId && id === allowId) return true;
+      const row = await db.enquiry.findFirst({
+        where: { id, deleted_at: null, stage: 'WON', projects: { none: { deleted_at: null } } },
+        select: { id: true },
+      });
       return row !== null;
     },
 

@@ -16,6 +16,13 @@ const getProjects = async (req, res) => {
   ApiResponse.paginated(res, items, { page: query.page, limit: query.limit, total });
 };
 
+/** `GET /projects/enquiry-options` — won, not-yet-linked enquiries for the picker. */
+const getEnquiryOptions = async (req, res) => {
+  const search  = typeof req.query.search === 'string' ? req.query.search : '';
+  const allowId = Number(req.query.allow) || undefined;
+  ApiResponse.ok(res, await projectService.enquiryOptions({ search, allowId }));
+};
+
 /** `GET /projects/:id` */
 const getProjectById = async (req, res) => {
   ApiResponse.ok(res, await projectService.getById(req.params.id));
@@ -41,6 +48,7 @@ const deleteProject = async (req, res) => {
 
 module.exports = {
   getProjects,
+  getEnquiryOptions,
   getProjectById,
   createProject,
   updateProject,

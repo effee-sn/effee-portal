@@ -8,7 +8,7 @@ const {
   listProjectsQuery, projectIdParam, createProjectBody, updateProjectBody,
 } = require('./project.validation');
 const {
-  getProjects, getProjectById, createProject, updateProject, deleteProject,
+  getProjects, getEnquiryOptions, getProjectById, createProject, updateProject, deleteProject,
 } = require('./project.controller');
 
 const router = Router();
@@ -27,6 +27,13 @@ router.post(
   authorize('PROJECT_CREATE'),
   validate({ body: createProjectBody }),
   asyncHandler(createProject)
+);
+
+// Static path before the `:id` route so it is not read as an id.
+router.get(
+  '/enquiry-options',
+  authorize('PROJECT_VIEW'),
+  asyncHandler(getEnquiryOptions)
 );
 
 router.get(

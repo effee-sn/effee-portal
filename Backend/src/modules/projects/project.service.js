@@ -26,11 +26,15 @@ function createProjectService(repository) {
     return `${prefix}${String(seq).padStart(4, '0')}`;
   }
 
-  /** Validates the optional enquiry / owner references on a write. */
-  async function assertRefs({ enquiry_id, owner_id }) {
-    if (enquiry_id !== undefined && enquiry_id !== null && !(await repository.enquiryExists(enquiry_id))) {
+  /**
+   * Validates the optional enquiry / owner references on a write. A linked
+   * enquiry must be WON and not already linked to another project; `allowId`
+   * (the project's current link, on edit) is exempt so re-saving is fine.
+   */
+  async function assertRefs({ enquiry_id, owner_id, allowId }) {
+    if (enquiry_id !== undefined && enquiry_id !== null && !(await repository.enquiryLinkable(enquiry_id, allowId))) {
       throw new ValidationError('Validation failed', [
-        { field: 'enquiry_id', message: 'Selected enquiry does not exist' },
+        { field: 'enquiry_id', message: 'Enquiry must be won and not already linked to a project' },
       ]);
     }
     if (owner_id !== undefined && owner_id !== null && !(await repository.userExists(owner_id))) {
@@ -67,11 +71,21 @@ function createProjectService(repository) {
     },
 
     /**
+     * Won enquiries available to link, for the picker. `allowId` keeps the
+     * edited project's current link in the list.
+     * @param {{ search?: string, allowId?: number }} params
+     */
+    enquiryOptions({ search, allowId }) {
+      return repository.availableWonEnquiries({ search: (search || '').trim(), allowId, take: 20 });
+    },
+
+    /**
      * @param {object} dto
      * @param {import('../../core/http/requestContext').ActorContext} [actor]
      */
     async create(dto, actor) {
       await assertRefs({ enquiry_id: dto.enquiry_id, owner_id: dto.owner_id });
+      // create has no current link to exempt.
 
       const data = pickWritable(dto, {
         code: await nextCode(),
@@ -101,7 +115,7 @@ function createProjectService(repository) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Project');
 
-      await assertRefs({ enquiry_id: dto.enquiry_id, owner_id: dto.owner_id });
+      await assertRefs({ enquiry_id: dto.enquiry_id, owner_id: dto.owner_id, allowId: before.enquiry_id ?? undefined });
 
       const data = pickWritable(dto, { updated_by: actor?.id ?? null });
       const project = await repository.update(id, data);
