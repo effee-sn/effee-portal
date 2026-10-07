@@ -13,6 +13,7 @@ const serviceRoutes   = require('../modules/service/service.routes');
 const salesRoutes     = require('../modules/sales/sales.routes');
 const flowRoutes      = require('../modules/flow/flow.routes');
 const departmentRoutes = require('../modules/department/department.routes');
+const projectRoutes   = require('../modules/projects/project.routes');
 
 const router = Router();
 
@@ -36,5 +37,6 @@ router.use('/service',     serviceRoutes);
 router.use('/sales',       salesRoutes);
 router.use('/flow',        flowRoutes);
 router.use('/departments', departmentRoutes);
+router.use('/projects',    projectRoutes);
 
 module.exports = router;

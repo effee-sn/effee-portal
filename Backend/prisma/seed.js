@@ -52,6 +52,7 @@ const MODULES = [
   { name: 'SALES',      slug: 'sales',      description: 'Sales — enquiries, quotations, customers' },
   { name: 'FLOW',       slug: 'flow',       description: 'Workflow / flow builder' },
   { name: 'DEPARTMENT', slug: 'department', description: 'Departments' },
+  { name: 'PROJECT',    slug: 'project',    description: 'Projects' },
 ];
 
 /** Default departments, so the user form's dropdown is not empty on first run. */
@@ -103,6 +104,12 @@ const PERMISSIONS = [
   { module: 'department', action: 'CREATE', code: 'DEPT_CREATE' },
   { module: 'department', action: 'EDIT',   code: 'DEPT_EDIT' },
   { module: 'department', action: 'DELETE', code: 'DEPT_DELETE' },
+
+  // Projects.
+  { module: 'project', action: 'VIEW',   code: 'PROJECT_VIEW' },
+  { module: 'project', action: 'CREATE', code: 'PROJECT_CREATE' },
+  { module: 'project', action: 'EDIT',   code: 'PROJECT_EDIT' },
+  { module: 'project', action: 'DELETE', code: 'PROJECT_DELETE' },
 ];
 
 /**

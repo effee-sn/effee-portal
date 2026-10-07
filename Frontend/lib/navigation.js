@@ -63,6 +63,14 @@ export const AREAS = [
     ],
   },
   {
+    key: 'projects',
+    label: 'Projects',
+    subtitle: 'Project tracking',
+    items: [
+      { label: 'Projects', href: '/dashboard/projects', perm: 'PROJECT_VIEW' },
+    ],
+  },
+  {
     key: 'administrator',
     label: 'Administrator',
     subtitle: 'System configuration',

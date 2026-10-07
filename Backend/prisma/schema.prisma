@@ -81,6 +81,7 @@ model User {
   ownedEnquiries   Enquiry[]  @relation("EnquiryOwner")
   handledEnquiries Enquiry[]  @relation("EnquiryHandler")
   salesWorkflows   SalesWorkflowConfig[] @relation("SalesWorkflowInternal")
+  ownedProjects    Project[]  @relation("ProjectOwner")
 
   // `email` and `phone` remain globally unique, including across soft-deleted
   // rows. That is intentional: reusing a departed user's address would make
@@ -907,6 +908,7 @@ model Enquiry {
   quotations  Quotation[]
   attachments EnquiryAttachment[]
   stageEvents EnquiryStageEvent[]
+  projects    Project[]
 
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
@@ -934,6 +936,47 @@ model SalesWorkflowConfig {
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
   updated_by Int?
+}
+
+/// A project. A standalone record that may optionally reference the sales
+/// enquiry it originated from. CRUD only for now.
+model Project {
+  id          Int           @id @default(autoincrement())
+  code        String        @unique
+  name        String
+  description String?       @db.Text
+  status      ProjectStatus @default(PLANNING)
+
+  // Optional link to the originating sales enquiry.
+  enquiry    Enquiry? @relation(fields: [enquiry_id], references: [id])
+  enquiry_id Int?
+
+  // Optional assigned owner.
+  owner    User? @relation("ProjectOwner", fields: [owner_id], references: [id])
+  owner_id Int?
+
+  start_date DateTime?
+  end_date   DateTime?
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+  created_by Int?
+  updated_by Int?
+
+  @@index([status])
+  @@index([enquiry_id])
+  @@index([owner_id])
+  @@index([deleted_at])
+  @@index([created_at])
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
 }
 
 /// One customer interaction on an enquiry - a call, meeting, Teams call, site
