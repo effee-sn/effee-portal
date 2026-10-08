@@ -21,9 +21,16 @@ const { logger } = require('../core/logging/logger');
 
 const MAIL = config.MAIL;
 
-/** True when host, user and password are all present. */
+/**
+ * True when there is enough to send. Two supported modes:
+ *   - Authenticated SMTP: host + user + password (e.g. smtp.office365.com:587).
+ *   - Unauthenticated relay / Microsoft 365 Direct Send: host + a From address,
+ *     no user/password (e.g. <tenant>.mail.protection.outlook.com:25).
+ */
 function isSmtpConfigured() {
-  return Boolean(MAIL.HOST && MAIL.USER && MAIL.PASS);
+  if (!MAIL.HOST) return false;
+  if (MAIL.USER) return Boolean(MAIL.PASS);
+  return Boolean(MAIL.FROM_EMAIL);
 }
 
 /** True when SMTP is configured *and* notification emails are switched on. */
@@ -41,9 +48,10 @@ function getTransporter() {
     transporter = nodemailer.createTransport({
       host: MAIL.HOST,
       port: MAIL.PORT,
-      // Implicit TLS on 465; STARTTLS negotiated on other ports.
+      // Implicit TLS on 465; STARTTLS negotiated on other ports when offered.
       secure: MAIL.PORT === 465,
-      auth: { user: MAIL.USER, pass: MAIL.PASS },
+      // No credentials = unauthenticated relay / Direct Send.
+      ...(MAIL.USER ? { auth: { user: MAIL.USER, pass: MAIL.PASS } } : {}),
       // Fail fast with a clear error instead of hanging for ~30s when the SMTP
       // host is unreachable (e.g. outbound port blocked, wrong host/port).
       connectionTimeout: 10000,
@@ -116,7 +124,10 @@ async function sendMailCritical({ to, subject, html }) {
  */
 async function sendTestMail({ to, subject, html }) {
   const t = getTransporter();
-  if (!t) throw new Error('SMTP is not configured. Set SMTP_HOST, SMTP_USER and SMTP_PASS in .env and restart.');
+  if (!t) {
+    throw new Error('SMTP is not configured. Set SMTP_HOST plus either SMTP_USER/SMTP_PASS '
+      + 'or (for an unauthenticated relay) SMTP_FROM_EMAIL in .env, then restart.');
+  }
   await t.verify();
   await t.sendMail({ from: fromAddress(), to, subject, html });
 }
