@@ -132,7 +132,7 @@ function createEnquiryService(repository) {
 
   function pickWritable(dto, data = {}) {
     for (const f of ['title', 'customer_id', 'contact_id', 'enquiry_type', 'stage',
-      'description', 'review_notes', 'expected_value', 'expected_close', 'owner_id']) {
+      'description', 'expected_value', 'expected_close', 'owner_id']) {
       if (dto[f] !== undefined) data[f] = dto[f];
     }
     return data;
@@ -176,7 +176,7 @@ function createEnquiryService(repository) {
    * internal handler, and whoever raised it — minus the person who closed it.
    */
   async function notifyClose(enquiry, actor, { type, title, body }) {
-    notificationService.notify({
+    await notificationService.notify({
       userIds: [enquiry.owner_id, await internalHandlerId(), enquiry.created_by],
       type,
       title,
@@ -247,12 +247,15 @@ function createEnquiryService(repository) {
         ]);
       }
       await assertRefs({ customer_id: dto.customer_id, contact_id: dto.contact_id, owner_id });
-      if (dto.stage) assertStageAllowed(dto.stage, dto.enquiry_type || 'INCOMING');
 
-      const data = pickWritable(dto, {
+      // Every enquiry starts at NEW — a stage passed by the caller is ignored,
+      // so creation can never skip the gates or the handoffs.
+      const { stage: _ignored, ...fields } = dto;
+      const data = pickWritable(fields, {
+        stage: 'NEW',
         owner_id,
         // The raiser is both the field initiator (owner) and the first handler.
-        handler_id: resolveHandler(dto.stage || 'NEW', owner_id, null),
+        handler_id: resolveHandler('NEW', owner_id, null),
         ref_no: await nextRefNo(),
         created_by: actor?.id ?? null,
         updated_by: actor?.id ?? null,
@@ -284,6 +287,14 @@ function createEnquiryService(repository) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Enquiry');
       assertCanManage(before, actor);
+      // The type picks the flow (Generated skips Contacted), so it's fixed once
+      // the enquiry leaves NEW — switching mid-flow could strand it on a stage
+      // its new flow doesn't have.
+      if (dto.enquiry_type !== undefined && dto.enquiry_type !== before.enquiry_type && before.stage !== 'NEW') {
+        throw new ValidationError('Validation failed', [
+          { field: 'enquiry_type', message: 'The enquiry type can only be changed while the enquiry is New' },
+        ]);
+      }
       if (dto.stage) assertStageAllowed(dto.stage, dto.enquiry_type ?? before.enquiry_type);
       if (dto.stage && dto.stage !== before.stage) {
         // One step forward at a time, along the enquiry-type's own flow
@@ -319,11 +330,16 @@ function createEnquiryService(repository) {
       }
 
       const stageChanged = dto.stage !== undefined && dto.stage !== before.stage;
+      const ownerChanged = dto.owner_id !== undefined && dto.owner_id !== null && dto.owner_id !== before.owner_id;
       const data = pickWritable(dto, { updated_by: actor?.id ?? null });
       if (stageChanged) {
         data.stage_since = new Date();
         // Hand the baton to whoever owns the new stage's phase.
-        data.handler_id = resolveHandler(dto.stage, before.owner_id, await internalHandlerId());
+        data.handler_id = resolveHandler(dto.stage, data.owner_id ?? before.owner_id, await internalHandlerId());
+      } else if (ownerChanged && (before.handler_id ?? before.owner_id) === before.owner_id) {
+        // Same rule as Reassign: when the field owner holds the baton, it
+        // follows them to the new owner.
+        data.handler_id = dto.owner_id;
       }
       const enquiry = await repository.update(id, data);
       if (stageChanged) {

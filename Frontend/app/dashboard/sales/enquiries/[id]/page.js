@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
-import { ENQUIRY_TYPES, STAGE_STYLE, STAGE_RANK, TYPE_LABEL, TEMPERATURE_STYLE, stagesForType, visibleDocKinds, formatINR } from '@/lib/salesOptions';
+import { ENQUIRY_TYPES, STAGE_STYLE, STAGE_RANK, TYPE_LABEL, TEMPERATURE_STYLE, visibleDocKinds, formatINR } from '@/lib/salesOptions';
 import EnquiryCustomerContact from '@/components/EnquiryCustomerContact';
 import EnquiryActivities from '@/components/EnquiryActivities';
 import EnquiryReviews from '@/components/EnquiryReviews';
@@ -198,23 +198,22 @@ function ReassignModal({ enquiry, users, onClose, onDone }) {
 }
 
 // ── Edit modal ────────────────────────────────────────────────────────────────
+// Edits the enquiry's details only. The stage is never changed here — it moves
+// through the process bar and the offer/follow-up actions, which enforce gates.
 function EditModal({ enquiry, users, onClose, onDone }) {
   const [form, setForm] = useState({
     title: enquiry.title || '', customer_id: enquiry.customer_id || '', contact_id: enquiry.contact_id || '',
     owner_id: enquiry.owner_id || '', enquiry_type: enquiry.enquiry_type || 'INCOMING',
-    stage: ['WON', 'LOST'].includes(enquiry.stage) ? 'FOLLOW_UP' : enquiry.stage,
     expected_value: enquiry.expected_value ?? '', expected_close: toDateInput(enquiry.expected_close), description: enquiry.description || '',
   });
   const [error, setError]   = useState('');
   const [saving, setSaving] = useState(false);
+  // The type picks the flow (Generated skips Contacted), so it's fixed after New.
+  const typeLocked = enquiry.stage !== 'NEW';
 
   const change = (e) => {
     const { name, value } = e.target;
-    setForm((f) => {
-      const next = { ...f, [name]: value };
-      if (name === 'enquiry_type' && value === 'GENERATED' && f.stage === 'CONTACTED') next.stage = 'NEW';
-      return next;
-    });
+    setForm((f) => ({ ...f, [name]: value }));
     setError('');
   };
 
@@ -223,7 +222,9 @@ function EditModal({ enquiry, users, onClose, onDone }) {
   const submit = async (e) => {
     e.preventDefault();
     setSaving(true); setError('');
-    try { const res = await apiPut(`/sales/enquiries/${enquiry.id}`, form); onDone(res.data); onClose(); }
+    const payload = { ...form };
+    if (typeLocked) delete payload.enquiry_type;
+    try { const res = await apiPut(`/sales/enquiries/${enquiry.id}`, payload); onDone(res.data); onClose(); }
     catch (err) { setError(err.message); }
     finally { setSaving(false); }
   };
@@ -237,11 +238,6 @@ function EditModal({ enquiry, users, onClose, onDone }) {
         </div>
         <form onSubmit={submit} className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
           {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm">{error}</div>}
-          {['WON', 'LOST'].includes(enquiry.stage) && (
-            <div className="px-3 py-2 rounded bg-amber-50 border border-amber-200 text-amber-700 text-xs">
-              This enquiry is {enquiry.stage.toLowerCase()}. Saving here moves it back into the active pipeline — use Reopen for that, or Cancel to keep it closed.
-            </div>
-          )}
           <div>
             <label className={label}>Title<span className="text-red-500"> *</span></label>
             <input name="title" value={form.title} onChange={change} required className="ams-input" />
@@ -261,15 +257,11 @@ function EditModal({ enquiry, users, onClose, onDone }) {
             </div>
             <div>
               <label className={label}>Type</label>
-              <select name="enquiry_type" value={form.enquiry_type} onChange={change} className="ams-input">
+              <select name="enquiry_type" value={form.enquiry_type} onChange={change} disabled={typeLocked}
+                className="ams-input disabled:bg-gray-50 disabled:text-gray-500">
                 {ENQUIRY_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
-            </div>
-            <div>
-              <label className={label}>Stage</label>
-              <select name="stage" value={form.stage} onChange={change} className="ams-input">
-                {stagesForType(form.enquiry_type).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
+              {typeLocked && <p className="text-xs text-gray-400 mt-1">Fixed once the enquiry leaves New.</p>}
             </div>
             <div>
               <label className={label}>Expected Value (₹)</label>

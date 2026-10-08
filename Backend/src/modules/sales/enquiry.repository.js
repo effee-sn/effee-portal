@@ -41,7 +41,6 @@ function createEnquiryRepository(db) {
     current_temperature: true,
     stage_since: true,
     description: true,
-    review_notes: true,
     expected_value: true,
     expected_close: true,
     won_at: true,

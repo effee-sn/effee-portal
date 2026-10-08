@@ -46,12 +46,12 @@ const listEnquiriesQuery = schemas.listQuery.extend({
 
 const enquiryIdParam = schemas.idParam;
 
+// No `stage`: every enquiry starts at NEW, so creation can't skip the gates.
 const createEnquiryBody = z.object({
   title:          z.string().trim().min(1, 'Title is required').max(191),
   customer_id:    z.coerce.number({ required_error: 'Customer is required' }).int().positive(),
   contact_id:     optionalContact,
   enquiry_type:   z.enum(TYPES).optional(),
-  stage:          z.enum(ACTIVE_STAGES).optional(),
   description:    optionalText(2000),
   expected_value: optionalMoney,
   expected_close: optionalDate,
@@ -65,7 +65,6 @@ const updateEnquiryBody = z.object({
   enquiry_type:   z.enum(TYPES).optional(),
   stage:          z.enum(ACTIVE_STAGES).optional(),
   description:    optionalText(2000),
-  review_notes:   optionalText(5000),
   expected_value: optionalMoney,
   expected_close: optionalDate,
   owner_id:       optionalOwner,
