@@ -3,10 +3,8 @@ const { sendTestMail } = require('../../lib/mailer');
 const { BadRequestError } = require('../../core');
 
 /**
- * Settings HTTP controller.
- *
- * Response shapes are unchanged: the settings object with `smtp_pass` removed
- * and `smtp_pass_set` added, and `{ logo }` from the upload endpoint.
+ * Settings HTTP controller. SMTP is configured from `.env`, not here; the
+ * test-email endpoint exercises that environment configuration.
  */
 
 /**
@@ -47,11 +45,6 @@ const getBranding = async (req, res) => {
 /** @type {import('express').RequestHandler} */
 const updateCompanyInfo = async (req, res) => {
   res.json(await settingsService.updateCompanyInfo(req.body));
-};
-
-/** @type {import('express').RequestHandler} */
-const updateEmailSettings = async (req, res) => {
-  res.json(await settingsService.updateEmailSettings(req.body));
 };
 
 /** @type {import('express').RequestHandler} */
@@ -102,7 +95,6 @@ module.exports = {
   getSettings,
   getBranding,
   updateCompanyInfo,
-  updateEmailSettings,
   updateSecuritySettings,
   testEmail,
   uploadLogo,

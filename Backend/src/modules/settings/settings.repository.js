@@ -38,21 +38,6 @@ function createSettingsRepository(db) {
     },
 
     /**
-     * Reads only the fields the mailer needs.
-     *
-     * @returns {Promise<object|null>}
-     */
-    findMailConfig() {
-      return db.companySettings.findFirst({
-        select: {
-          smtp_host: true, smtp_port: true, smtp_user: true, smtp_pass: true,
-          smtp_from_name: true, smtp_from_email: true,
-          email_notifications: true, company_name: true,
-        },
-      });
-    },
-
-    /**
      * Reads only the fields the login rate limiter needs.
      *
      * @returns {Promise<{ login_max_attempts: number, login_window_minutes: number }|null>}

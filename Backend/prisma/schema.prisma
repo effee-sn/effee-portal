@@ -233,15 +233,7 @@ model CompanySettings {
   company_website String?
   company_gstin   String?
 
-  // Stored encrypted (AES-256-GCM) — see src/lib/crypto.js. Sized generously
-  // because ciphertext with its IV and auth tag is far longer than the secret.
-  smtp_host           String?
-  smtp_port           Int     @default(587)
-  smtp_user           String?
-  smtp_pass           String? @db.Text
-  smtp_from_name      String?
-  smtp_from_email     String?
-  email_notifications Boolean @default(false)
+  // SMTP is configured from the environment (SMTP_* in .env), not stored here.
 
   login_max_attempts   Int @default(5)
   login_window_minutes Int @default(15)
@@ -875,6 +867,9 @@ model Enquiry {
   // When the enquiry entered its current stage — powers time-in-stage and the
   // aging flag without walking the stage-event history.
   stage_since DateTime @default(now())
+  // When the stage-aging reminder last fired. Re-arms automatically once the
+  // enquiry moves stage (stage_since becomes later than this).
+  aging_reminded_at DateTime?
 
   expected_value Decimal?  @db.Decimal(14, 2)
   expected_close DateTime?

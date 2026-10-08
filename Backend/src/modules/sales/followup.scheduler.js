@@ -1,11 +1,11 @@
-const { runDueFollowupReminders } = require('./followup.service');
+const { runDueFollowupReminders, runStageAgingReminders } = require('./followup.service');
 const { logger } = require('../../core');
 
 /**
- * Periodic follow-up reminder sweep. In-process setInterval — the app has no
- * external scheduler yet. Safe under a cluster because the sweep claims each
- * row before notifying (see followup.service). A `running` guard prevents
- * overlap if a sweep runs long.
+ * Periodic sales reminder sweep (follow-ups due + stalled stages). In-process
+ * setInterval — the app has no external scheduler yet. Safe under a cluster
+ * because the sweep claims each row before notifying (see followup.service).
+ * A `running` guard prevents overlap if a sweep runs long.
  */
 
 const INTERVAL_MS = 15 * 60 * 1000; // every 15 minutes
@@ -18,8 +18,10 @@ async function sweep() {
   if (running) return;
   running = true;
   try {
-    const { checked, sent } = await runDueFollowupReminders();
-    if (sent > 0) logger.info({ checked, sent }, 'Follow-up reminders sent');
+    const followups = await runDueFollowupReminders();
+    if (followups.sent > 0) logger.info(followups, 'Follow-up reminders sent');
+    const aging = await runStageAgingReminders();
+    if (aging.sent > 0) logger.info(aging, 'Stage-aging reminders sent');
   } catch (err) {
     logger.error({ err }, 'Follow-up reminder sweep failed');
   } finally {

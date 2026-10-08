@@ -27,21 +27,6 @@ const updateCompanyBody = z.object({
   company_gstin:   optionalText(20),
 });
 
-/** `PUT /settings/email` */
-const updateEmailBody = z.object({
-  smtp_host:       optionalText(200),
-  smtp_port:       z.coerce.number().int()
-                     .min(1, 'SMTP port must be between 1 and 65535')
-                     .max(65535, 'SMTP port must be between 1 and 65535')
-                     .optional(),
-  smtp_user:       optionalText(200),
-  smtp_pass:       z.string().max(200).optional(),
-  smtp_from_name:  optionalText(120),
-  smtp_from_email: z.union([schemas.email, z.literal('')]).optional()
-                     .transform((value) => (value === '' ? undefined : value)),
-  email_notifications: schemas.flexibleBoolean.optional(),
-});
-
 /** `PUT /settings/security` */
 const updateSecurityBody = z.object({
   login_max_attempts:   z.coerce.number().int()
@@ -65,7 +50,6 @@ const testEmailBody = z.object({
 
 module.exports = {
   updateCompanyBody,
-  updateEmailBody,
   updateSecurityBody,
   testEmailBody,
 };

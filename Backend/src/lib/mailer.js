@@ -1,79 +1,68 @@
 const nodemailer = require('nodemailer');
 
-const { settingsService } = require('../modules/settings/settings.service');
+const config = require('../config/env');
 const { logger } = require('../core/logging/logger');
 
 /**
  * Outbound mail.
  *
- * Configuration is read from the database rather than the environment so an
- * administrator can change SMTP settings without a redeploy. The stored
- * password is encrypted at rest and is decrypted by the settings service, so it
- * exists in plaintext only inside this module, for the duration of a send.
+ * SMTP is configured entirely from the environment (`SMTP_*` in `.env`, read
+ * through `config.MAIL`) — nothing is stored in the database. Changing it needs
+ * a restart.
  *
- * Two entry points, distinguished by whether the administrator's
- * "email notifications" toggle applies:
+ * Two entry points, distinguished by whether `EMAIL_NOTIFICATIONS` applies:
  *
- *   - `sendMail`         — routine notifications. Honours the toggle.
- *   - `sendMailCritical` — password resets. Ignores the toggle, because a user
+ *   - `sendMail`         — routine notifications. Honours the switch.
+ *   - `sendMailCritical` — password resets. Ignores the switch, because a user
  *                          locked out of their account cannot be helped by a
- *                          preference that silently discards the only message
+ *                          setting that silently discards the only message
  *                          that would let them back in.
  */
 
-/**
- * @param {object} config Decrypted mail configuration.
- * @returns {import('nodemailer').Transporter|null}
- */
-function buildTransporter(config) {
-  if (!config?.smtp_host || !config?.smtp_user || !config?.smtp_pass) return null;
+const MAIL = config.MAIL;
 
-  const port = config.smtp_port || 587;
-
-  return nodemailer.createTransport({
-    host: config.smtp_host,
-    port,
-    // Implicit TLS on 465; STARTTLS negotiated on other ports.
-    secure: port === 465,
-    auth: { user: config.smtp_user, pass: config.smtp_pass },
-    // Fail fast with a clear error instead of hanging for ~30s when the SMTP
-    // host is unreachable (e.g. outbound port blocked, wrong host/port).
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 20000,
-  });
+/** True when host, user and password are all present. */
+function isSmtpConfigured() {
+  return Boolean(MAIL.HOST && MAIL.USER && MAIL.PASS);
 }
 
-/**
- * @param {object} config
- * @returns {string}
- */
-function buildFromAddress(config) {
-  const name  = config?.smtp_from_name  || config?.company_name || 'Effee Portal';
-  const email = config?.smtp_from_email || config?.smtp_user    || '';
+/** True when SMTP is configured *and* notification emails are switched on. */
+function isEmailEnabled() {
+  return MAIL.NOTIFICATIONS && isSmtpConfigured();
+}
+
+/** Built once and reused — nodemailer pools the connection. */
+let transporter = null;
+
+/** @returns {import('nodemailer').Transporter|null} */
+function getTransporter() {
+  if (!isSmtpConfigured()) return null;
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
+      host: MAIL.HOST,
+      port: MAIL.PORT,
+      // Implicit TLS on 465; STARTTLS negotiated on other ports.
+      secure: MAIL.PORT === 465,
+      auth: { user: MAIL.USER, pass: MAIL.PASS },
+      // Fail fast with a clear error instead of hanging for ~30s when the SMTP
+      // host is unreachable (e.g. outbound port blocked, wrong host/port).
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 20000,
+    });
+  }
+  return transporter;
+}
+
+/** @returns {string} */
+function fromAddress() {
+  const name  = MAIL.FROM_NAME  || 'Effee Portal';
+  const email = MAIL.FROM_EMAIL || MAIL.USER;
   return `"${name}" <${email}>`;
 }
 
 /**
- * @returns {Promise<boolean>} Whether SMTP credentials are present.
- */
-async function isSmtpConfigured() {
-  const config = await settingsService.getMailConfig();
-  return Boolean(config?.smtp_host && config?.smtp_user && config?.smtp_pass);
-}
-
-/**
- * @returns {Promise<boolean>} Whether configured *and* enabled by the toggle.
- */
-async function isEmailEnabled() {
-  const config = await settingsService.getMailConfig();
-  return Boolean(
-    config?.email_notifications && config?.smtp_host && config?.smtp_user && config?.smtp_pass
-  );
-}
-
-/**
- * Sends a routine notification, honouring the notifications toggle.
+ * Sends a routine notification, honouring `EMAIL_NOTIFICATIONS`.
  *
  * Never throws: a failure to deliver a notification must not fail the business
  * operation that triggered it.
@@ -83,38 +72,32 @@ async function isEmailEnabled() {
  */
 async function sendMail({ to, subject, html }) {
   try {
-    const config = await settingsService.getMailConfig();
+    if (!MAIL.NOTIFICATIONS) return { sent: false, reason: 'Notifications disabled' };
+    const t = getTransporter();
+    if (!t) return { sent: false, reason: 'SMTP not configured' };
 
-    if (!config?.email_notifications) return { sent: false, reason: 'Notifications disabled' };
-
-    const transporter = buildTransporter(config);
-    if (!transporter) return { sent: false, reason: 'SMTP not configured' };
-
-    await transporter.sendMail({ from: buildFromAddress(config), to, subject, html });
+    await t.sendMail({ from: fromAddress(), to, subject, html });
     return { sent: true };
   } catch (err) {
-    logger.error({ err }, 'Failed to send notification email');
+    logger.error({ err, to, subject }, 'Failed to send notification email');
     return { sent: false, reason: err.message };
   }
 }
 
 /**
- * Sends a critical message, ignoring the notifications toggle.
+ * Sends a critical message (password reset), ignoring `EMAIL_NOTIFICATIONS`.
  *
  * @param {{ to: string, subject: string, html: string }} message
  * @returns {Promise<{ sent: boolean, skipped?: boolean, reason?: string }>}
  */
 async function sendMailCritical({ to, subject, html }) {
   try {
-    const config = await settingsService.getMailConfig();
-    const transporter = buildTransporter(config);
-
-    if (!transporter) {
+    const t = getTransporter();
+    if (!t) {
       logger.warn('SMTP not configured — cannot send critical email');
       return { sent: false, skipped: true, reason: 'SMTP not configured' };
     }
-
-    await transporter.sendMail({ from: buildFromAddress(config), to, subject, html });
+    await t.sendMail({ from: fromAddress(), to, subject, html });
     return { sent: true };
   } catch (err) {
     logger.error({ err }, 'Failed to send critical email');
@@ -132,11 +115,10 @@ async function sendMailCritical({ to, subject, html }) {
  * @returns {Promise<void>}
  */
 async function sendTestMail({ to, subject, html }) {
-  const config = await settingsService.requireMailConfig();
-  const transporter = buildTransporter(config);
-
-  await transporter.verify();
-  await transporter.sendMail({ from: buildFromAddress(config), to, subject, html });
+  const t = getTransporter();
+  if (!t) throw new Error('SMTP is not configured. Set SMTP_HOST, SMTP_USER and SMTP_PASS in .env and restart.');
+  await t.verify();
+  await t.sendMail({ from: fromAddress(), to, subject, html });
 }
 
 module.exports = { sendMail, sendMailCritical, sendTestMail, isEmailEnabled, isSmtpConfigured };

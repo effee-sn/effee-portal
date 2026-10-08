@@ -5,6 +5,7 @@ const { attachmentRepository } = require('./attachment.repository');
 const { storageDir } = require('./attachment.upload');
 const { enquiryService } = require('./enquiry.service');
 const { auditService } = require('../audit/audit.service');
+const { notificationService } = require('../notification/notification.service');
 const { NotFoundError, ForbiddenError, BadRequestError, ConflictError } = require('../../core');
 
 // Kinds that hold a single live document (re-uploading replaces it). OFFER is
@@ -139,9 +140,26 @@ function createAttachmentService(repository) {
       // Negotiation Follow-up, its own forward stage. The move is a side effect
       // of sending, not a manual step.
       if (sent && enquiry.stage === 'OFFER_RELEASED') {
-        await enquiryService.setStageAuto(before.enquiry_id, 'FOLLOW_UP', actor);
+        await enquiryService.setStageAuto(before.enquiry_id, 'FOLLOW_UP', actor, {
+          note: `offer "${before.file_name}" was sent to the customer — please follow up`,
+        });
       } else if (sent && enquiry.stage === 'NEGOTIATION') {
-        await enquiryService.setStageAuto(before.enquiry_id, 'NEGOTIATION_FOLLOW_UP', actor);
+        await enquiryService.setStageAuto(before.enquiry_id, 'NEGOTIATION_FOLLOW_UP', actor, {
+          note: `revised offer "${before.file_name}" was sent to the customer — please follow up`,
+        });
+      } else if (sent) {
+        // Sent without a stage change (e.g. a re-send during follow-up): still
+        // tell the field owner, who handles the customer.
+        notificationService.notify({
+          userIds: [enquiry.owner_id],
+          type: notificationService.Type.OFFER_SENT,
+          title: `Offer sent: ${enquiry.ref_no}`,
+          body: `"${before.file_name}" was sent to the customer`,
+          entityType: 'Enquiry',
+          entityId: String(enquiry.id),
+          link: `/dashboard/sales/enquiries/${enquiry.id}`,
+          actorId: actor?.id ?? null,
+        });
       }
 
       return attachment;

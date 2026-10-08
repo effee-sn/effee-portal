@@ -141,6 +141,21 @@ const config = Object.freeze({
     PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY || '',
     SUBJECT:     process.env.VAPID_SUBJECT || 'mailto:admin@example.com',
   },
+
+  /**
+   * Outbound email (SMTP). All optional — when host/user/pass are absent, email
+   * is simply disabled and the app boots fine. `EMAIL_NOTIFICATIONS` switches
+   * routine notification emails on/off; password-reset emails ignore it.
+   */
+  MAIL: {
+    HOST:          (process.env.SMTP_HOST || '').trim(),
+    PORT:          integer('SMTP_PORT', 587),
+    USER:          (process.env.SMTP_USER || '').trim(),
+    PASS:          process.env.SMTP_PASS || '',
+    FROM_NAME:     (process.env.SMTP_FROM_NAME || '').trim(),
+    FROM_EMAIL:    (process.env.SMTP_FROM_EMAIL || '').trim(),
+    NOTIFICATIONS: (process.env.EMAIL_NOTIFICATIONS || 'false').trim().toLowerCase() === 'true',
+  },
 });
 
 if (problems.length > 0) {

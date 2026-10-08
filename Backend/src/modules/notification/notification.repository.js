@@ -63,6 +63,18 @@ function createNotificationRepository(db) {
     },
 
     // ── Recipient resolution ────────────────────────────────────────────────
+    /**
+     * Email addresses of active recipients, for the notification email.
+     * @param {number[]} userIds
+     * @returns {Promise<Array<{ id: number, name: string, email: string }>>}
+     */
+    findEmailRecipients(userIds) {
+      return db.user.findMany({
+        where: { id: { in: userIds }, deleted_at: null, status: 'ACTIVE' },
+        select: { id: true, name: true, email: true },
+      });
+    },
+
     /** Active members of a role. @param {number} roleId @returns {Promise<number[]>} */
     async userIdsByRole(roleId) {
       const rows = await db.user.findMany({

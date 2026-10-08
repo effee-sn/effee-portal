@@ -1,6 +1,16 @@
 const { notificationRepository } = require('./notification.repository');
 const { pushService } = require('./push.service');
+const { sendMail, isEmailEnabled } = require('../../lib/mailer');
+const { notification: notificationEmail } = require('../../lib/emailTemplates');
+const config = require('../../config/env');
 const { logger } = require('../../core/logging/logger');
+
+/** Turns a stored in-app link (`/dashboard/...`) into an absolute portal URL. */
+function absoluteLink(link) {
+  if (!link) return null;
+  if (/^https?:\/\//i.test(link)) return link;
+  return `${config.ALLOWED_ORIGINS[0]}${link.startsWith('/') ? '' : '/'}${link}`;
+}
 
 /**
  * Notification business logic.
@@ -18,6 +28,23 @@ const { logger } = require('../../core/logging/logger');
  * @param {ReturnType<typeof import('./notification.repository').createNotificationRepository>} repository
  */
 function createNotificationService(repository) {
+  /**
+   * Mirrors a notification to each recipient's inbox by email. Fire-and-forget
+   * (the caller never waits on SMTP) and best-effort (`sendMail` never throws).
+   * Skipped entirely when email is off or SMTP is not configured in `.env`.
+   */
+  function emailRecipients(recipients, { title, body, link }) {
+    if (!isEmailEnabled()) return;
+    (async () => {
+      const users = await repository.findEmailRecipients(recipients);
+      const actionUrl = absoluteLink(link);
+      await Promise.all(users.filter((u) => u.email).map(async (u) => {
+        const mail = await notificationEmail({ to: u.email, userName: u.name, title, body, actionUrl });
+        await sendMail(mail);
+      }));
+    })().catch((err) => logger.error({ err, title }, 'Failed to email notification'));
+  }
+
   /** Standard event verbs. Strings, so modules can add their own. */
   const Type = Object.freeze({
     TICKET_ASSIGNED:            'TICKET_ASSIGNED',
@@ -34,6 +61,9 @@ function createNotificationService(repository) {
     // Sales area.
     ENQUIRY_ASSIGNED:           'ENQUIRY_ASSIGNED',
     ENQUIRY_WON:                'ENQUIRY_WON',
+    ENQUIRY_LOST:               'ENQUIRY_LOST',
+    OFFER_SENT:                 'OFFER_SENT',
+    STAGE_AGING:                'STAGE_AGING',
     ACTIVITY_FOLLOWUP:          'ACTIVITY_FOLLOWUP',
     FOLLOWUP_DUE:               'FOLLOWUP_DUE',
   });
@@ -76,6 +106,9 @@ function createNotificationService(repository) {
         // Fan the same event out to any browser push subscriptions (best-effort,
         // no-op when push is not configured).
         await pushService.sendToUsers(recipients, { title, body, url: link });
+
+        // …and to email (background; no-op unless EMAIL_NOTIFICATIONS + SMTP_* are set).
+        emailRecipients(recipients, { title, body, link });
       } catch (err) {
         logger.error({ err, type, title }, 'Failed to write notification(s)');
       }

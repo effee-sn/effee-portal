@@ -8,10 +8,10 @@ const authenticate      = require('../../middleware/authenticate');
 const requireSystemRole = require('../../middleware/requireSystemRole');
 const { asyncHandler, validate, BadRequestError } = require('../../core');
 const {
-  updateCompanyBody, updateEmailBody, updateSecurityBody, testEmailBody,
+  updateCompanyBody, updateSecurityBody, testEmailBody,
 } = require('./settings.validation');
 const {
-  getSettings, getBranding, updateCompanyInfo, updateEmailSettings,
+  getSettings, getBranding, updateCompanyInfo,
   updateSecuritySettings, testEmail, uploadLogo,
 } = require('./settings.controller');
 
@@ -107,14 +107,14 @@ router.use(authenticate);
 /**
  * Readable by any authenticated user, but the payload is filtered by role in
  * the service. Every user needs company branding for the application shell;
- * only system administrators may see SMTP and security configuration.
+ * only system administrators may see security configuration.
  */
 router.get('/', asyncHandler(getSettings));
 
 /**
  * Platform configuration. These were originally protected by authentication
  * alone, with the super-admin check left to the frontend — which meant any
- * authenticated user could repoint SMTP credentials or disable login rate
+ * authenticated user could change company details or disable login rate
  * limiting by calling the API directly.
  */
 router.put(
@@ -122,13 +122,6 @@ router.put(
   requireSystemRole,
   validate({ body: updateCompanyBody }),
   asyncHandler(updateCompanyInfo)
-);
-
-router.put(
-  '/email',
-  requireSystemRole,
-  validate({ body: updateEmailBody }),
-  asyncHandler(updateEmailSettings)
 );
 
 router.put(

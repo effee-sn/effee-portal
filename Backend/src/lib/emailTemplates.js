@@ -5,7 +5,17 @@ async function getCompanyName() {
   return s?.company_name || 'Effee Portal';
 }
 
-function baseTemplate(companyName, content) {
+/** Escapes text for safe interpolation into HTML (titles can be user-entered). */
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function baseTemplate(companyName, content, subtitle = 'Service Ticketing') {
   return `
 <!DOCTYPE html>
 <html>
@@ -36,7 +46,7 @@ function baseTemplate(companyName, content) {
   <div class="wrapper">
     <div class="header">
       <h1>${companyName}</h1>
-      <p>Service Ticketing</p>
+      <p>${subtitle}</p>
     </div>
     <div class="body">
       ${content}
@@ -217,7 +227,30 @@ async function forgotPassword({ to, userName, resetUrl }) {
   return { to, subject: `Reset Your Password — ${company}`, html: baseTemplate(company, content) };
 }
 
+// ── In-app notification, mirrored to email ───────────────────────────────────
+/**
+ * Generic email for any in-app notification: the same title and body the bell
+ * shows, plus a button into the portal.
+ *
+ * @param {{ to: string, userName?: string, title: string, body?: string|null, actionUrl?: string|null }} params
+ */
+async function notification({ to, userName, title, body, actionUrl }) {
+  const company = await getCompanyName();
+  const content = `
+    <p>Hi ${escapeHtml(userName || 'there')},</p>
+    <p style="font-size:16px; font-weight:600; color:#0f172a;">${escapeHtml(title)}</p>
+    ${body ? `<p>${escapeHtml(body)}</p>` : ''}
+    ${actionUrl ? `
+    <div style="text-align:center; margin: 24px 0;">
+      <a href="${escapeHtml(actionUrl)}" style="display:inline-block; background:#1e40af; color:#fff; padding:11px 26px; border-radius:8px; font-size:14px; font-weight:600; text-decoration:none;">
+        View in portal
+      </a>
+    </div>` : ''}`;
+  return { to, subject: `${title} — ${company}`, html: baseTemplate(company, content, 'Notification') };
+}
+
 module.exports = {
+  notification,
   reimbursementSubmitted,
   reimbursementApproved,
   reimbursementRejected,

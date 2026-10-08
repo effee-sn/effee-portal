@@ -5,6 +5,12 @@ const { notificationService } = require('../notification/notification.service');
 const { missingForStage, GATED_STAGES } = require('./stageGate');
 const { NotFoundError, ConflictError, ValidationError, ForbiddenError, buildSearchClause } = require('../../core');
 
+/** Human label for a stage enum, for notification text (`FOLLOW_UP` → `Follow up`). */
+function stageLabel(stage) {
+  const s = String(stage || '').replace(/_/g, ' ').toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 /**
  * Which role holds the enquiry at a given stage. FIELD = the initiator who
  * raised it; INTERNAL = the configured Internal Sales handler. The initiator
@@ -151,13 +157,30 @@ function createEnquiryService(repository) {
   }
 
   /** Notifies whoever the enquiry has just been handed to (never the actor). */
-  function notifyHandoff(enquiry, handlerId, actor) {
+  function notifyHandoff(enquiry, handlerId, actor, note) {
     if (!handlerId || handlerId === actor?.id) return;
     notificationService.notify({
       userIds: [handlerId],
       type: notificationService.Type.ENQUIRY_ASSIGNED,
       title: `Enquiry handed to you: ${enquiry.ref_no}`,
-      body: `${enquiry.title} — now at ${enquiry.stage}`,
+      body: `${enquiry.title} — ${note || `now at ${stageLabel(enquiry.stage)}`}`,
+      entityType: 'Enquiry',
+      entityId: String(enquiry.id),
+      link: `/dashboard/sales/enquiries/${enquiry.id}`,
+      actorId: actor?.id ?? null,
+    });
+  }
+
+  /**
+   * Tells everyone with a stake in the deal how it closed: the field owner, the
+   * internal handler, and whoever raised it — minus the person who closed it.
+   */
+  async function notifyClose(enquiry, actor, { type, title, body }) {
+    notificationService.notify({
+      userIds: [enquiry.owner_id, await internalHandlerId(), enquiry.created_by],
+      type,
+      title,
+      body,
       entityType: 'Enquiry',
       entityId: String(enquiry.id),
       link: `/dashboard/sales/enquiries/${enquiry.id}`,
@@ -333,7 +356,7 @@ function createEnquiryService(repository) {
      * @param {'FOLLOW_UP'|'NEGOTIATION'|'NEGOTIATION_FOLLOW_UP'} toStage
      * @param {import('../../core/http/requestContext').ActorContext} [actor]
      */
-    async setStageAuto(id, toStage, actor) {
+    async setStageAuto(id, toStage, actor, { note } = {}) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Enquiry');
       if (before.stage === toStage) return before;
@@ -345,7 +368,7 @@ function createEnquiryService(repository) {
       await repository.recordStageEvent({
         enquiry_id: id, from_stage: before.stage, to_stage: toStage, changed_by: actor?.id ?? null,
       });
-      if (handler_id !== before.handler_id) notifyHandoff(enquiry, handler_id, actor);
+      if (handler_id !== before.handler_id) notifyHandoff(enquiry, handler_id, actor, note);
 
       await auditService.record({
         action: auditService.Action.UPDATE,
@@ -396,15 +419,10 @@ function createEnquiryService(repository) {
       });
 
       // Congratulate / inform the owner (unless they closed it themselves).
-      notificationService.notify({
-        userIds: [enquiry.owner_id],
+      await notifyClose(enquiry, actor, {
         type: notificationService.Type.ENQUIRY_WON,
         title: `Order won: ${enquiry.ref_no}`,
         body: `${enquiry.title} — ${enquiry.customer?.name ?? 'customer'}`,
-        entityType: 'Enquiry',
-        entityId: String(enquiry.id),
-        link: `/dashboard/sales/enquiries/${enquiry.id}`,
-        actorId: actor?.id ?? null,
       });
 
       return enquiry;
@@ -435,6 +453,12 @@ function createEnquiryService(repository) {
         entityId: id,
         actor,
         changes: { stage: { from: before.stage, to: 'LOST' }, lost_reason: dto.lost_reason },
+      });
+
+      await notifyClose(enquiry, actor, {
+        type: notificationService.Type.ENQUIRY_LOST,
+        title: `Enquiry lost: ${enquiry.ref_no}`,
+        body: `${enquiry.title} — ${dto.lost_reason}${dto.lost_to ? ` (went to ${dto.lost_to})` : ''}`,
       });
 
       return enquiry;
@@ -548,4 +572,4 @@ function createEnquiryService(repository) {
 
 const enquiryService = createEnquiryService(enquiryRepository);
 
-module.exports = { enquiryService, createEnquiryService };
+module.exports = { enquiryService, createEnquiryService, stageLabel };

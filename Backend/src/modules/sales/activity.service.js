@@ -116,7 +116,9 @@ function createActivityService(repository) {
       // Negotiation Follow-up round.
       if (!dto.is_review && dto.needs_negotiation
         && (enquiry.stage === 'FOLLOW_UP' || enquiry.stage === 'NEGOTIATION_FOLLOW_UP')) {
-        await enquiryService.setStageAuto(enquiryId, 'NEGOTIATION', actor);
+        await enquiryService.setStageAuto(enquiryId, 'NEGOTIATION', actor, {
+          note: 'negotiation requested — please prepare and send a revised offer',
+        });
       }
 
       return mapRow(activity);
@@ -149,7 +151,9 @@ function createActivityService(repository) {
       // Negotiation.
       if (!before.is_review && dto.needs_negotiation
         && (enquiry.stage === 'FOLLOW_UP' || enquiry.stage === 'NEGOTIATION_FOLLOW_UP')) {
-        await enquiryService.setStageAuto(before.enquiry_id, 'NEGOTIATION', actor);
+        await enquiryService.setStageAuto(before.enquiry_id, 'NEGOTIATION', actor, {
+          note: 'negotiation requested — please prepare and send a revised offer',
+        });
       }
 
       return mapRow(activity);
