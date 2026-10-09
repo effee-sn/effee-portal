@@ -176,7 +176,8 @@ function createEnquiryRepository(db) {
     async docFlags(enquiryId) {
       const [rows, activityCount, concludedReviewCount] = await Promise.all([
         db.enquiryAttachment.findMany({
-          where: { enquiry_id: enquiryId, deleted_at: null },
+          // Current documents only — superseded versions are history.
+          where: { enquiry_id: enquiryId, deleted_at: null, superseded_at: null },
           select: { kind: true, sent_at: true },
         }),
         db.enquiryActivity.count({ where: { enquiry_id: enquiryId, deleted_at: null, is_review: false } }),

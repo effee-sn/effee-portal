@@ -620,3 +620,56 @@ describe('Sales configuration: applications and stage probabilities', () => {
     assert.equal(r.headline.weighted_value, 5000);
   });
 });
+
+describe('Sales documents: versioning', () => {
+  let id;
+  const docs = async (kind) => (await attachmentService.listForEnquiry(id)).filter((d) => d.kind === kind);
+
+  it('replacing a document keeps the old one as a superseded version', async () => {
+    id = (await newEnquiry('GENERATED')).id;
+    const v1 = await upload(id, 'FORMAT_PDF', fx.field);
+    const v2 = await upload(id, 'FORMAT_PDF', fx.field);
+    assert.equal(v1.version, 1);
+    assert.equal(v2.version, 2);
+
+    const list = await docs('FORMAT_PDF');
+    assert.equal(list.length, 2, 'both versions are listed');
+    assert.equal(list[0].id, v2.id, 'newest first');
+    assert.equal(list[0].superseded_at, null, 'v2 is current');
+    assert.notEqual(list[1].superseded_at, null, 'v1 is history');
+    assert.equal(list[0].uploaded_by, fx.field.name);
+  });
+
+  it('a superseded version stays downloadable but cannot be deleted', async () => {
+    const [, v1] = await docs('FORMAT_PDF');
+    await assert.rejects(attachmentService.remove(v1.id, actor(fx.field)), { name: 'ConflictError' });
+    await assert.rejects(attachmentService.fileFor(v1.id), { name: 'NotFoundError', message: /File/ },
+      'the row resolves (only the test file itself is missing on disk)');
+  });
+
+  it('deleting the current version restores the previous one as current', async () => {
+    const [v2, v1] = await docs('FORMAT_PDF');
+    await attachmentService.remove(v2.id, actor(fx.field));
+    const list = await docs('FORMAT_PDF');
+    assert.equal(list.length, 1);
+    assert.equal(list[0].id, v1.id);
+    assert.equal(list[0].superseded_at, null);
+    // The gate sees a current format document again.
+    await move(id, 'REVIEW', fx.field);
+    assert.equal((await state(id)).stage, 'REVIEW');
+  });
+
+  it('the next upload after a delete continues the numbering from what is kept', async () => {
+    const v = await upload(id, 'FORMAT_PDF', fx.internal); // at Review, Internal holds it
+    assert.equal(v.version, 2);
+  });
+
+  it('offer revisions are numbered and all stay current', async () => {
+    const e = await toOfferReleased();
+    const r1 = await upload(e.id, 'OFFER', fx.internal);
+    const r2 = await upload(e.id, 'OFFER', fx.internal);
+    assert.deepEqual([r1.version, r2.version], [1, 2]);
+    const offers = (await attachmentService.listForEnquiry(e.id)).filter((d) => d.kind === 'OFFER');
+    assert.ok(offers.every((o) => o.superseded_at === null));
+  });
+});

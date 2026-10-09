@@ -8,8 +8,9 @@ const { auditService } = require('../audit/audit.service');
 const { notificationService } = require('../notification/notification.service');
 const { NotFoundError, ForbiddenError, BadRequestError, ConflictError } = require('../../core');
 
-// Kinds that hold a single live document (re-uploading replaces it). OFFER is
-// the exception — it keeps every revision.
+// Kinds that hold a single *current* document. Re-uploading creates the next
+// version and keeps the old one as superseded history. OFFER is the exception —
+// every revision stays current (each can be sent), numbered Rev 1, 2, ….
 const SINGLE_KINDS = new Set(['FORMAT_PDF', 'FORMAT_EXCEL', 'CONCEPT', 'POWER_CALC', 'COSTING', 'COSTING_REVIEW']);
 
 /**
@@ -63,9 +64,11 @@ function createAttachmentService(repository) {
         throw err;
       }
 
-      // Single-instance kinds replace the prior live doc.
+      // Next version of this kind. For single-instance kinds the previous
+      // current doc becomes superseded history (still downloadable).
+      const version = (await repository.maxVersion(enquiryId, dto.kind)) + 1;
       if (SINGLE_KINDS.has(dto.kind)) {
-        await repository.softDeleteKind(enquiryId, dto.kind, actor?.id ?? null);
+        await repository.supersedeCurrent(enquiryId, dto.kind, actor?.id ?? null);
       }
 
       const attachment = await repository.create({
@@ -77,6 +80,7 @@ function createAttachmentService(repository) {
         size_bytes: file.size,
         note: dto.note ?? null,
         stage: enquiry.stage, // stamp the stage this document was uploaded in
+        version,
         created_by: actor?.id ?? null,
         updated_by: actor?.id ?? null,
       });
@@ -86,7 +90,7 @@ function createAttachmentService(repository) {
         entity: 'EnquiryAttachment',
         entityId: attachment.id,
         actor,
-        changes: { enquiry_id: enquiryId, kind: dto.kind, file_name: file.originalname },
+        changes: { enquiry_id: enquiryId, kind: dto.kind, file_name: file.originalname, version },
       });
 
       return attachment;
@@ -118,6 +122,7 @@ function createAttachmentService(repository) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Attachment');
       if (before.kind !== 'OFFER') throw new ConflictError('Only offer documents can be marked as sent');
+      if (before.superseded_at) throw new ConflictError('An older version cannot be marked as sent');
       const enquiry = await loadEnquiry(before.enquiry_id);
       assertCanManage(enquiry, actor);
 
@@ -174,15 +179,30 @@ function createAttachmentService(repository) {
       if (!before) throw new NotFoundError('Attachment');
       const enquiry = await loadEnquiry(before.enquiry_id);
       assertCanManage(enquiry, actor);
+      // History is the record of what was shared and when — previous versions
+      // stay. Only the current document (or an offer revision) can be deleted.
+      if (before.superseded_at) {
+        throw new ConflictError('Previous versions are kept as history and cannot be deleted');
+      }
 
       await repository.softDelete(id, actor?.id ?? null);
+
+      // Deleting the current version undoes it: the one before becomes current.
+      let restored = null;
+      if (SINGLE_KINDS.has(before.kind)) {
+        restored = await repository.findLatestSuperseded(before.enquiry_id, before.kind);
+        if (restored) await repository.update(restored.id, { superseded_at: null, updated_by: actor?.id ?? null });
+      }
 
       await auditService.record({
         action: auditService.Action.DELETE,
         entity: 'EnquiryAttachment',
         entityId: id,
         actor,
-        changes: { enquiry_id: before.enquiry_id, kind: before.kind, file_name: before.file_name, soft_deleted: true },
+        changes: {
+          enquiry_id: before.enquiry_id, kind: before.kind, file_name: before.file_name, version: before.version,
+          soft_deleted: true, ...(restored ? { restored_version: restored.version } : {}),
+        },
       });
     },
   };

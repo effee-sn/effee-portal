@@ -1088,6 +1088,13 @@ model EnquiryAttachment {
   // whether an offer version was added at Offer Released or during Negotiation).
   stage       EnquiryStage?
 
+  // Version within this enquiry + kind (v1, v2, …; offers read as Rev N).
+  version       Int       @default(1)
+  // Set when a newer upload of the same kind replaced this one. A superseded
+  // document is history: still listed and downloadable, never "current".
+  // (Offers are never superseded — every revision stays live.)
+  superseded_at DateTime?
+
   // Offer send record.
   sent_at DateTime?
   sent_by Int?
@@ -1099,6 +1106,7 @@ model EnquiryAttachment {
   updated_by Int?
 
   @@index([enquiry_id])
+  @@index([enquiry_id, kind])
   @@index([kind])
   @@index([deleted_at])
 }

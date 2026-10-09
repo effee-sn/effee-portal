@@ -15,6 +15,8 @@ function createAttachmentRepository(db) {
     size_bytes: true,
     note: true,
     stage: true,
+    version: true,
+    superseded_at: true,
     sent_at: true,
     sent_by: true,
     created_at: true,
@@ -27,11 +29,36 @@ function createAttachmentRepository(db) {
     attachmentSelect,
     active,
 
-    findByEnquiry(enquiryId) {
-      return db.enquiryAttachment.findMany({
+    /** Every kept document — current and superseded — newest version first, with uploader names. */
+    async findByEnquiry(enquiryId) {
+      const rows = await db.enquiryAttachment.findMany({
         where: active({ enquiry_id: enquiryId }),
         select: attachmentSelect,
-        orderBy: [{ kind: 'asc' }, { created_at: 'desc' }],
+        orderBy: [{ kind: 'asc' }, { version: 'desc' }, { created_at: 'desc' }],
+      });
+      const ids = [...new Set(rows.map((r) => r.created_by).filter(Boolean))];
+      const users = ids.length
+        ? await db.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } })
+        : [];
+      const names = Object.fromEntries(users.map((u) => [u.id, u.name]));
+      return rows.map((r) => ({ ...r, uploaded_by: r.created_by ? names[r.created_by] ?? null : null }));
+    },
+
+    /** Highest kept version of a kind on an enquiry (0 when none). */
+    async maxVersion(enquiryId, kind) {
+      const agg = await db.enquiryAttachment.aggregate({
+        where: active({ enquiry_id: enquiryId, kind }),
+        _max: { version: true },
+      });
+      return agg._max.version ?? 0;
+    },
+
+    /** The newest superseded version of a kind — restored when the current one is deleted. */
+    findLatestSuperseded(enquiryId, kind) {
+      return db.enquiryAttachment.findFirst({
+        where: active({ enquiry_id: enquiryId, kind, superseded_at: { not: null } }),
+        orderBy: [{ version: 'desc' }, { id: 'desc' }],
+        select: { id: true, version: true },
       });
     },
 
@@ -63,11 +90,11 @@ function createAttachmentRepository(db) {
       });
     },
 
-    /** Soft-deletes any existing live doc of a single-instance kind. */
-    softDeleteKind(enquiryId, kind, actorId = null) {
+    /** Marks the current doc of a single-instance kind as superseded (kept as history). */
+    supersedeCurrent(enquiryId, kind, actorId = null) {
       return db.enquiryAttachment.updateMany({
-        where: active({ enquiry_id: enquiryId, kind }),
-        data: { deleted_at: new Date(), updated_by: actorId },
+        where: active({ enquiry_id: enquiryId, kind, superseded_at: null }),
+        data: { superseded_at: new Date(), updated_by: actorId },
       });
     },
 
