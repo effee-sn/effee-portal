@@ -452,6 +452,13 @@ export default function EnquiryDetailPage() {
               {enquiry.current_temperature && <TempChip value={enquiry.current_temperature} />}
             </div>
             <h1 className="text-xl font-semibold text-gray-800 mt-0.5 break-words">{enquiry.title}</h1>
+            {enquiry.application && (
+              <p className="mt-0.5">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium text-[var(--ams-primary)] bg-[var(--ams-primary-mid)]">
+                  <span className="text-gray-500 font-normal">Application:</span> {enquiry.application.name}
+                </span>
+              </p>
+            )}
             <div className="text-xs text-gray-500 mt-1 flex items-center gap-x-4 gap-y-1 flex-wrap">
               <button onClick={() => nav(`/dashboard/master-data/customers/${enquiry.customer_id}`)}
                 className="hover:underline text-blue-600 cursor-pointer">{enquiry.customer?.name}</button>
