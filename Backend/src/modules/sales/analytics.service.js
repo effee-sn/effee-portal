@@ -1,4 +1,5 @@
 const { analyticsRepository } = require('./analytics.repository');
+const { salesConfigService } = require('./config.service');
 
 /**
  * Sales dashboard business logic: turns the repository's rows into the
@@ -6,8 +7,9 @@ const { analyticsRepository } = require('./analytics.repository');
  * slice of enquiries; no writes.
  *
  * @param {ReturnType<typeof import('./analytics.repository').createAnalyticsRepository>} repository
+ * @param {{ probabilityMap: () => Promise<Record<string, number>> }} [config]
  */
-function createAnalyticsService(repository) {
+function createAnalyticsService(repository, config = salesConfigService) {
   const DAY_MS = 24 * 60 * 60 * 1000;
 
   // Pipeline order used to decide how far an enquiry got. LOST is not a rung.
@@ -54,7 +56,7 @@ function createAnalyticsService(repository) {
     to.setDate(to.getDate() + 1); // include the whole "to" day
     const from = query.from ? new Date(query.from) : new Date(to.getTime() - 90 * DAY_MS);
     from.setHours(0, 0, 0, 0);
-    return { from, to, ownerId: query.owner_id, type: query.enquiry_type };
+    return { from, to, ownerId: query.owner_id, type: query.enquiry_type, applicationId: query.application_id };
   }
 
   function funnel(raised) {
@@ -115,8 +117,10 @@ function createAnalyticsService(repository) {
       const lastDay = new Date(f.to.getTime() - 1);
       const trendFrom = new Date(lastDay.getFullYear(), lastDay.getMonth() - 11, 1);
 
-      const [openRows, won, lost, raised, exits, closed, stalled, hot, overdue, owners] = await Promise.all([
+      const [openRows, stageRows, probability, won, lost, raised, exits, closed, stalled, hot, overdue, owners] = await Promise.all([
         repository.openByOwner(f),
+        repository.openByStage(f),
+        config.probabilityMap(),
         repository.won(f),
         repository.lost(f),
         repository.raised(f),
@@ -151,6 +155,10 @@ function createAnalyticsService(repository) {
         headline: {
           open_count: openRows.reduce((n, r) => n + r._count._all, 0),
           open_value: openRows.reduce((n, r) => n + num(r._sum.expected_value), 0),
+          // Expected value × the stage's win probability, summed.
+          weighted_value: Math.round(stageRows.reduce(
+            (n, r) => n + num(r._sum.expected_value) * ((probability[r.stage] ?? 0) / 100), 0
+          )),
           raised: raised.length,
           won: won.length,
           won_value: wonValue,

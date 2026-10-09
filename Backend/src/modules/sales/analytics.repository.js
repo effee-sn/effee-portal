@@ -22,7 +22,7 @@ function createAnalyticsRepository(db) {
   const CLOSED = ['WON', 'LOST'];
 
   /**
-   * @typedef {{ from: Date, to: Date, ownerId?: number, type?: string }} Filter
+   * @typedef {{ from: Date, to: Date, ownerId?: number, type?: string, applicationId?: number }} Filter
    * `to` is exclusive (the day after the last included day).
    */
 
@@ -31,6 +31,7 @@ function createAnalyticsRepository(db) {
     deleted_at: null,
     ...(f.ownerId ? { owner_id: f.ownerId } : {}),
     ...(f.type ? { enquiry_type: f.type } : {}),
+    ...(f.applicationId ? { application_id: f.applicationId } : {}),
   });
 
   /** @param {Filter} f */
@@ -50,6 +51,11 @@ function createAnalyticsRepository(db) {
       return db.enquiry.groupBy({
         by: ['owner_id'], where: open(f), _count: { _all: true }, _sum: { expected_value: true },
       });
+    },
+
+    /** Open value per stage — weighted by the stage probabilities in the service. @param {Filter} f */
+    openByStage(f) {
+      return db.enquiry.groupBy({ by: ['stage'], where: open(f), _sum: { expected_value: true } });
     },
 
     /** @param {Filter} f */

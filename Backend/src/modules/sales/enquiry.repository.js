@@ -19,6 +19,8 @@ function createEnquiryRepository(db) {
     order_value: true,
     customer_id: true,
     customer: { select: { id: true, name: true } },
+    application_id: true,
+    application: { select: { id: true, name: true } },
     owner_id: true,
     owner: { select: { id: true, name: true } },
     handler_id: true,
@@ -54,6 +56,8 @@ function createEnquiryRepository(db) {
     lost_to: true,
     customer_id: true,
     customer: { select: { id: true, name: true, state: true, state_code: true, gstin: true } },
+    application_id: true,
+    application: { select: { id: true, name: true, is_active: true } },
     contact_id: true,
     contact: { select: { id: true, name: true, designation: true, email: true, phone: true } },
     owner_id: true,
@@ -150,6 +154,12 @@ function createEnquiryRepository(db) {
         where: { id: contactId, customer_id: customerId, deleted_at: null },
         select: { id: true },
       });
+      return row !== null;
+    },
+
+    /** An application can be newly chosen only while it is active. */
+    async applicationActive(id) {
+      const row = await db.salesApplication.findFirst({ where: { id, is_active: true }, select: { id: true } });
       return row !== null;
     },
 

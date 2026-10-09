@@ -27,6 +27,9 @@ const {
 const { updateWorkflowBody } = require('./workflow.validation');
 const { getWorkflow, updateWorkflow } = require('./workflow.controller');
 
+const configValidation = require('./config.validation');
+const configController = require('./config.controller');
+
 const { analyticsQuery } = require('./analytics.validation');
 const { getAnalytics } = require('./analytics.controller');
 
@@ -41,6 +44,37 @@ router.put(
   authorize('SALES_EDIT'),
   validate({ body: updateWorkflowBody }),
   asyncHandler(updateWorkflow)
+);
+
+// ── Sales configuration (applications + stage probabilities) ─────────────────
+// Reading is open to every sales user (the enquiry form's dropdown, the
+// probability shown on an enquiry); changing needs SALES_CONFIG_* rights.
+router.get('/applications', authorize('SALES_VIEW'), asyncHandler(configController.listApplications));
+router.post(
+  '/applications',
+  authorize('SALES_CONFIG_CREATE'),
+  validate({ body: configValidation.createApplicationBody }),
+  asyncHandler(configController.createApplication)
+);
+router.put(
+  '/applications/:id',
+  authorize('SALES_CONFIG_EDIT'),
+  validate({ params: configValidation.applicationIdParam, body: configValidation.updateApplicationBody }),
+  asyncHandler(configController.updateApplication)
+);
+router.delete(
+  '/applications/:id',
+  authorize('SALES_CONFIG_DELETE'),
+  validate({ params: configValidation.applicationIdParam }),
+  asyncHandler(configController.deleteApplication)
+);
+
+router.get('/stage-probabilities', authorize('SALES_VIEW'), asyncHandler(configController.listProbabilities));
+router.put(
+  '/stage-probabilities',
+  authorize('SALES_CONFIG_EDIT'),
+  validate({ body: configValidation.probabilitiesBody }),
+  asyncHandler(configController.saveProbabilities)
 );
 
 // ── Sales dashboard (pipeline analytics) ──────────────────────────────────────

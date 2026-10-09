@@ -10,6 +10,7 @@ import {
 import {
   Card, Empty, Pulse, Stat, StageChip, compactINR,
 } from '@/components/DashboardKit';
+import useSalesConfig from '@/lib/useSalesConfig';
 
 /**
  * Sales → Dashboard. How the sales team is doing over a period: headline
@@ -255,6 +256,8 @@ export default function SalesDashboardPage() {
   const [range, setRange]   = useState(() => presetRange('fy'));
   const [ownerId, setOwnerId] = useState('');
   const [type, setType]       = useState('');
+  const [appId, setAppId]     = useState('');
+  const salesConfig = useSalesConfig();
 
   const [data, setData]         = useState(null);
   const [loadedUrl, setLoadedUrl] = useState(null);
@@ -266,8 +269,9 @@ export default function SalesDashboardPage() {
     if (range.to) p.set('to', range.to);
     if (ownerId) p.set('owner_id', ownerId);
     if (type) p.set('enquiry_type', type);
+    if (appId) p.set('application_id', appId);
     return `/sales/analytics?${p}`;
-  }, [range, ownerId, type]);
+  }, [range, ownerId, type, appId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -295,7 +299,7 @@ export default function SalesDashboardPage() {
   };
 
   const h = data?.headline;
-  const filtered = Boolean(ownerId || type);
+  const filtered = Boolean(ownerId || type || appId);
 
   return (
     <div className="space-y-5 p-4 pb-10">
@@ -347,8 +351,16 @@ export default function SalesDashboardPage() {
             {ENQUIRY_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
 
+          {salesConfig?.applications?.length > 0 && (
+            <select value={appId} onChange={(e) => setAppId(e.target.value)} aria-label="Application"
+              className="text-sm border border-gray-300 rounded px-2 py-1.5 text-gray-700 bg-white cursor-pointer">
+              <option value="">All applications</option>
+              {salesConfig.applications.map((a) => <option key={a.id} value={a.id}>{a.name}{a.is_active ? '' : ' (inactive)'}</option>)}
+            </select>
+          )}
+
           {filtered && (
-            <button type="button" onClick={() => { setOwnerId(''); setType(''); }}
+            <button type="button" onClick={() => { setOwnerId(''); setType(''); setAppId(''); }}
               className="text-xs font-medium text-[var(--ams-primary)] hover:underline cursor-pointer">Clear filters</button>
           )}
         </div>
@@ -364,7 +376,8 @@ export default function SalesDashboardPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-px bg-gray-100">
               <Stat label="Open pipeline" value={compactINR(h.open_value)} title={formatINR(h.open_value)}
                 sub={`${h.open_count} open · right now`} />
-              <Stat label="Raised" value={h.raised} sub="In the period" />
+              <Stat label="Weighted pipeline" value={compactINR(h.weighted_value)} title={formatINR(h.weighted_value)}
+                sub="Value × stage probability" />
               <Stat label="Won" value={h.won} sub={h.won ? compactINR(h.won_value) : 'No orders yet'} title={formatINR(h.won_value)} />
               <Stat label="Lost" value={h.lost} sub="In the period" />
               <Stat label="Win rate" value={h.win_rate === null ? '—' : `${h.win_rate}%`}

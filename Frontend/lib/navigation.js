@@ -60,6 +60,7 @@ export const AREAS = [
     items: [
       { label: 'Dashboard', href: '/dashboard/sales',           perm: 'SALES_VIEW', exact: true },
       { label: 'Enquiries', href: '/dashboard/sales/enquiries', perm: 'SALES_VIEW' },
+      { label: 'Configuration', href: '/dashboard/sales/config', perm: 'SALES_CONFIG_VIEW' },
     ],
   },
   {

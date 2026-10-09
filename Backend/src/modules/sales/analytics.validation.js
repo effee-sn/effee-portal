@@ -15,6 +15,10 @@ const analyticsQuery = z.object({
     (v) => (v === '' || v === null ? undefined : v),
     z.coerce.number().int().positive().optional()
   ),
+  application_id: z.preprocess(
+    (v) => (v === '' || v === null ? undefined : v),
+    z.coerce.number().int().positive().optional()
+  ),
   enquiry_type: z.enum(['GENERATED', 'INCOMING']).optional()
     .or(z.literal('').transform(() => undefined)),
 }).refine((q) => !q.from || !q.to || q.from <= q.to, {

@@ -44,9 +44,9 @@ const it = (name, fn) => test(name, async (t) => {
 
 // ── Lazy app handles (required only once the environment is settled) ────────
 let prisma; let enquiryService; let activityService; let attachmentService;
-let workflowService; let followup; let analyticsService;
+let workflowService; let followup; let analyticsService; let salesConfigService;
 
-const ids = { enquiries: [], users: [] };
+const ids = { enquiries: [], users: [], apps: [] };
 const fx = {}; // fixtures: users, customer, previous workflow config
 const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
 
@@ -132,6 +132,8 @@ before(async () => {
   ({ workflowService } = require('../../src/modules/sales/workflow.service'));
   followup = require('../../src/modules/sales/followup.service');
   ({ analyticsService } = require('../../src/modules/sales/analytics.service'));
+  ({ salesConfigService } = require('../../src/modules/sales/config.service'));
+  fx.previousProbabilities = await salesConfigService.listProbabilities();
 
   const role = await prisma.role.findFirst({ where: { deleted_at: null }, select: { id: true } });
   const mkUser = async (name) => {
@@ -165,6 +167,10 @@ after(async () => {
     await prisma.enquiryAttachment.deleteMany({ where: { enquiry_id: { in: enquiryIds } } });
     await prisma.enquiryStageEvent.deleteMany({ where: { enquiry_id: { in: enquiryIds } } });
     await prisma.enquiry.deleteMany({ where: { id: { in: enquiryIds } } });
+    if (ids.apps.length) await prisma.salesApplication.deleteMany({ where: { id: { in: ids.apps } } });
+    if (fx.previousProbabilities) {
+      await salesConfigService.saveProbabilities({ items: fx.previousProbabilities }, actor(fx.field));
+    }
     if (fx.customer) await prisma.customer.delete({ where: { id: fx.customer.id } });
     await prisma.user.deleteMany({ where: { id: { in: ids.users } } });
   } finally {
@@ -562,5 +568,55 @@ describe('Sales dashboard analytics', () => {
     assert.equal(none.headline.raised, 0);
     assert.equal(none.headline.won, 0);
     assert.equal(none.team.length, 0);
+  });
+});
+
+describe('Sales configuration: applications and stage probabilities', () => {
+  let app;
+
+  it('an application is created, and names are unique regardless of case', async () => {
+    app = await salesConfigService.createApplication({ name: `Induction Brazing ${suffix}` }, actor(fx.field));
+    ids.apps.push(app.id);
+    assert.equal(app.is_active, true);
+    await assert.rejects(
+      salesConfigService.createApplication({ name: `induction brazing ${suffix}` }, actor(fx.field)),
+      { name: 'ConflictError' },
+    );
+  });
+
+  it('an enquiry records its application; an inactive one cannot be picked for a new enquiry', async () => {
+    const e = await newEnquiry('GENERATED', fx.field, { application_id: app.id });
+    assert.equal((await enquiryService.getById(e.id)).application.id, app.id);
+
+    await salesConfigService.updateApplication(app.id, { is_active: false }, actor(fx.field));
+    await assert.rejects(newEnquiry('GENERATED', fx.field, { application_id: app.id }), { name: 'ValidationError' });
+    // ...but the enquiry that already has it can still be edited.
+    await enquiryService.update(e.id, { title: `TEST renamed ${suffix}` }, actor(fx.field));
+    assert.equal((await enquiryService.getById(e.id)).application.id, app.id);
+  });
+
+  it('an application in use cannot be deleted; an unused one can', async () => {
+    await assert.rejects(salesConfigService.deleteApplication(app.id, actor(fx.field)), { name: 'ConflictError' });
+    const spare = await salesConfigService.createApplication({ name: `Spare ${suffix}` }, actor(fx.field));
+    await salesConfigService.deleteApplication(spare.id, actor(fx.field));
+    assert.equal(await prisma.salesApplication.count({ where: { id: spare.id } }), 0);
+  });
+
+  it('stage probabilities save; Won stays 100 and Lost stays 0', async () => {
+    const rows = await salesConfigService.saveProbabilities({
+      items: [{ stage: 'NEW', probability: 25 }, { stage: 'WON', probability: 40 }, { stage: 'LOST', probability: 90 }],
+    }, actor(fx.field));
+    const p = Object.fromEntries(rows.map((r) => [r.stage, r.probability]));
+    assert.equal(p.NEW, 25);
+    assert.equal(p.WON, 100);
+    assert.equal(p.LOST, 0);
+    assert.equal(rows.length, 12);
+  });
+
+  it('the dashboard weights the open pipeline by stage probability', async () => {
+    // The analyst's only open enquiry: ₹20,000 at New (now 25%).
+    const r = await analyticsService.overview({ owner_id: fx.analyst.id });
+    assert.equal(r.headline.open_value, 20000);
+    assert.equal(r.headline.weighted_value, 5000);
   });
 });

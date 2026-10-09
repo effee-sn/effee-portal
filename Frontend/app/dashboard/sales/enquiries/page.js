@@ -8,6 +8,7 @@ import { TableSkeleton } from '@/components/Skeleton';
 import { ALL_STAGES, STAGE_STYLE, TYPE_LABEL, TEMPERATURE_STYLE, formatINR, isAging, stageAgeDays } from '@/lib/salesOptions';
 import EnquiryCustomerContact from '@/components/EnquiryCustomerContact';
 import useNav from '@/lib/useNav';
+import useSalesConfig from '@/lib/useSalesConfig';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
@@ -29,8 +30,10 @@ const ORIGIN_CARDS = [
 ];
 
 function EnquiryModal({ onClose, onSaved }) {
+  const config = useSalesConfig();
+  const activeApps = (config?.applications || []).filter((a) => a.is_active);
   const [type, setType] = useState(null); // null = pick origin; else show the form
-  const [form, setForm] = useState({ title: '', customer_id: '', contact_id: '', description: '' });
+  const [form, setForm] = useState({ title: '', customer_id: '', contact_id: '', application_id: '', description: '' });
   const [error, setError]   = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -91,6 +94,15 @@ function EnquiryModal({ onClose, onSaved }) {
             <EnquiryCustomerContact onChange={setCustomerContact} />
 
             <div>
+              <label className={label}>Application{activeApps.length > 0 && <span className="text-red-500"> *</span>}</label>
+              <select name="application_id" value={form.application_id} onChange={change} required={activeApps.length > 0}
+                disabled={!config} className="ams-input">
+                <option value="">{config ? (activeApps.length ? '— Select application —' : 'No applications configured') : 'Loading…'}</option>
+                {activeApps.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </div>
+
+            <div>
               <label className={label}>Description</label>
               <textarea name="description" value={form.description} onChange={change} rows={3} className="ams-input resize-none" />
             </div>
@@ -117,6 +129,7 @@ export default function EnquiriesPage() {
   const [page, setPage]       = useState(1);
   const [search, setSearch]   = useState('');
   const [stage, setStage]     = useState('');
+  const [appId, setAppId]     = useState('');
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
 
@@ -124,12 +137,14 @@ export default function EnquiriesPage() {
 
   const canView   = me?.is_system || can('SALES_VIEW');
   const canCreate = me?.is_system || can('SALES_CREATE');
+  const config    = useSalesConfig();
 
-  const fetchRows = async (p = page, s = search, st = stage) => {
+  const fetchRows = async (p = page, s = search, st = stage, app = appId) => {
     setLoading(true);
     try {
       const q = new URLSearchParams({ page: String(p), limit: String(limit), search: s });
       if (st) q.set('stage', st);
+      if (app) q.set('application_id', app);
       const res = await apiGet(`/sales/enquiries?${q.toString()}`);
       setRows(res.data); setTotal(res.meta.pagination.total);
     } catch { setRows([]); }
@@ -147,8 +162,9 @@ export default function EnquiriesPage() {
 
   const onSearch = (e) => { e.preventDefault(); setPage(1); fetchRows(1, search, stage); };
   const onStage = (v) => { setStage(v); setPage(1); fetchRows(1, search, v); };
+  const onApp = (v) => { setAppId(v); setPage(1); fetchRows(1, search, stage, v); };
   const goPage = (delta) => { const p = page + delta; setPage(p); fetchRows(p, search, stage); };
-  const onSaved = () => { setPage(1); setSearch(''); setStage(''); fetchRows(1, '', ''); };
+  const onSaved = () => { setPage(1); setSearch(''); setStage(''); setAppId(''); fetchRows(1, '', '', ''); };
 
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to   = Math.min(page * limit, total);
@@ -157,7 +173,7 @@ export default function EnquiriesPage() {
     return (
       <div className="bg-white rounded border border-gray-200 overflow-hidden">
         <div className="h-12 border-b border-gray-200 animate-pulse bg-gray-50" />
-        <TableSkeleton cols={6} rows={6} />
+        <TableSkeleton cols={7} rows={6} />
       </div>
     );
   }
@@ -189,6 +205,13 @@ export default function EnquiriesPage() {
             <option value="">All stages</option>
             {ALL_STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
+          {config?.applications?.length > 0 && (
+            <select value={appId} onChange={(e) => onApp(e.target.value)} aria-label="Application"
+              className="shrink-0 text-sm border border-gray-300 rounded px-2 py-1.5 text-gray-700 bg-white cursor-pointer">
+              <option value="">All applications</option>
+              {config.applications.map((a) => <option key={a.id} value={a.id}>{a.name}{a.is_active ? '' : ' (inactive)'}</option>)}
+            </select>
+          )}
           <div className="flex-1 min-w-0" />
           <form onSubmit={onSearch} className="shrink-0 flex items-center border border-gray-300 rounded bg-white overflow-hidden"
             style={{ minWidth: 220 }}>
@@ -220,15 +243,16 @@ export default function EnquiriesPage() {
         {/* Table */}
         <div className="overflow-x-auto">
           {rows.length === 0 ? (
-            <div className="py-20 text-center text-sm text-gray-400">No enquiries {stage || search ? 'match your filters' : 'yet'}.</div>
+            <div className="py-20 text-center text-sm text-gray-400">No enquiries {stage || appId || search ? 'match your filters' : 'yet'}.</div>
           ) : (
-            <table className="w-full text-sm" style={{ minWidth: 820 }}>
+            <table className="w-full text-sm" style={{ minWidth: 880 }}>
               <thead>
                 <tr className="border-b border-gray-200 text-left text-gray-500 sticky top-0 bg-white z-10">
                   <th className="px-3 py-3 font-normal">Ref</th>
                   <th className="px-3 py-3 font-normal">Title</th>
                   <th className="px-3 py-3 font-normal">Customer</th>
                   <th className="px-3 py-3 font-normal">Stage</th>
+                  <th className="px-3 py-3 font-normal text-right" title="Win probability at this stage">Prob.</th>
                   <th className="px-3 py-3 font-normal">Owner</th>
                   <th className="px-3 py-3 font-normal text-right">Value</th>
                   <th className="px-3 py-3 font-normal text-center">Acts</th>
@@ -241,7 +265,9 @@ export default function EnquiriesPage() {
                     <td className="px-3 py-3 font-mono text-xs text-gray-500 whitespace-nowrap">{e.ref_no}</td>
                     <td className="px-3 py-3 font-medium text-gray-800">
                       {e.title}
-                      <span className="block text-xs text-gray-400 font-normal">{TYPE_LABEL[e.enquiry_type] || e.enquiry_type}</span>
+                      <span className="block text-xs text-gray-400 font-normal">
+                        {TYPE_LABEL[e.enquiry_type] || e.enquiry_type}{e.application && ` · ${e.application.name}`}
+                      </span>
                     </td>
                     <td className="px-3 py-3 text-gray-600">{e.customer?.name || '—'}</td>
                     <td className="px-3 py-3">
@@ -258,6 +284,9 @@ export default function EnquiriesPage() {
                             title={`${stageAgeDays(e.stage_since)} days in stage`}>⚠ {stageAgeDays(e.stage_since)}d</span>
                         )}
                       </div>
+                    </td>
+                    <td className="px-3 py-3 text-gray-600 tabular-nums text-right">
+                      {config?.probability?.[e.stage] !== undefined ? `${config.probability[e.stage]}%` : '—'}
                     </td>
                     <td className="px-3 py-3 text-gray-600">{e.owner?.name || '—'}</td>
                     <td className="px-3 py-3 text-gray-700 tabular-nums text-right whitespace-nowrap">

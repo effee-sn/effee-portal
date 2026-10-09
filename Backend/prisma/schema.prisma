@@ -872,6 +872,11 @@ model Enquiry {
   expected_value Decimal?  @db.Decimal(14, 2)
   expected_close DateTime?
 
+  // The heat-treatment application (Annealing, Hardening, …) from the
+  // configurable list in Sales → Configuration.
+  application    SalesApplication? @relation(fields: [application_id], references: [id])
+  application_id Int?
+
   // The field initiator — the salesperson who raised it and owns the customer
   // relationship. Persistent for the life of the enquiry.
   owner    User @relation("EnquiryOwner", fields: [owner_id], references: [id])
@@ -914,8 +919,38 @@ model Enquiry {
   @@index([handler_id])
   @@index([stage])
   @@index([enquiry_type])
+  @@index([application_id])
   @@index([deleted_at])
   @@index([created_at])
+}
+
+/// An application an enquiry is for (Annealing, Hardening, Brazing, …).
+/// Managed in Sales → Configuration. An application already used by an
+/// enquiry can't be deleted — it is marked inactive instead, which hides it
+/// from new enquiries while existing ones keep showing it.
+model SalesApplication {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  description String?   @db.Text
+  is_active   Boolean   @default(true)
+  sort_order  Int       @default(0)
+  enquiries   Enquiry[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by Int?
+  updated_by Int?
+}
+
+/// Win probability (%) for each pipeline stage, set in Sales → Configuration.
+/// One row per stage; drives the weighted pipeline value. WON is always 100
+/// and LOST always 0.
+model SalesStageProbability {
+  stage       EnquiryStage @id
+  probability Int
+
+  updated_at DateTime @updatedAt
+  updated_by Int?
 }
 
 /// Sales workflow configuration (single row). Holds the selected Internal Sales

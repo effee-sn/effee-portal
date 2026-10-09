@@ -42,6 +42,7 @@ const listEnquiriesQuery = schemas.listQuery.extend({
   enquiry_type: z.enum(TYPES).optional(),
   owner_id:     z.coerce.number().int().positive().optional(),
   customer_id:  z.coerce.number().int().positive().optional(),
+  application_id: z.coerce.number().int().positive().optional(),
 });
 
 const enquiryIdParam = schemas.idParam;
@@ -56,6 +57,7 @@ const createEnquiryBody = z.object({
   expected_value: optionalMoney,
   expected_close: optionalDate,
   owner_id:       optionalOwner,
+  application_id: optionalContact,
 });
 
 const updateEnquiryBody = z.object({
@@ -68,6 +70,7 @@ const updateEnquiryBody = z.object({
   expected_value: optionalMoney,
   expected_close: optionalDate,
   owner_id:       optionalOwner,
+  application_id: optionalContact,
 }).refine(
   (data) => Object.values(data).some((v) => v !== undefined),
   { message: 'At least one field must be provided' }

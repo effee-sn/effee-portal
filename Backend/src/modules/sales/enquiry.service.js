@@ -52,6 +52,7 @@ function createEnquiryService(repository) {
     enquiry_type: (v) => v,
     owner_id:     (v) => Number(v) || undefined,
     customer_id:  (v) => Number(v) || undefined,
+    application_id: (v) => Number(v) || undefined,
   });
 
   /**
@@ -104,6 +105,16 @@ function createEnquiryService(repository) {
   }
 
   /** Validates the customer / contact / owner references on a write. */
+  /** A newly chosen application must exist and be active (inactive ones stay on old enquiries). */
+  async function assertApplication(applicationId) {
+    if (applicationId === undefined || applicationId === null) return;
+    if (!(await repository.applicationActive(applicationId))) {
+      throw new ValidationError('Validation failed', [
+        { field: 'application_id', message: 'Selected application does not exist or is inactive' },
+      ]);
+    }
+  }
+
   async function assertRefs({ customer_id, contact_id, owner_id }) {
     if (customer_id !== undefined && !(await repository.customerExists(customer_id))) {
       throw new ValidationError('Validation failed', [
@@ -132,7 +143,7 @@ function createEnquiryService(repository) {
 
   function pickWritable(dto, data = {}) {
     for (const f of ['title', 'customer_id', 'contact_id', 'enquiry_type', 'stage',
-      'description', 'expected_value', 'expected_close', 'owner_id']) {
+      'description', 'expected_value', 'expected_close', 'owner_id', 'application_id']) {
       if (dto[f] !== undefined) data[f] = dto[f];
     }
     return data;
@@ -247,6 +258,7 @@ function createEnquiryService(repository) {
         ]);
       }
       await assertRefs({ customer_id: dto.customer_id, contact_id: dto.contact_id, owner_id });
+      await assertApplication(dto.application_id);
 
       // Every enquiry starts at NEW — a stage passed by the caller is ignored,
       // so creation can never skip the gates or the handoffs.
@@ -312,6 +324,8 @@ function createEnquiryService(repository) {
         }
         await assertStageGate(id, dto.stage);
       }
+
+      if (dto.application_id !== before.application_id) await assertApplication(dto.application_id);
 
       // Resolve the effective customer for contact validation (new or existing).
       const customer_id = dto.customer_id ?? before.customer_id;

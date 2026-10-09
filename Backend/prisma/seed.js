@@ -54,6 +54,7 @@ const MODULES = [
   { name: 'DEPARTMENT', slug: 'department', description: 'Departments' },
   { name: 'PROJECT',    slug: 'project',    description: 'Projects' },
   { name: 'CUSTOMER',   slug: 'customer',   description: 'Master data — customers & contacts' },
+  { name: 'SALES_CONFIG', slug: 'sales-config', description: 'Sales configuration — applications, stage probabilities' },
 ];
 
 /** Default departments, so the user form's dropdown is not empty on first run. */
@@ -117,6 +118,12 @@ const PERMISSIONS = [
   { module: 'customer', action: 'CREATE', code: 'CUSTOMER_CREATE' },
   { module: 'customer', action: 'EDIT',   code: 'CUSTOMER_EDIT' },
   { module: 'customer', action: 'DELETE', code: 'CUSTOMER_DELETE' },
+
+  // Sales configuration — applications list and stage probabilities.
+  { module: 'sales-config', action: 'VIEW',   code: 'SALES_CONFIG_VIEW' },
+  { module: 'sales-config', action: 'CREATE', code: 'SALES_CONFIG_CREATE' },
+  { module: 'sales-config', action: 'EDIT',   code: 'SALES_CONFIG_EDIT' },
+  { module: 'sales-config', action: 'DELETE', code: 'SALES_CONFIG_DELETE' },
 ];
 
 /**

@@ -12,6 +12,7 @@ import EnquiryReviews from '@/components/EnquiryReviews';
 import EnquiryProcess from '@/components/EnquiryProcess';
 import EnquiryAttachments from '@/components/EnquiryAttachments';
 import useNav from '@/lib/useNav';
+import useSalesConfig from '@/lib/useSalesConfig';
 import { DetailPageSkeleton } from '@/components/Skeleton';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
@@ -203,9 +204,13 @@ function ReassignModal({ enquiry, users, onClose, onDone }) {
 // Edits the enquiry's details only. The stage is never changed here — it moves
 // through the process bar and the offer/follow-up actions, which enforce gates.
 function EditModal({ enquiry, users, onClose, onDone }) {
+  const config = useSalesConfig();
+  // Active applications, plus the current one even if it has since been made inactive.
+  const appOptions = (config?.applications || []).filter((a) => a.is_active || a.id === enquiry.application_id);
   const [form, setForm] = useState({
     title: enquiry.title || '', customer_id: enquiry.customer_id || '', contact_id: enquiry.contact_id || '',
     owner_id: enquiry.owner_id || '', enquiry_type: enquiry.enquiry_type || 'INCOMING',
+    application_id: enquiry.application_id ? String(enquiry.application_id) : '',
     expected_value: enquiry.expected_value ?? '', expected_close: toDateInput(enquiry.expected_close), description: enquiry.description || '',
   });
   const [error, setError]   = useState('');
@@ -264,6 +269,13 @@ function EditModal({ enquiry, users, onClose, onDone }) {
                 {ENQUIRY_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
               {typeLocked && <p className="text-xs text-gray-400 mt-1">Fixed once the enquiry leaves New.</p>}
+            </div>
+            <div className="sm:col-span-2">
+              <label className={label}>Application</label>
+              <select name="application_id" value={form.application_id} onChange={change} disabled={!config} className="ams-input">
+                <option value="">{config ? '— None —' : 'Loading…'}</option>
+                {appOptions.map((a) => <option key={a.id} value={a.id}>{a.name}{a.is_active ? '' : ' (inactive)'}</option>)}
+              </select>
             </div>
             <div>
               <label className={label}>Expected Value (₹)</label>
@@ -349,6 +361,7 @@ export default function EnquiryDetailPage() {
   const { id } = useParams();
   const nav = useNav();
   const { me, can, loading: permLoading } = usePermissions();
+  const salesConfig = useSalesConfig();
 
   const [enquiry, setEnquiry] = useState(null);
   const [users, setUsers]     = useState([]);
@@ -527,6 +540,17 @@ export default function EnquiryDetailPage() {
           <Field label="Designation">{enquiry.contact?.designation}</Field>
           <Field label="Contact Info">{[enquiry.contact?.email, enquiry.contact?.phone].filter(Boolean).join(' · ') || null}</Field>
           <Field label="Type">{TYPE_LABEL[enquiry.enquiry_type] || enquiry.enquiry_type}</Field>
+          <Field label="Application">{enquiry.application?.name}</Field>
+          <Field label="Probability">
+            {salesConfig?.probability?.[enquiry.stage] !== undefined ? (
+              <span title="Win probability at the current stage (Sales → Configuration)">
+                {salesConfig.probability[enquiry.stage]}%
+                {Number(enquiry.expected_value) > 0 && !['WON', 'LOST'].includes(enquiry.stage) && (
+                  <span className="text-gray-500"> · weighted {formatINR(Number(enquiry.expected_value) * salesConfig.probability[enquiry.stage] / 100)}</span>
+                )}
+              </span>
+            ) : null}
+          </Field>
           <Field label="Owner">{enquiry.owner?.name}</Field>
           <Field label="Temperature">{enquiry.current_temperature ? <TempChip value={enquiry.current_temperature} /> : null}</Field>
           <Field label="Expected Value">{formatINR(enquiry.expected_value)}</Field>
