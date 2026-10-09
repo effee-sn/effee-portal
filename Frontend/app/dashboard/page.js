@@ -5,6 +5,15 @@ import Link from 'next/link';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet } from '@/lib/api';
+import {
+  ACTIVE_STAGES, STAGE_STYLE, TEMPERATURE_STYLE, formatINR, isAging, stageAgeDays,
+} from '@/lib/salesOptions';
+
+/**
+ * Home dashboard — role-aware. Leads with what is waiting on *this* user, then
+ * module snapshots for the modules they can see. Every block comes from the
+ * server already filtered by permission (see backend dashboard.service).
+ */
 
 function greeting() {
   const h = new Date().getHours();
@@ -13,72 +22,158 @@ function greeting() {
   return 'Good evening';
 }
 
-function Pulse({ className }) {
-  return <div className={`bg-gray-200 rounded-lg animate-pulse ${className}`} />;
+/** Indian compact currency for tiles: ₹4.5 Cr, ₹12.3 L, ₹85 K. */
+function compactINR(value) {
+  const n = Number(value) || 0;
+  if (n >= 1e7) return `₹${(n / 1e7).toFixed(n >= 1e8 ? 0 : 1)} Cr`;
+  if (n >= 1e5) return `₹${(n / 1e5).toFixed(n >= 1e6 ? 0 : 1)} L`;
+  if (n >= 1e3) return `₹${Math.round(n / 1e3)} K`;
+  return `₹${Math.round(n)}`;
+}
+
+const dayDiff = (iso) => {
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const d = new Date(iso); d.setHours(0, 0, 0, 0);
+  return Math.round((start - d) / 86400000);
+};
+
+// ── Icons (stroke, currentColor) ─────────────────────────────────────────────
+const ICON_PATHS = {
+  alert:   'M12 9v3.75m0 3.75h.008M10.34 3.94 1.82 18a1.875 1.875 0 0 0 1.6 2.81h17.16a1.875 1.875 0 0 0 1.6-2.81L13.66 3.94a1.875 1.875 0 0 0-3.32 0Z',
+  clock:   'M12 6v6l4 2m6-2a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z',
+  briefcase: 'M20 7h-4V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1ZM10 5h4v2h-4V5Z',
+  pause:   'M10 9v6m4-6v6m7-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+  ticket:  'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2',
+  bell:    'M14.86 17.08a23.85 23.85 0 0 0 5.45-1.31A8.97 8.97 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.97 8.97 0 0 1-2.31 6.02c1.73.64 3.56 1.08 5.45 1.31m5.72 0a24.26 24.26 0 0 1-5.72 0m5.72 0a3 3 0 1 1-5.72 0',
+  folder:  'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z',
+};
+function Icon({ name, className = 'w-4 h-4' }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" d={ICON_PATHS[name]} />
+    </svg>
+  );
+}
+
+// ── Building blocks ──────────────────────────────────────────────────────────
+const TONES = {
+  critical: { box: 'border-red-200 bg-red-50/60', icon: 'text-red-600 bg-red-100', value: 'text-red-700' },
+  warning:  { box: 'border-amber-200 bg-amber-50/60', icon: 'text-amber-700 bg-amber-100', value: 'text-amber-800' },
+  neutral:  { box: 'border-gray-200 bg-white', icon: 'text-[var(--ams-primary)] bg-[var(--ams-primary-mid)]', value: 'text-gray-900' },
+  quiet:    { box: 'border-gray-200 bg-white', icon: 'text-gray-400 bg-gray-100', value: 'text-gray-400' },
+};
+
+/** One "needs your attention" count. Zero reads as quiet; status tones only when there's something to do. */
+function AttentionTile({ label, value, icon, href, tone = 'neutral', hint }) {
+  const t = TONES[value > 0 ? tone : 'quiet'];
+  const body = (
+    <div className={`h-full rounded-lg border px-4 py-3.5 flex items-start gap-3 transition-shadow ${t.box} ${href ? 'hover:shadow-sm' : ''}`}>
+      <span className={`shrink-0 w-8 h-8 rounded-md flex items-center justify-center ${t.icon}`}><Icon name={icon} /></span>
+      <div className="min-w-0">
+        <p className={`text-2xl font-semibold leading-none tabular-nums ${t.value}`}>{value}</p>
+        <p className="text-xs text-gray-600 mt-1.5 leading-snug">{label}</p>
+        {hint && value > 0 && <p className="text-[11px] text-gray-500 mt-0.5">{hint}</p>}
+      </div>
+    </div>
+  );
+  return href ? <Link href={href} className="block h-full">{body}</Link> : body;
+}
+
+/** A headline figure in a module snapshot. */
+function Stat({ label, value, sub, title, tone }) {
+  return (
+    <div className="bg-white px-4 py-3.5 min-w-0" title={title}>
+      <p className="text-[11px] font-medium uppercase tracking-wider text-gray-500">{label}</p>
+      <p className={`text-xl font-semibold tabular-nums mt-1 leading-tight ${tone === 'warning' ? 'text-amber-700' : 'text-gray-900'}`}>{value}</p>
+      {sub && <p className="text-xs text-gray-500 mt-0.5 truncate">{sub}</p>}
+    </div>
+  );
+}
+
+function Card({ title, action, children, className = '' }) {
+  return (
+    <section className={`bg-white rounded-lg border border-gray-200 ${className}`}>
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100">
+        <h2 className="text-sm font-semibold text-gray-800">{title}</h2>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+const CardLink = ({ href, children }) => (
+  <Link href={href} className="text-xs font-medium text-[var(--ams-primary)] hover:underline whitespace-nowrap">{children}</Link>
+);
+
+function StageChip({ stage }) {
+  const s = STAGE_STYLE[stage];
+  if (!s) return null;
+  return (
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium whitespace-nowrap"
+      style={{ color: s.color, backgroundColor: s.bg }}>{s.label}</span>
+  );
+}
+
+/**
+ * Open enquiries per stage, in pipeline order. Single series → one hue (brand),
+ * values written beside each bar, whole row is the hover/click target.
+ */
+function PipelineChart({ pipeline }) {
+  const rows = ACTIVE_STAGES.map((s) => {
+    const hit = pipeline.find((p) => p.stage === s.value);
+    return { ...s, count: hit?.count || 0, value: hit?.value || 0 };
+  });
+  const max = Math.max(1, ...rows.map((r) => r.count));
+
+  return (
+    <ul className="px-2 py-2" aria-label="Open enquiries by stage">
+      {rows.map((r) => (
+        <li key={r.value}>
+          <Link href={`/dashboard/sales/enquiries?stage=${r.value}`}
+            title={`${r.label}: ${r.count} open ${r.count === 1 ? 'enquiry' : 'enquiries'} · ${formatINR(r.value)} expected`}
+            className="grid grid-cols-[7.5rem_minmax(0,1fr)_5.5rem] items-center gap-3 px-2 py-1.5 rounded-md hover:bg-gray-50">
+            <span className={`text-xs truncate ${r.count ? 'text-gray-700' : 'text-gray-400'}`}>{r.label}</span>
+            <span className="relative h-2.5 rounded-sm bg-gray-100">
+              {r.count > 0 && (
+                <span className="absolute inset-y-0 left-0 rounded-r-[4px]"
+                  style={{ width: `${Math.max(3, (r.count / max) * 100)}%`, backgroundColor: 'var(--ams-primary)' }} />
+              )}
+            </span>
+            <span className="text-xs tabular-nums text-right whitespace-nowrap">
+              <span className={r.count ? 'font-semibold text-gray-800' : 'text-gray-400'}>{r.count}</span>
+              {r.value > 0 && <span className="text-gray-500"> · {compactINR(r.value)}</span>}
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Empty({ children }) {
+  return <p className="px-4 py-8 text-center text-sm text-gray-400">{children}</p>;
+}
+
+function P({ className }) {
+  return <div className={`bg-gray-200 rounded-md animate-pulse ${className}`} />;
 }
 
 function DashboardSkeleton() {
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <Pulse className="h-7 w-48" />
-        <Pulse className="h-4 w-56" />
+    <div className="space-y-6 p-4 pb-8">
+      <div className="space-y-2"><P className="h-7 w-56" /><P className="h-4 w-40" /></div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {[1, 2, 3, 4, 5].map((i) => <P key={i} className="h-[76px]" />)}
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {[1, 2].map((i) => (
-          <div key={i} className="bg-white rounded-lg border border-gray-200 p-5 space-y-3">
-            <Pulse className="h-5 w-32" />
-            <Pulse className="h-8 w-16" />
-          </div>
-        ))}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <P className="h-64 lg:col-span-2" /><P className="h-64" />
       </div>
     </div>
   );
 }
 
-function StatCard({ label, value, icon, color, href }) {
-  const inner = (
-    <div className="bg-white rounded-lg border border-gray-200 p-5 flex items-center gap-4 hover:shadow-sm transition-shadow">
-      <div className={`${color} rounded-lg p-3 shrink-0`}>{icon}</div>
-      <div className="min-w-0">
-        <p className="text-xs text-gray-400 uppercase tracking-wide leading-none mb-1">{label}</p>
-        <p className="text-2xl font-bold text-gray-900 leading-none">{value}</p>
-      </div>
-    </div>
-  );
-  return href ? <Link href={href}>{inner}</Link> : inner;
-}
-
-const QUICK_LINKS = [
-  { label: 'Manage Users', href: '/dashboard/users',    icon: '👥', color: 'text-violet-600', bg: 'bg-violet-50', system: true },
-  { label: 'Settings',     href: '/dashboard/settings', icon: '⚙️', color: 'text-gray-600',   bg: 'bg-gray-50',   system: false },
-];
-
-function QuickLinks({ isSystem }) {
-  const links = QUICK_LINKS.filter((l) => !l.system || isSystem);
-  if (!links.length) return null;
-  return (
-    <div className="bg-white rounded-lg border border-gray-200 p-5">
-      <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Quick Links</h2>
-      <div className="space-y-1">
-        {links.map((l) => (
-          <Link key={l.href} href={l.href}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-50 transition group">
-            <span className={`w-8 h-8 rounded-lg ${l.bg} flex items-center justify-center text-base shrink-0`}>
-              {l.icon}
-            </span>
-            <span className={`text-sm font-medium ${l.color}`}>{l.label}</span>
-            <svg className="w-4 h-4 text-gray-300 ml-auto group-hover:text-gray-400 group-hover:translate-x-0.5 transition-all"
-              fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
-}
-
+// ── Page ─────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   useAuth();
   const { me, can, loading: permLoading } = usePermissions();
@@ -87,7 +182,9 @@ export default function DashboardPage() {
   const [svc, setSvc]         = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const canService = me?.is_system || can('SERVICE_VIEW');
+  const canSales    = me?.is_system || can('SALES_VIEW');
+  const canService  = me?.is_system || can('SERVICE_VIEW');
+  const canProjects = me?.is_system || can('PROJECT_VIEW');
 
   useEffect(() => {
     apiGet('/dashboard')
@@ -96,80 +193,192 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Service snapshot — only for users who can see tickets (the /service
-  // aggregate is oversight-tier). Loads independently of the main payload.
+  // Service snapshot comes from the service module's own aggregate (oversight tier).
   useEffect(() => {
     if (permLoading || !canService) return;
     apiGet('/service').then((res) => setSvc(res.data)).catch(() => {});
   }, [permLoading, canService]);
 
-  if (loading) return <DashboardSkeleton />;
+  if (loading || permLoading) return <DashboardSkeleton />;
 
-  const { user, orgStats } = data;
+  const { user, myWork: w = {}, sales, projects, orgStats } = data;
   const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const myEnquiries = w.enquiries || [];
+  const followups = w.followups || [];
+  const showSalesWork = canSales || w.enquiries_with_me > 0;
+  const showTickets = canService || w.tickets_with_me > 0;
 
   return (
-    <div className="space-y-6 p-4 pb-8">
+    <div className="space-y-6 p-4 pb-10 max-w-[1400px]">
 
-      {/* Welcome header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+      {/* Header */}
+      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-1">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
-            {greeting()}, {user?.name?.split(' ')[0]} 👋
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 text-balance">
+            {greeting()}, {user?.name?.split(' ')[0]}
           </h1>
-          <p className="text-xs sm:text-sm text-gray-500 mt-0.5 flex flex-wrap items-center gap-x-1.5">
-            <span className="inline-flex items-center gap-1">
-              <span className={`w-1.5 h-1.5 rounded-full inline-block ${user?.is_system ? 'bg-orange-400' : 'bg-[#875A7B]'}`} />
-              {user?.role}
-            </span>
-          </p>
+          <p className="text-sm text-gray-500 mt-0.5">{user?.role}</p>
         </div>
-        <p className="text-xs text-gray-400 hidden sm:block">{today}</p>
-      </div>
+        <p className="text-xs text-gray-400">{today}</p>
+      </header>
 
-      {/* Org stats (system users only) */}
+      {/* Needs your attention */}
+      <section aria-labelledby="attention-h">
+        <h2 id="attention-h" className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Needs your attention</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {showSalesWork && (
+            <>
+              <AttentionTile icon="alert" tone="critical" label="Follow-ups overdue" value={w.followups_overdue ?? 0}
+                href="#followups" hint="Past their date" />
+              <AttentionTile icon="clock" tone="warning" label="Follow-ups due today" value={w.followups_today ?? 0}
+                href="#followups" />
+              <AttentionTile icon="briefcase" label="Enquiries with you" value={w.enquiries_with_me ?? 0}
+                href="/dashboard/sales/enquiries" />
+              <AttentionTile icon="pause" tone="warning" label="Your stalled enquiries" value={w.stalled ?? 0}
+                href="#my-enquiries" hint="Past the stage's time limit" />
+            </>
+          )}
+          {showTickets && (
+            <AttentionTile icon="ticket" label="Tickets & tasks with you" value={w.tickets_with_me ?? 0}
+              href="/dashboard/service/inbox" />
+          )}
+          <AttentionTile icon="bell" label="Unread notifications" value={w.unread_notifications ?? 0} />
+        </div>
+      </section>
+
+      {/* Your work */}
+      {showSalesWork && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+          <Card title="Your enquiries" className="lg:col-span-2" action={<CardLink href="/dashboard/sales/enquiries">All enquiries →</CardLink>}>
+            <div id="my-enquiries" className="scroll-mt-4" />
+            {myEnquiries.length === 0 ? (
+              <Empty>No enquiries are waiting on you.</Empty>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {myEnquiries.map((e) => {
+                  const days = stageAgeDays(e.stage_since);
+                  const stalled = isAging(e.stage, e.stage_since);
+                  const temp = TEMPERATURE_STYLE[e.current_temperature];
+                  return (
+                    <li key={e.id}>
+                      <Link href={`/dashboard/sales/enquiries/${e.id}`}
+                        className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-gray-900 truncate">
+                            <span className="font-mono text-xs text-gray-500 mr-2">{e.ref_no}</span>{e.title}
+                          </p>
+                          <p className="text-xs text-gray-500 truncate">{e.customer?.name}</p>
+                        </div>
+                        {temp && (
+                          <span className="hidden sm:inline text-[11px] font-medium px-1.5 py-0.5 rounded"
+                            style={{ color: temp.color, backgroundColor: temp.bg }}>{temp.label}</span>
+                        )}
+                        <StageChip stage={e.stage} />
+                        <span className={`w-20 text-right text-xs tabular-nums whitespace-nowrap ${stalled ? 'text-amber-700 font-medium' : 'text-gray-500'}`}
+                          title={stalled ? 'Past the time limit for this stage' : 'Days in this stage'}>
+                          {stalled && <span aria-hidden="true">● </span>}{days}d{stalled ? ' stalled' : ''}
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Card>
+
+          <Card title="Follow-ups due">
+            <div id="followups" className="scroll-mt-4" />
+            {followups.length === 0 ? (
+              <Empty>Nothing due — you&apos;re all caught up.</Empty>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {followups.map((f) => {
+                  const late = dayDiff(f.follow_up_at);
+                  return (
+                    <li key={f.id}>
+                      <Link href={`/dashboard/sales/enquiries/${f.enquiry.id}`} className="block px-4 py-2.5 hover:bg-gray-50">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[11px] font-semibold whitespace-nowrap ${late > 0 ? 'text-red-700' : 'text-amber-700'}`}>
+                            {late > 0 ? `Overdue ${late}d` : 'Today'}
+                          </span>
+                          <span className="text-[11px] text-gray-500">{f.is_review ? 'Review' : 'Follow-up'}</span>
+                        </div>
+                        <p className="text-sm text-gray-900 truncate mt-0.5">{f.subject}</p>
+                        <p className="text-xs text-gray-500 truncate">
+                          <span className="font-mono">{f.enquiry.ref_no}</span> · {f.enquiry.title}
+                        </p>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* Sales snapshot */}
+      {sales && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+          <Card title="Sales overview" className="lg:col-span-1" action={<CardLink href="/dashboard/sales/enquiries">Enquiries →</CardLink>}>
+            <div className="grid grid-cols-2 gap-px bg-gray-100 rounded-b-lg overflow-hidden">
+              <Stat label="Open pipeline" value={compactINR(sales.open_value)} title={formatINR(sales.open_value)}
+                sub={`${sales.open_count} open ${sales.open_count === 1 ? 'enquiry' : 'enquiries'}`} />
+              <Stat label="Won this month" value={compactINR(sales.won_this_month.value)} title={formatINR(sales.won_this_month.value)}
+                sub={`${sales.won_this_month.count} ${sales.won_this_month.count === 1 ? 'order' : 'orders'}`} />
+              <Stat label="Win rate · 90 days" value={sales.win_rate_90d === null ? '—' : `${sales.win_rate_90d}%`}
+                sub={sales.decided_90d ? `of ${sales.decided_90d} closed` : 'No deals closed yet'} />
+              <Stat label="Lost this month" value={sales.lost_this_month} />
+              <Stat label="Hot deals" value={sales.hot} sub="Temperature: Hot" />
+              <Stat label="Stalled" value={sales.stalled} tone={sales.stalled > 0 ? 'warning' : undefined}
+                sub="Past the stage's time limit" />
+            </div>
+          </Card>
+
+          <Card title="Pipeline by stage" className="lg:col-span-2"
+            action={<span className="text-xs text-gray-500">Open enquiries · expected value</span>}>
+            {sales.open_count === 0 ? <Empty>No open enquiries yet.</Empty> : <PipelineChart pipeline={sales.pipeline} />}
+          </Card>
+        </div>
+      )}
+
+      {/* Service + projects */}
+      {(svc || projects) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+          {svc && (
+            <Card title="Service tickets" action={<CardLink href="/dashboard/service">Service dashboard →</CardLink>}>
+              <div className="grid grid-cols-3 divide-x divide-gray-100">
+                <Stat label="Total" value={svc.total ?? 0} />
+                <Stat label="Active" value={svc.active ?? 0} />
+                <Stat label="On observation" value={svc.on_observation ?? 0} />
+              </div>
+            </Card>
+          )}
+          {projects && (
+            <Card title="Projects" action={<CardLink href="/dashboard/projects">All projects →</CardLink>}>
+              <div className="grid grid-cols-4 divide-x divide-gray-100">
+                <Stat label="Planning" value={projects.PLANNING ?? 0} />
+                <Stat label="Active" value={projects.ACTIVE ?? 0} />
+                <Stat label="On hold" value={projects.ON_HOLD ?? 0} />
+                <Stat label="Completed" value={projects.COMPLETED ?? 0} />
+              </div>
+              {w.active_projects > 0 && (
+                <p className="px-4 pb-3 -mt-1 text-xs text-gray-500">{w.active_projects} of the open ones are yours.</p>
+              )}
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Administration */}
       {orgStats && (
-        <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Overview</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <StatCard
-              label="Active Users"
-              value={orgStats.users}
-              color="bg-[#875A7B]"
-              href="/dashboard/users"
-              icon={<svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>}
-            />
-            <StatCard
-              label="Roles"
-              value={orgStats.roles}
-              color="bg-orange-500"
-              icon={<svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>}
-            />
-          </div>
-        </div>
+        <p className="text-xs text-gray-500 flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
+          <span className="font-semibold uppercase tracking-wider text-gray-400">Administration</span>
+          <span><span className="tabular-nums text-gray-700">{orgStats.users}</span> active users</span>
+          <span><span className="tabular-nums text-gray-700">{orgStats.roles}</span> roles</span>
+          <Link href="/dashboard/users" className="text-[var(--ams-primary)] hover:underline">Manage users →</Link>
+        </p>
       )}
-
-      {/* Service snapshot — for ticket oversight roles */}
-      {svc && (
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Service Tickets</p>
-            <Link href="/dashboard/service" className="text-xs font-medium text-[#875A7B] hover:underline">Service dashboard →</Link>
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-            <StatCard label="Total Tickets" value={svc.total} color="bg-gray-400" href="/dashboard/service/tickets"
-              icon={<svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>} />
-            <StatCard label="Active" value={svc.active} color="bg-amber-500" href="/dashboard/service/inbox"
-              icon={<svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>} />
-            <StatCard label="On Observation" value={svc.on_observation} color="bg-cyan-600" href="/dashboard/service"
-              icon={<svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>} />
-          </div>
-        </div>
-      )}
-
-      {/* Quick links */}
-      <QuickLinks isSystem={!!user?.is_system} />
-
     </div>
   );
 }

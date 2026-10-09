@@ -39,6 +39,9 @@ async function runDueFollowupReminders() {
       reminded_at: null,
       follow_up_at: { not: null, lte: now },
       enquiry: { deleted_at: null, stage: { notIn: ['WON', 'LOST'] } },
+      // A review's next date only matters while the enquiry is still at Review;
+      // once it has moved on, the old date is stale and must not nag anyone.
+      OR: [{ is_review: false }, { is_review: true, enquiry: { stage: 'REVIEW' } }],
     },
     select: {
       id: true,

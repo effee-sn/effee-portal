@@ -138,7 +138,10 @@ export default function EnquiriesPage() {
 
   useEffect(() => {
     if (!permLoading && canView) {
-      fetchRows();
+      // A stage can arrive in the URL (e.g. from the dashboard pipeline).
+      const fromUrl = new URLSearchParams(window.location.search).get('stage') || '';
+      if (fromUrl) setStage(fromUrl);
+      fetchRows(1, search, fromUrl);
     } else if (!permLoading) setLoading(false);
   }, [permLoading]);
 

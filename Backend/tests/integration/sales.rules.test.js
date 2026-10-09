@@ -431,6 +431,21 @@ describe('Sales rules: reminders', () => {
     assert.equal(await notified(fx.field.id, 'FOLLOWUP_DUE', id), 1, 'not reminded twice');
   });
 
+  it('a past next-review date stops reminding once the enquiry has left Review', async () => {
+    const id = (await newEnquiry('GENERATED')).id;
+    await upload(id, 'FORMAT_PDF', fx.field);
+    await move(id, 'REVIEW', fx.field);
+    await log(id, fx.internal, {
+      type: 'MEETING', subject: 'first review', is_review: true,
+      follow_up_at: new Date(Date.now() - 864e5), // next review was yesterday
+    });
+    await concludeReview(id, fx.internal);
+    await move(id, 'CONCEPT', fx.internal); // left Review
+
+    await followup.runDueFollowupReminders();
+    assert.equal(await notified(fx.internal.id, 'FOLLOWUP_DUE', id), 0);
+  });
+
   it('a stalled stage reminds the holder once per stage, and re-arms after a stage change', async () => {
     const id = (await newEnquiry('GENERATED')).id;
     await upload(id, 'FORMAT_PDF', fx.field);
