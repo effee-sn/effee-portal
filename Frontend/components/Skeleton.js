@@ -121,3 +121,52 @@ export function SearchBarSkeleton() {
     </div>
   );
 }
+
+// ── List skeleton (rows inside a card: timelines, documents, comments) ───────
+export function ListSkeleton({ rows = 3 }) {
+  return (
+    <div className="space-y-3 py-2 animate-pulse" aria-hidden="true">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="flex items-start gap-3">
+          <div className="w-8 h-8 rounded-full bg-gray-200 shrink-0" />
+          <div className="flex-1 space-y-2 pt-1">
+            <SkeletonLine className={`h-3.5 ${i % 2 ? 'w-1/2' : 'w-2/3'}`} />
+            <SkeletonLine className="h-3 w-1/3" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Detail page skeleton (record header + main column + side column) ─────────
+export function DetailPageSkeleton() {
+  return (
+    <div className="p-4 space-y-5 animate-pulse" aria-busy="true" aria-label="Loading">
+      <SkeletonLine className="h-3.5 w-24" />
+      <div className="space-y-2">
+        <SkeletonLine className="h-7 w-72 max-w-full" />
+        <SkeletonLine className="h-4 w-48" />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 space-y-4">
+          <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-3">
+            <SkeletonLine className="h-4 w-40" />
+            <SkeletonLine className="h-3.5 w-full" />
+            <SkeletonLine className="h-3.5 w-5/6" />
+            <SkeletonLine className="h-3.5 w-2/3" />
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 p-5"><ListSkeleton rows={3} /></div>
+        </div>
+        <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-4 h-fit">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="space-y-1.5">
+              <SkeletonLine className="h-3 w-20" />
+              <SkeletonLine className="h-3.5 w-32" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

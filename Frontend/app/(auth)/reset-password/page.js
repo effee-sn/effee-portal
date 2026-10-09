@@ -1,13 +1,14 @@
 'use client';
 
 import { Suspense, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { API_URL } from '@/lib/config';
+import useNav from '@/lib/useNav';
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
-  const router       = useRouter();
+  const nav       = useNav();
   const token        = searchParams.get('token');
 
   const [passwords, setPasswords] = useState({ new_password: '', confirm_password: '' });
@@ -48,7 +49,7 @@ function ResetPasswordForm() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Something went wrong');
       setDone(true);
-      setTimeout(() => router.push('/login'), 3000);
+      setTimeout(() => nav('/login'), 3000);
     } catch (err) {
       setError(err.message);
     } finally {

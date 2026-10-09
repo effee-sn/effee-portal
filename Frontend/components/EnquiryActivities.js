@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { ACTIVITY_MEDIUMS, MEDIUM_LABEL, TEMPERATURES, TEMPERATURE_STYLE, STAGE_STYLE } from '@/lib/salesOptions';
 import UserMultiSelect from '@/components/UserMultiSelect';
+import { ListSkeleton } from '@/components/Skeleton';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 
@@ -294,7 +295,7 @@ export default function EnquiryActivities({ enquiryId, canEdit, users = [], stag
 
       <div className="px-5 py-4">
         {loading ? (
-          <p className="text-sm text-gray-400 py-4 text-center">Loading…</p>
+          <ListSkeleton rows={3} />
         ) : items.length === 0 ? (
           <p className="text-sm text-gray-400 py-4 text-center">No activity yet. Log the first interaction.</p>
         ) : (

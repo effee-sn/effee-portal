@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { apiGet, apiPost, apiDelete } from '@/lib/api';
+import { ListSkeleton } from '@/components/Skeleton';
 
 /** Compact relative time. */
 const timeAgo = (iso) => {
@@ -259,7 +260,7 @@ export default function TicketComments({ ticketId, closed, me, canModerate, peop
             <div className="flex-1 overflow-y-auto px-5 py-4">
               {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm mb-4">{error}</div>}
               {loading ? (
-                <p className="text-sm text-gray-400">Loading…</p>
+                <ListSkeleton rows={3} />
               ) : tree.length === 0 ? (
                 <p className="text-sm text-gray-400">No comments yet.</p>
               ) : (

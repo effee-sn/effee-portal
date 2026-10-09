@@ -2,11 +2,13 @@
 
 import { Suspense, useEffect, useRef, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { RESOLUTION_METHODS } from '@/lib/serviceOptions';
+import useNav from '@/lib/useNav';
+import { DetailPageSkeleton } from '@/components/Skeleton';
 
 // BlockNote is browser-only — never render it on the server.
 const PlanEditor = dynamic(() => import('@/components/BlockEditor'), {
@@ -23,7 +25,7 @@ const STATUS_BADGE = {
 function ResolutionPlanInner() {
   useAuth();
   const { id } = useParams();
-  const router = useRouter();
+  const nav = useNav();
   const searchParams = useSearchParams();
   const taskId = searchParams.get('task');
   const { me, can, loading: permLoading } = usePermissions();
@@ -184,7 +186,7 @@ function ResolutionPlanInner() {
       <div className="flex flex-col items-center justify-center h-64 text-center">
         <p className="text-sm font-semibold text-gray-700 mb-1">{taskId ? 'Ticket unavailable' : 'No department selected'}</p>
         {!taskId && <p className="text-sm text-gray-500">Open a plan from a department on the ticket.</p>}
-        <button onClick={() => router.push(`/dashboard/service/tickets/${id}`)} className="btn-secondary text-sm mt-4">Back to ticket</button>
+        <button onClick={() => nav(`/dashboard/service/tickets/${id}`)} className="btn-secondary text-sm mt-4">Back to ticket</button>
       </div>
     );
   }
@@ -193,7 +195,7 @@ function ResolutionPlanInner() {
     <div className="max-w-8xl p-4 sm:p-6 pb-10 space-y-4">
       {/* Header */}
       <div className="flex items-center gap-3 flex-wrap">
-        <button onClick={() => router.push(`/dashboard/service/tickets/${id}`)} className="cursor-pointer text-gray-400 hover:text-gray-600 text-sm">← Back to ticket</button>
+        <button onClick={() => nav(`/dashboard/service/tickets/${id}`)} className="cursor-pointer text-gray-400 hover:text-gray-600 text-sm">← Back to ticket</button>
         <h1 className="text-lg font-semibold text-gray-800">Resolution Plan</h1>
         {task && (
           <span className="inline-flex items-center gap-1.5 text-xs rounded-full px-2.5 py-1 border bg-gray-50 border-gray-200 text-gray-600">
@@ -308,7 +310,7 @@ function ResolutionPlanInner() {
 
 export default function ResolutionPlanPage() {
   return (
-    <Suspense fallback={<div className="max-w-5xl p-4 sm:p-6 text-sm text-gray-400">Loading…</div>}>
+    <Suspense fallback={<DetailPageSkeleton />}>
       <ResolutionPlanInner />
     </Suspense>
   );

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { apiGet, apiPut } from '@/lib/api';
+import { SkeletonLine } from '@/components/Skeleton';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 
@@ -47,7 +48,7 @@ export default function SalesWorkflowCard({ canEdit = false }) {
 
       <div className="px-5 py-4">
         {loading ? (
-          <p className="text-sm text-gray-400 py-2">Loading…</p>
+          <SkeletonLine className="h-9 w-64 max-w-full my-1" />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* The handoff, at a glance */}

@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import useNav from '@/lib/useNav';
@@ -273,7 +273,6 @@ function ControlPanel({ total, page, limit, canCreate, canDelete, onNew, onBulkD
 function UsersPageInner() {
   useAuth();
   const { me, can, loading: permLoading } = usePermissions();
-  const router       = useRouter();
   const nav          = useNav();
   const searchParams = useSearchParams();
 
@@ -311,7 +310,7 @@ function UsersPageInner() {
     if (!editId || loading) return;
     apiGet(`/users/${editId}`).then((u) => {
       setModal({ type: 'edit', user: u });
-      router.replace('/dashboard/users', { scroll: false });
+      nav.replace('/dashboard/users', { scroll: false });
     }).catch(() => {});
   }, [searchParams, loading]);
 

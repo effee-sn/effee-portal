@@ -1,12 +1,12 @@
 'use client';
 
 import { Suspense, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiPost } from '@/lib/api';
+import useNav from '@/lib/useNav';
 
 function LoginForm() {
-  const router = useRouter();
+  const nav = useNav();
 
   const [form, setForm]       = useState({ email: '', password: '' });
   const [error, setError]     = useState('');
@@ -24,7 +24,7 @@ function LoginForm() {
     try {
       const data = await apiPost('/auth/login', form);
       localStorage.setItem('token', data.token);
-      router.push('/dashboard');
+      nav('/dashboard');
     } catch (err) {
       setError(err.message);
     } finally {

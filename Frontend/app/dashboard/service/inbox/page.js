@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import useNav from '@/lib/useNav';
@@ -21,7 +20,6 @@ const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { da
  */
 export default function ServiceInboxPage() {
   useAuth();
-  const router = useRouter();
   const nav = useNav();
   const { me, can } = usePermissions();
 
@@ -122,7 +120,7 @@ export default function ServiceInboxPage() {
       {creating && (
         <CreateTicketModal
           onClose={() => setCreating(false)}
-          onCreated={(t) => router.push(`/dashboard/service/tickets/${t.id}`)}
+          onCreated={(t) => nav(`/dashboard/service/tickets/${t.id}`)}
         />
       )}
     </div>

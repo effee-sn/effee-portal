@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet } from '@/lib/api';
+import useNav from '@/lib/useNav';
 
 const PALETTE = ['#6366F1','#0EA5E9','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#14B8A6'];
 const avatarBg  = (name) => PALETTE[(name?.charCodeAt(0) ?? 0) % PALETTE.length];
@@ -48,7 +49,7 @@ export default function UserProfilePage() {
   useAuth();
   const { me, can }   = usePermissions();
   const params        = useParams();
-  const router        = useRouter();
+  const nav        = useNav();
   const userId        = parseInt(params.id);
 
   const [user, setUser]       = useState(null);
@@ -67,7 +68,7 @@ export default function UserProfilePage() {
   if (error || !user) return (
     <div className="py-20 text-center">
       <p className="text-sm text-gray-500 mb-3">{error || 'User not found'}</p>
-      <button onClick={() => router.back()} className="btn-secondary text-xs">← Go back</button>
+      <button onClick={() => nav.back()} className="btn-secondary text-xs">← Go back</button>
     </div>
   );
 
@@ -119,7 +120,7 @@ export default function UserProfilePage() {
 
           {canEdit && (
             <button
-              onClick={() => router.push(`/dashboard/users?edit=${user.id}`)}
+              onClick={() => nav(`/dashboard/users?edit=${user.id}`)}
               className="btn-secondary text-xs shrink-0"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

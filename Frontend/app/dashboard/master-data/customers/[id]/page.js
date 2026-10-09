@@ -1,10 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
+import useNav from '@/lib/useNav';
+import { DetailPageSkeleton } from '@/components/Skeleton';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 
@@ -137,7 +139,7 @@ function DeleteContactModal({ contact, onClose, onDeleted }) {
 export default function CustomerDetailPage() {
   useAuth();
   const { id } = useParams();
-  const router = useRouter();
+  const nav = useNav();
   const { me, can, loading: permLoading } = usePermissions();
 
   const [customer, setCustomer] = useState(null);
@@ -161,13 +163,13 @@ export default function CustomerDetailPage() {
   useEffect(() => { if (!permLoading) load(); }, [permLoading, load]);
 
   if (loading || permLoading) {
-    return <div className="py-20 text-center text-sm text-gray-400">Loading…</div>;
+    return <DetailPageSkeleton />;
   }
   if (notFound || !customer) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-center">
         <p className="text-sm font-semibold text-gray-700 mb-1">Customer not found</p>
-        <button onClick={() => router.push('/dashboard/master-data/customers')} className="text-sm text-blue-600 hover:underline">Back to customers</button>
+        <button onClick={() => nav('/dashboard/master-data/customers')} className="text-sm text-blue-600 hover:underline">Back to customers</button>
       </div>
     );
   }
@@ -178,7 +180,7 @@ export default function CustomerDetailPage() {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <button onClick={() => router.push('/dashboard/master-data/customers')}
+        <button onClick={() => nav('/dashboard/master-data/customers')}
           className="p-1.5 rounded hover:bg-gray-100 text-gray-500 cursor-pointer" title="Back">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />

@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
+import useNav from '@/lib/useNav';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 
@@ -171,7 +171,7 @@ function DeleteModal({ customer, onClose, onDeleted }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function CustomersPage() {
   useAuth();
-  const router = useRouter();
+  const nav = useNav();
   const { me, can, loading: permLoading } = usePermissions();
 
   const [rows, setRows]       = useState([]);
@@ -295,7 +295,7 @@ export default function CustomersPage() {
               </thead>
               <tbody>
                 {rows.map((c) => (
-                  <tr key={c.id} onClick={() => router.push(`/dashboard/master-data/customers/${c.id}`)}
+                  <tr key={c.id} onClick={() => nav(`/dashboard/master-data/customers/${c.id}`)}
                     className="border-b border-gray-100 hover:bg-gray-50 group cursor-pointer">
                     <td className="px-3 py-3">
                       <div className="font-medium text-gray-800">{c.name}</div>

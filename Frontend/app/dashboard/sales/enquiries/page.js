@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
 import { ALL_STAGES, STAGE_STYLE, TYPE_LABEL, TEMPERATURE_STYLE, formatINR, isAging, stageAgeDays } from '@/lib/salesOptions';
 import EnquiryCustomerContact from '@/components/EnquiryCustomerContact';
+import useNav from '@/lib/useNav';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
@@ -109,7 +109,7 @@ function EnquiryModal({ onClose, onSaved }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function EnquiriesPage() {
   useAuth();
-  const router = useRouter();
+  const nav = useNav();
   const { me, can, loading: permLoading } = usePermissions();
 
   const [rows, setRows]       = useState([]);
@@ -236,7 +236,7 @@ export default function EnquiriesPage() {
               </thead>
               <tbody>
                 {rows.map((e) => (
-                  <tr key={e.id} onClick={() => router.push(`/dashboard/sales/enquiries/${e.id}`)}
+                  <tr key={e.id} onClick={() => nav(`/dashboard/sales/enquiries/${e.id}`)}
                     className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer">
                     <td className="px-3 py-3 font-mono text-xs text-gray-500 whitespace-nowrap">{e.ref_no}</td>
                     <td className="px-3 py-3 font-medium text-gray-800">

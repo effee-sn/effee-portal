@@ -1,13 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost } from '@/lib/api';
 import DepartmentTasks from '@/components/DepartmentTasks';
 import TicketComments from '@/components/TicketComments';
 import TicketBilling from '@/components/TicketBilling';
+import useNav from '@/lib/useNav';
 import {
   SERVICE_LOCATIONS, TICKET_TYPES,
   SEVERITY_STYLE, STATUS_STYLE,
@@ -116,7 +117,7 @@ function ReopenModal({ ticketId, onClose, onDone }) {
 export default function TicketDetailPage() {
   useAuth();
   const { id } = useParams();
-  const router = useRouter();
+  const nav = useNav();
   const { me, can, loading: permLoading } = usePermissions();
 
   const [ticket, setTicket]     = useState(null);
@@ -189,7 +190,7 @@ export default function TicketDetailPage() {
       <div className="flex flex-col items-center justify-center h-64 text-center">
         <p className="text-sm font-semibold text-gray-700 mb-1">Ticket unavailable</p>
         <p className="text-sm text-gray-500">It may not exist, or it isn&apos;t assigned to you.</p>
-        <button onClick={() => router.push('/dashboard/service/inbox')} className="btn-secondary text-sm mt-4">Go to My Tickets</button>
+        <button onClick={() => nav('/dashboard/service/inbox')} className="btn-secondary text-sm mt-4">Go to My Tickets</button>
       </div>
     );
   }
@@ -201,7 +202,7 @@ export default function TicketDetailPage() {
     <div className="max-w-8xl p-4 sm:p-6 pb-10 space-y-4">
       {/* Header */}
       <div className="flex items-center gap-3 flex-wrap">
-        <button onClick={() => router.back()} className="cursor-pointer text-gray-400 hover:text-gray-600 text-sm">← Back</button>
+        <button onClick={() => nav.back()} className="cursor-pointer text-gray-400 hover:text-gray-600 text-sm">← Back</button>
         <h1 className="text-lg font-semibold text-gray-800">{ticket.ticket_id}</h1>
         <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium" style={{ color: sev.color, backgroundColor: sev.bg }}>{sev.label}</span>
         <span className="text-xs font-medium" style={{ color: st.color }}>● {st.label}</span>

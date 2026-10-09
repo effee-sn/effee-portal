@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
@@ -11,6 +11,8 @@ import EnquiryActivities from '@/components/EnquiryActivities';
 import EnquiryReviews from '@/components/EnquiryReviews';
 import EnquiryProcess from '@/components/EnquiryProcess';
 import EnquiryAttachments from '@/components/EnquiryAttachments';
+import useNav from '@/lib/useNav';
+import { DetailPageSkeleton } from '@/components/Skeleton';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
@@ -345,7 +347,7 @@ function StageHistoryDrawer({ events, users, onClose }) {
 export default function EnquiryDetailPage() {
   useAuth();
   const { id } = useParams();
-  const router = useRouter();
+  const nav = useNav();
   const { me, can, loading: permLoading } = usePermissions();
 
   const [enquiry, setEnquiry] = useState(null);
@@ -395,16 +397,16 @@ export default function EnquiryDetailPage() {
 
   const del = async () => {
     setBusy(true);
-    try { await apiDelete(`/sales/enquiries/${id}`); router.push('/dashboard/sales/enquiries'); }
+    try { await apiDelete(`/sales/enquiries/${id}`); nav('/dashboard/sales/enquiries'); }
     catch (err) { alert(err.message); setBusy(false); }
   };
 
-  if (loading || permLoading) return <div className="py-20 text-center text-sm text-gray-400">Loading…</div>;
+  if (loading || permLoading) return <DetailPageSkeleton />;
   if (notFound || !enquiry) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-center">
         <p className="text-sm font-semibold text-gray-700 mb-1">Enquiry not found</p>
-        <button onClick={() => router.push('/dashboard/sales/enquiries')} className="text-sm text-blue-600 hover:underline">Back to enquiries</button>
+        <button onClick={() => nav('/dashboard/sales/enquiries')} className="text-sm text-blue-600 hover:underline">Back to enquiries</button>
       </div>
     );
   }
@@ -421,7 +423,7 @@ export default function EnquiryDetailPage() {
       {/* Header card */}
       <div className="bg-white rounded-lg border border-gray-200 px-5 py-4">
         <div className="flex items-start gap-3">
-          <button onClick={() => router.push('/dashboard/sales/enquiries')}
+          <button onClick={() => nav('/dashboard/sales/enquiries')}
             className="p-1.5 -ml-1.5 rounded hover:bg-gray-100 text-gray-500 cursor-pointer shrink-0" title="Back">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -438,7 +440,7 @@ export default function EnquiryDetailPage() {
             </div>
             <h1 className="text-xl font-semibold text-gray-800 mt-0.5 break-words">{enquiry.title}</h1>
             <div className="text-xs text-gray-500 mt-1 flex items-center gap-x-4 gap-y-1 flex-wrap">
-              <button onClick={() => router.push(`/dashboard/master-data/customers/${enquiry.customer_id}`)}
+              <button onClick={() => nav(`/dashboard/master-data/customers/${enquiry.customer_id}`)}
                 className="hover:underline text-blue-600 cursor-pointer">{enquiry.customer?.name}</button>
               <span>Owner: {enquiry.owner?.name || '—'}</span>
               {!isClosed && (
@@ -514,7 +516,7 @@ export default function EnquiryDetailPage() {
 
       {/* Customer + details — a single full-width card */}
       <Section title="Customer & Details" right={
-        <button onClick={() => router.push(`/dashboard/master-data/customers/${enquiry.customer_id}`)}
+        <button onClick={() => nav(`/dashboard/master-data/customers/${enquiry.customer_id}`)}
           className="text-xs text-blue-600 hover:underline cursor-pointer">Open customer</button>
       }>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-3">

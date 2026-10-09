@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import UserMultiSelect from '@/components/UserMultiSelect';
+import { ListSkeleton } from '@/components/Skeleton';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 const pad = (n) => String(n).padStart(2, '0');
@@ -195,7 +196,7 @@ export default function EnquiryReviews({ enquiryId, canEdit, users = [], onChang
           <p className="text-xs text-amber-700 mb-3">A future review is still open — mark a review “No future review” to move on to Concept.</p>
         )}
         {loading ? (
-          <p className="text-sm text-gray-400 py-2 text-center">Loading…</p>
+          <ListSkeleton rows={2} />
         ) : items.length === 0 ? (
           <p className="text-sm text-gray-400 py-2 text-center">No reviews yet. Log the internal review.</p>
         ) : (

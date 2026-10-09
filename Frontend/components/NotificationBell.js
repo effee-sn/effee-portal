@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { apiGet, apiPost } from '@/lib/api';
 import { pushSupported, currentPushState, enablePush, disablePush } from '@/lib/push';
+import useNav from '@/lib/useNav';
+import { ListSkeleton } from '@/components/Skeleton';
 
 /** Compact relative time for a notification row. */
 const timeAgo = (iso) => {
@@ -23,7 +24,7 @@ const timeAgo = (iso) => {
  * on an interval; the full list loads when the dropdown is opened.
  */
 export default function NotificationBell() {
-  const router = useRouter();
+  const nav = useNav();
   const [open, setOpen]     = useState(false);
   const [items, setItems]   = useState([]);
   const [unread, setUnread] = useState(0);
@@ -87,7 +88,7 @@ export default function NotificationBell() {
       try { const r = await apiPost(`/notifications/${n.id}/read`, {}, { silent: true }); setUnread(r.data?.unread ?? 0); } catch { /* silent */ }
       setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)));
     }
-    if (n.link) router.push(n.link);
+    if (n.link) nav(n.link);
   };
 
   const markAll = async () => {
@@ -126,7 +127,7 @@ export default function NotificationBell() {
 
           <div className="max-h-96 overflow-y-auto">
             {loading ? (
-              <div className="py-10 text-center text-sm text-gray-400">Loading…</div>
+              <div className="px-4 py-3"><ListSkeleton rows={4} /></div>
             ) : items.length === 0 ? (
               <div className="py-10 text-center text-sm text-gray-400">You&apos;re all caught up.</div>
             ) : (

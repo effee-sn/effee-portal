@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet } from '@/lib/api';
 import { UPLOADS_URL } from '@/lib/config';
 import { areaKeyForPath, visibleAreasFor } from '@/lib/navigation';
 import NotificationBell from '@/components/NotificationBell';
+import useNav from '@/lib/useNav';
 
 /** Multi-colour apps grid, the Odoo-style "switch app" affordance. */
 function WaffleIcon() {
@@ -23,7 +24,7 @@ function WaffleIcon() {
 
 export default function DashboardLayout({ children }) {
   const pathname = usePathname();
-  const router = useRouter();
+  const nav = useNav();
   const { me, can, loading: permLoading } = usePermissions();
 
   const [companyName, setCompanyName] = useState('Effee Portal');
@@ -81,7 +82,7 @@ export default function DashboardLayout({ children }) {
 
   const handleLogout = () => {
     localStorage.removeItem('token');
-    router.push('/login');
+    nav('/login');
   };
 
   // Mount, then transition in on the next frame so the CSS transition runs.
@@ -92,7 +93,7 @@ export default function DashboardLayout({ children }) {
   // Switching apps opens the target area's first permitted page.
   const switchArea = (area) => {
     closeApps();
-    if (area.key !== activeArea?.key) router.push(area.items[0].href);
+    if (area.key !== activeArea?.key) nav(area.items[0].href);
   };
 
   return (

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiGet, apiPost, apiDelete, apiPostForm, downloadFile } from '@/lib/api';
 import { STAGE_STYLE } from '@/lib/salesOptions';
+import { ListSkeleton } from '@/components/Skeleton';
 
 /** Small chip naming the stage a document was uploaded in. */
 function StageTag({ stage }) {
@@ -134,7 +135,7 @@ export default function EnquiryAttachments({
       <input ref={fileRef} type="file" accept={ACCEPT} onChange={onFile} className="hidden" />
 
       {loading ? (
-        <p className="text-sm text-gray-400 py-2 text-center">Loading…</p>
+        <ListSkeleton rows={2} />
       ) : (
           <>
             {/* Single-document slots */}
