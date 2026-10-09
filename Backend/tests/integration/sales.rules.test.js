@@ -4,7 +4,8 @@
  * Exercises the sales services directly against a real database (no HTTP), so
  * the rules that matter are locked in: stage gates, one-step progression, the
  * Field ⇄ Internal handoff baton, the offer → follow-up ⇄ negotiation loop,
- * Won/Lost/Reopen, reassignment, and the reminder sweeps.
+ * Won/Lost/Reopen, reassignment, the reminder sweeps, and the Sales dashboard
+ * arithmetic.
  *
  * ── Requirements ──────────────────────────────────────────────────────────────
  * `DATABASE_URL` must point at a migrated **development/test** database. The
@@ -43,7 +44,7 @@ const it = (name, fn) => test(name, async (t) => {
 
 // ── Lazy app handles (required only once the environment is settled) ────────
 let prisma; let enquiryService; let activityService; let attachmentService;
-let workflowService; let followup;
+let workflowService; let followup; let analyticsService;
 
 const ids = { enquiries: [], users: [] };
 const fx = {}; // fixtures: users, customer, previous workflow config
@@ -130,6 +131,7 @@ before(async () => {
   ({ attachmentService } = require('../../src/modules/sales/attachment.service'));
   ({ workflowService } = require('../../src/modules/sales/workflow.service'));
   followup = require('../../src/modules/sales/followup.service');
+  ({ analyticsService } = require('../../src/modules/sales/analytics.service'));
 
   const role = await prisma.role.findFirst({ where: { deleted_at: null }, select: { id: true } });
   const mkUser = async (name) => {
@@ -143,6 +145,7 @@ before(async () => {
   fx.field = await mkUser('Field');
   fx.field2 = await mkUser('FieldTwo');
   fx.internal = await mkUser('Internal');
+  fx.analyst = await mkUser('Analyst'); // owns only the dashboard-analytics enquiries
   fx.customer = await prisma.customer.create({ data: { name: `TEST CUSTOMER ${suffix}` }, select: { id: true } });
 
   fx.previousInternal = (await workflowService.get()).internal_user_id ?? null;
@@ -469,5 +472,95 @@ describe('Sales rules: reminders', () => {
     });
     await followup.runStageAgingReminders();
     assert.equal(await notified(fx.internal.id, 'STAGE_AGING', id), 2);
+  });
+});
+
+describe('Sales dashboard analytics', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const ago = (days) => new Date(Date.now() - days * DAY);
+
+  /**
+   * Seeds an enquiry owned by the analyst with a hand-written stage trail
+   * ([stage, daysAgo] pairs) — analytics only reads, so the trail is written
+   * directly rather than walked through the gates.
+   */
+  async function seed(trail, data = {}) {
+    const e = await newEnquiry('GENERATED', fx.analyst);
+    await prisma.enquiryStageEvent.deleteMany({ where: { enquiry_id: e.id } });
+    let from = null;
+    for (const [stage, days] of trail) {
+      await prisma.enquiryStageEvent.create({
+        data: { enquiry_id: e.id, from_stage: from, to_stage: stage, created_at: ago(days) },
+      });
+      from = stage;
+    }
+    const [last, lastDays] = trail[trail.length - 1];
+    await prisma.enquiry.update({
+      where: { id: e.id },
+      data: { stage: last, stage_since: ago(lastDays), created_at: ago(trail[0][1]), ...data },
+    });
+    return e;
+  }
+
+  let r;
+  before(async () => {
+    if (env.unavailable) return;
+    await seed([['NEW', 10], ['REVIEW', 8], ['CONCEPT', 7], ['COSTING', 6], ['COSTING_REVIEW', 5],
+      ['OFFER_RELEASED', 4], ['FOLLOW_UP', 3], ['WON', 2]], { won_at: ago(2), order_value: 100000 });
+    await seed([['NEW', 6], ['REVIEW', 4], ['CONCEPT', 3], ['COSTING', 3], ['COSTING_REVIEW', 2],
+      ['OFFER_RELEASED', 2], ['FOLLOW_UP', 1], ['WON', 1]], { won_at: ago(1), order_value: 50000 });
+    await seed([['NEW', 5], ['REVIEW', 4], ['CONCEPT', 4], ['COSTING', 3], ['COSTING_REVIEW', 3],
+      ['OFFER_RELEASED', 2], ['FOLLOW_UP', 2], ['LOST', 1]],
+    { lost_at: ago(1), lost_reason: 'Price too high', lost_to: 'Rival Co' });
+    await seed([['NEW', 4], ['LOST', 3]], { lost_at: ago(3), lost_reason: ' price TOO high ' });
+    await seed([['NEW', 1]], { expected_value: 20000 });
+    r = await analyticsService.overview({ owner_id: fx.analyst.id });
+  });
+
+  it('headline: won, lost, win rate, average deal and days to close', () => {
+    assert.equal(r.headline.raised, 5);
+    assert.equal(r.headline.won, 2);
+    assert.equal(r.headline.won_value, 150000);
+    assert.equal(r.headline.lost, 2);
+    assert.equal(r.headline.win_rate, 50);
+    assert.equal(r.headline.avg_deal, 75000);
+    assert.equal(r.headline.avg_days_to_close, 6.5); // (8 + 5) / 2
+    assert.equal(r.headline.open_count, 1);
+    assert.equal(r.headline.open_value, 20000);
+  });
+
+  it('funnel counts how far each raised enquiry got (a loss keeps its furthest stage)', () => {
+    const f = Object.fromEntries(r.funnel.map((s) => [s.key, s.count]));
+    assert.deepEqual(f, { RAISED: 5, REVIEW: 3, CONCEPT: 3, COSTING: 3, OFFER_RELEASED: 3, WON: 2 });
+  });
+
+  it('time in stage averages each completed stay', () => {
+    const t = Object.fromEntries(r.time_in_stage.map((s) => [s.stage, s.avg_days]));
+    assert.equal(t.NEW, 1.5);    // (2 + 2 + 1 + 1) / 4 — the still-open NEW is not counted
+    assert.equal(t.REVIEW, 0.7); // (1 + 1 + 0) / 3
+    assert.equal(t.WON, undefined, 'Won is an end state, never "waited in"');
+  });
+
+  it('lost analysis groups reasons case-insensitively and records the stage lost from', () => {
+    assert.deepEqual(r.lost.reasons, [{ label: 'Price too high', count: 2 }]);
+    assert.deepEqual(r.lost.competitors.map((c) => c.label).sort(), ['Not known', 'Rival Co']);
+    assert.deepEqual(r.lost.by_stage.map((s) => s.label).sort(), ['FOLLOW_UP', 'NEW']);
+  });
+
+  it('team row and monthly trend reflect the same closes', () => {
+    assert.equal(r.team.length, 1);
+    assert.equal(r.team[0].owner_id, fx.analyst.id);
+    assert.equal(r.team[0].won_value, 150000);
+    assert.equal(r.team[0].win_rate, 50);
+    const total = r.monthly.reduce((n, m) => ({ won: n.won + m.won, lost: n.lost + m.lost }), { won: 0, lost: 0 });
+    assert.deepEqual(total, { won: 2, lost: 2 });
+    assert.equal(r.monthly.length, 12);
+  });
+
+  it('the type filter narrows every block', async () => {
+    const none = await analyticsService.overview({ owner_id: fx.analyst.id, enquiry_type: 'INCOMING' });
+    assert.equal(none.headline.raised, 0);
+    assert.equal(none.headline.won, 0);
+    assert.equal(none.team.length, 0);
   });
 });

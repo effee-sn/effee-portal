@@ -58,6 +58,7 @@ export const AREAS = [
     label: 'Sales',
     subtitle: 'Enquiries to orders',
     items: [
+      { label: 'Dashboard', href: '/dashboard/sales',           perm: 'SALES_VIEW', exact: true },
       { label: 'Enquiries', href: '/dashboard/sales/enquiries', perm: 'SALES_VIEW' },
     ],
   },

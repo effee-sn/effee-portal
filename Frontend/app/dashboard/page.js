@@ -6,8 +6,11 @@ import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet } from '@/lib/api';
 import {
-  ACTIVE_STAGES, STAGE_STYLE, TEMPERATURE_STYLE, formatINR, isAging, stageAgeDays,
+  ACTIVE_STAGES, TEMPERATURE_STYLE, formatINR, isAging, stageAgeDays,
 } from '@/lib/salesOptions';
+import {
+  Card, CardLink, Empty, Pulse, Stat, StageChip, compactINR,
+} from '@/components/DashboardKit';
 
 /**
  * Home dashboard — role-aware. Leads with what is waiting on *this* user, then
@@ -20,15 +23,6 @@ function greeting() {
   if (h < 12) return 'Good morning';
   if (h < 17) return 'Good afternoon';
   return 'Good evening';
-}
-
-/** Indian compact currency for tiles: ₹4.5 Cr, ₹12.3 L, ₹85 K. */
-function compactINR(value) {
-  const n = Number(value) || 0;
-  if (n >= 1e7) return `₹${(n / 1e7).toFixed(n >= 1e8 ? 0 : 1)} Cr`;
-  if (n >= 1e5) return `₹${(n / 1e5).toFixed(n >= 1e6 ? 0 : 1)} L`;
-  if (n >= 1e3) return `₹${Math.round(n / 1e3)} K`;
-  return `₹${Math.round(n)}`;
 }
 
 const dayDiff = (iso) => {
@@ -79,42 +73,6 @@ function AttentionTile({ label, value, icon, href, tone = 'neutral', hint }) {
   return href ? <Link href={href} className="block h-full">{body}</Link> : body;
 }
 
-/** A headline figure in a module snapshot. */
-function Stat({ label, value, sub, title, tone }) {
-  return (
-    <div className="bg-white px-4 py-3.5 min-w-0" title={title}>
-      <p className="text-[11px] font-medium uppercase tracking-wider text-gray-500">{label}</p>
-      <p className={`text-xl font-semibold tabular-nums mt-1 leading-tight ${tone === 'warning' ? 'text-amber-700' : 'text-gray-900'}`}>{value}</p>
-      {sub && <p className="text-xs text-gray-500 mt-0.5 truncate">{sub}</p>}
-    </div>
-  );
-}
-
-function Card({ title, action, children, className = '' }) {
-  return (
-    <section className={`bg-white rounded-lg border border-gray-200 ${className}`}>
-      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100">
-        <h2 className="text-sm font-semibold text-gray-800">{title}</h2>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-const CardLink = ({ href, children }) => (
-  <Link href={href} className="text-xs font-medium text-[var(--ams-primary)] hover:underline whitespace-nowrap">{children}</Link>
-);
-
-function StageChip({ stage }) {
-  const s = STAGE_STYLE[stage];
-  if (!s) return null;
-  return (
-    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium whitespace-nowrap"
-      style={{ color: s.color, backgroundColor: s.bg }}>{s.label}</span>
-  );
-}
-
 /**
  * Open enquiries per stage, in pipeline order. Single series → one hue (brand),
  * values written beside each bar, whole row is the hover/click target.
@@ -151,23 +109,15 @@ function PipelineChart({ pipeline }) {
   );
 }
 
-function Empty({ children }) {
-  return <p className="px-4 py-8 text-center text-sm text-gray-400">{children}</p>;
-}
-
-function P({ className }) {
-  return <div className={`bg-gray-200 rounded-md animate-pulse ${className}`} />;
-}
-
 function DashboardSkeleton() {
   return (
     <div className="space-y-6 p-4 pb-8">
-      <div className="space-y-2"><P className="h-7 w-56" /><P className="h-4 w-40" /></div>
+      <div className="space-y-2"><Pulse className="h-7 w-56" /><Pulse className="h-4 w-40" /></div>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {[1, 2, 3, 4, 5].map((i) => <P key={i} className="h-[76px]" />)}
+        {[1, 2, 3, 4, 5].map((i) => <Pulse key={i} className="h-[76px]" />)}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <P className="h-64 lg:col-span-2" /><P className="h-64" />
+        <Pulse className="h-64 lg:col-span-2" /><Pulse className="h-64" />
       </div>
     </div>
   );
@@ -320,7 +270,7 @@ export default function DashboardPage() {
       {/* Sales snapshot */}
       {sales && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-          <Card title="Sales overview" className="lg:col-span-1" action={<CardLink href="/dashboard/sales/enquiries">Enquiries →</CardLink>}>
+          <Card title="Sales overview" className="lg:col-span-1" action={<CardLink href="/dashboard/sales">Sales dashboard →</CardLink>}>
             <div className="grid grid-cols-2 gap-px bg-gray-100 rounded-b-lg overflow-hidden">
               <Stat label="Open pipeline" value={compactINR(sales.open_value)} title={formatINR(sales.open_value)}
                 sub={`${sales.open_count} open ${sales.open_count === 1 ? 'enquiry' : 'enquiries'}`} />

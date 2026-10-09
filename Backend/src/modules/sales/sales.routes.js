@@ -27,6 +27,9 @@ const {
 const { updateWorkflowBody } = require('./workflow.validation');
 const { getWorkflow, updateWorkflow } = require('./workflow.controller');
 
+const { analyticsQuery } = require('./analytics.validation');
+const { getAnalytics } = require('./analytics.controller');
+
 const router = Router();
 
 router.use(authenticate);
@@ -38,6 +41,14 @@ router.put(
   authorize('SALES_EDIT'),
   validate({ body: updateWorkflowBody }),
   asyncHandler(updateWorkflow)
+);
+
+// ── Sales dashboard (pipeline analytics) ──────────────────────────────────────
+router.get(
+  '/analytics',
+  authorize('SALES_VIEW'),
+  validate({ query: analyticsQuery }),
+  asyncHandler(getAnalytics)
 );
 
 // Customers & contacts moved to the Master Data module (/customers, /contacts).
