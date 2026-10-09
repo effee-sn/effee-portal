@@ -209,7 +209,7 @@ export default function DashboardPage() {
   const showTickets = canService || w.tickets_with_me > 0;
 
   return (
-    <div className="space-y-6 p-4 pb-10 max-w-[1400px]">
+    <div className="space-y-6 p-4 pb-10">
 
       {/* Header */}
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-1">
@@ -347,7 +347,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
           {svc && (
             <Card title="Service tickets" action={<CardLink href="/dashboard/service">Service dashboard →</CardLink>}>
-              <div className="grid grid-cols-3 divide-x divide-gray-100">
+              <div className="grid grid-cols-3 divide-x divide-gray-100 rounded-b-lg overflow-hidden">
                 <Stat label="Total" value={svc.total ?? 0} />
                 <Stat label="Active" value={svc.active ?? 0} />
                 <Stat label="On observation" value={svc.on_observation ?? 0} />
@@ -356,7 +356,7 @@ export default function DashboardPage() {
           )}
           {projects && (
             <Card title="Projects" action={<CardLink href="/dashboard/projects">All projects →</CardLink>}>
-              <div className="grid grid-cols-4 divide-x divide-gray-100">
+              <div className="grid grid-cols-4 divide-x divide-gray-100 rounded-b-lg overflow-hidden">
                 <Stat label="Planning" value={projects.PLANNING ?? 0} />
                 <Stat label="Active" value={projects.ACTIVE ?? 0} />
                 <Stat label="On hold" value={projects.ON_HOLD ?? 0} />
