@@ -9,6 +9,7 @@ import { ALL_STAGES, STAGE_STYLE, TYPE_LABEL, TEMPERATURE_STYLE, formatINR, isAg
 import EnquiryCustomerContact from '@/components/EnquiryCustomerContact';
 import useNav from '@/lib/useNav';
 import useSalesConfig from '@/lib/useSalesConfig';
+import useCurrencies, { formatMoney } from '@/lib/money';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
@@ -33,7 +34,12 @@ function EnquiryModal({ onClose, onSaved }) {
   const config = useSalesConfig();
   const activeApps = (config?.applications || []).filter((a) => a.is_active);
   const [type, setType] = useState(null); // null = pick origin; else show the form
-  const [form, setForm] = useState({ title: '', customer_id: '', contact_id: '', application_id: '', description: '' });
+  const currencies = useCurrencies();
+  const [form, setForm] = useState({
+    title: '', customer_id: '', contact_id: '', application_id: '', currency_code: '', expected_value: '', description: '',
+  });
+  // Until the user picks one, the form follows the default currency (Master Data → Currencies).
+  const currencyCode = form.currency_code || currencies?.defaultCode || 'INR';
   const [error, setError]   = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -45,7 +51,7 @@ function EnquiryModal({ onClose, onSaved }) {
     setSaving(true); setError('');
     try {
       // Stage is automated to New; owner defaults to the creator server-side.
-      const res = await apiPost('/sales/enquiries', { ...form, enquiry_type: type, stage: 'NEW' });
+      const res = await apiPost('/sales/enquiries', { ...form, currency_code: currencyCode, enquiry_type: type, stage: 'NEW' });
       onSaved(res.data);
       onClose();
     } catch (err) { setError(err.message); }
@@ -100,6 +106,22 @@ function EnquiryModal({ onClose, onSaved }) {
                 <option value="">{config ? (activeApps.length ? '— Select application —' : 'No applications configured') : 'Loading…'}</option>
                 {activeApps.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={label}>Currency</label>
+                <select name="currency_code" value={currencyCode} onChange={change} disabled={!currencies} className="ams-input">
+                  {(currencies?.list || [{ code: 'INR', name: 'Indian Rupee' }]).map((c) => (
+                    <option key={c.code} value={c.code}>{c.code} · {c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={label}>Expected Value ({currencyCode})</label>
+                <input name="expected_value" type="number" min="0" step="0.01" value={form.expected_value} onChange={change}
+                  placeholder="Optional" className="ams-input" />
+              </div>
             </div>
 
             <div>
@@ -289,8 +311,9 @@ export default function EnquiriesPage() {
                       {config?.probability?.[e.stage] !== undefined ? `${config.probability[e.stage]}%` : '—'}
                     </td>
                     <td className="px-3 py-3 text-gray-600">{e.owner?.name || '—'}</td>
-                    <td className="px-3 py-3 text-gray-700 tabular-nums text-right whitespace-nowrap">
-                      {formatINR(e.stage === 'WON' ? e.order_value : e.expected_value)}
+                    <td className="px-3 py-3 text-gray-700 tabular-nums text-right whitespace-nowrap"
+                      title={e.currency_code !== 'INR' ? `≈ ${formatINR(e.stage === 'WON' ? e.order_value_inr : e.expected_value_inr)}` : undefined}>
+                      {formatMoney(e.stage === 'WON' ? e.order_value : e.expected_value, e.currency_code, e.currency?.symbol)}
                     </td>
                     <td className="px-3 py-3 text-gray-500 tabular-nums text-center">{e._count?.activities ?? 0}</td>
                   </tr>

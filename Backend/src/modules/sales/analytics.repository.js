@@ -49,20 +49,21 @@ function createAnalyticsRepository(db) {
     /** @param {Filter} f */
     openByOwner(f) {
       return db.enquiry.groupBy({
-        by: ['owner_id'], where: open(f), _count: { _all: true }, _sum: { expected_value: true },
+        // Split by currency too — sums are converted to INR in the service.
+        by: ['owner_id', 'currency_code'], where: open(f), _count: { _all: true }, _sum: { expected_value: true },
       });
     },
 
     /** Open value per stage — weighted by the stage probabilities in the service. @param {Filter} f */
     openByStage(f) {
-      return db.enquiry.groupBy({ by: ['stage'], where: open(f), _sum: { expected_value: true } });
+      return db.enquiry.groupBy({ by: ['stage', 'currency_code'], where: open(f), _sum: { expected_value: true } });
     },
 
     /** @param {Filter} f */
     won(f) {
       return db.enquiry.findMany({
         where: { ...base(f), stage: 'WON', won_at: { gte: f.from, lt: f.to } },
-        select: { owner_id: true, order_value: true, created_at: true, won_at: true },
+        select: { owner_id: true, order_value: true, currency_code: true, order_fx_rate: true, created_at: true, won_at: true },
       });
     },
 
@@ -117,7 +118,7 @@ function createAnalyticsRepository(db) {
             { stage: 'LOST', lost_at: { gte: since, lt: f.to } },
           ],
         },
-        select: { stage: true, won_at: true, lost_at: true, order_value: true },
+        select: { stage: true, won_at: true, lost_at: true, order_value: true, currency_code: true, order_fx_rate: true },
       });
     },
 
@@ -143,9 +144,11 @@ function createAnalyticsRepository(db) {
       const [total, items] = await Promise.all([
         db.enquiry.count({ where }),
         db.enquiry.findMany({
-          where, orderBy: [{ expected_value: 'desc' }, { stage_since: 'asc' }], take: 15,
+          // Over-fetch: amounts are in mixed currencies, so the service ranks
+          // them in INR and keeps the top 15.
+          where, orderBy: [{ expected_value: 'desc' }, { stage_since: 'asc' }], take: 60,
           select: {
-            id: true, ref_no: true, title: true, stage: true, expected_value: true, expected_close: true,
+            id: true, ref_no: true, title: true, stage: true, expected_value: true, expected_close: true, currency_code: true,
             customer: { select: { name: true } }, owner: person,
           },
         }),

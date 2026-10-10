@@ -1,5 +1,6 @@
 const { analyticsRepository } = require('./analytics.repository');
 const { salesConfigService } = require('./config.service');
+const { loadRates, toInr, paise } = require('../master/fx');
 
 /**
  * Sales dashboard business logic: turns the repository's rows into the
@@ -90,7 +91,7 @@ function createAnalyticsService(repository, config = salesConfigService) {
   }
 
   /** Last 12 calendar months up to the month of the period's end. */
-  function monthly(closed, f) {
+  function monthly(closed, f, rates) {
     const last = new Date(f.to.getTime() - 1);
     const months = [];
     for (let i = 11; i >= 0; i -= 1) {
@@ -103,8 +104,9 @@ function createAnalyticsService(repository, config = salesConfigService) {
       if (!at) continue;
       const m = byKey[`${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}`];
       if (!m) continue;
-      if (e.stage === 'WON') { m.won += 1; m.won_value += num(e.order_value); } else m.lost += 1;
+      if (e.stage === 'WON') { m.won += 1; m.won_value += toInr(e.order_value, e.currency_code, rates, e.order_fx_rate); } else m.lost += 1;
     }
+    for (const m of months) m.won_value = Math.round(m.won_value);
     return months;
   }
 
@@ -117,7 +119,10 @@ function createAnalyticsService(repository, config = salesConfigService) {
       const lastDay = new Date(f.to.getTime() - 1);
       const trendFrom = new Date(lastDay.getFullYear(), lastDay.getMonth() - 11, 1);
 
-      const [openRows, stageRows, probability, won, lost, raised, exits, closed, stalled, hot, overdue, owners] = await Promise.all([
+      // Every money figure below is in INR: open amounts at today's rate, won
+      // orders at the rate locked when they were won.
+      const [rates, openRows, stageRows, probability, won, lost, raised, exits, closed, stalled, hot, overdue, owners] = await Promise.all([
+        loadRates(),
         repository.openByOwner(f),
         repository.openByStage(f),
         config.probabilityMap(),
@@ -132,7 +137,9 @@ function createAnalyticsService(repository, config = salesConfigService) {
         repository.owners(),
       ]);
 
-      const wonValue = won.reduce((n, e) => n + num(e.order_value), 0);
+      const orderInr = (e) => toInr(e.order_value, e.currency_code, rates, e.order_fx_rate);
+      const openInr = (r) => toInr(r._sum.expected_value, r.currency_code, rates);
+      const wonValue = Math.round(won.reduce((n, e) => n + orderInr(e), 0));
       const daysToClose = won.map((e) => (e.won_at.getTime() - e.created_at.getTime()) / DAY_MS);
 
       // ── Team performance: one row per field initiator seen in any block ──
@@ -141,9 +148,9 @@ function createAnalyticsService(repository, config = salesConfigService) {
         if (!team.has(id)) team.set(id, { owner_id: id, raised: 0, open: 0, open_value: 0, won: 0, won_value: 0, lost: 0 });
         return team.get(id);
       };
-      for (const r of openRows) { const t = row(r.owner_id); t.open = r._count._all; t.open_value = num(r._sum.expected_value); }
+      for (const r of openRows) { const t = row(r.owner_id); t.open += r._count._all; t.open_value += openInr(r); }
       for (const e of raised) row(e.owner_id).raised += 1;
-      for (const e of won) { const t = row(e.owner_id); t.won += 1; t.won_value += num(e.order_value); }
+      for (const e of won) { const t = row(e.owner_id); t.won += 1; t.won_value += orderInr(e); }
       for (const e of lost) row(e.owner_id).lost += 1;
       const names = Object.fromEntries(
         (await repository.usersByIds([...team.keys()])).map((u) => [u.id, u.name])
@@ -154,10 +161,10 @@ function createAnalyticsService(repository, config = salesConfigService) {
         owners,
         headline: {
           open_count: openRows.reduce((n, r) => n + r._count._all, 0),
-          open_value: openRows.reduce((n, r) => n + num(r._sum.expected_value), 0),
+          open_value: Math.round(openRows.reduce((n, r) => n + openInr(r), 0)),
           // Expected value × the stage's win probability, summed.
           weighted_value: Math.round(stageRows.reduce(
-            (n, r) => n + num(r._sum.expected_value) * ((probability[r.stage] ?? 0) / 100), 0
+            (n, r) => n + openInr(r) * ((probability[r.stage] ?? 0) / 100), 0
           )),
           raised: raised.length,
           won: won.length,
@@ -171,7 +178,7 @@ function createAnalyticsService(repository, config = salesConfigService) {
         },
         funnel: funnel(raised),
         time_in_stage: timeInStage(exits, f),
-        monthly: monthly(closed, f),
+        monthly: monthly(closed, f, rates),
         lost: {
           total: lost.length,
           reasons: tally(lost.map((e) => e.lost_reason), 'No reason given').slice(0, 8),
@@ -179,13 +186,23 @@ function createAnalyticsService(repository, config = salesConfigService) {
           by_stage: tally(lost.map((e) => e.stageEvents[0]?.from_stage || ''), 'Unknown'),
         },
         team: [...team.values()]
-          .map((t) => ({ ...t, name: names[t.owner_id] || `User #${t.owner_id}`, win_rate: rate(t.won, t.lost) }))
+          .map((t) => ({
+            ...t, open_value: Math.round(t.open_value), won_value: Math.round(t.won_value),
+            name: names[t.owner_id] || `User #${t.owner_id}`, win_rate: rate(t.won, t.lost),
+          }))
           .sort((a, b) => b.won_value - a.won_value || b.open_value - a.open_value || a.name.localeCompare(b.name)),
         watch: {
           stalled: { total: stalled.total, items: stalled.items },
           hot: {
             total: hot.total,
-            items: hot.items.map((e) => ({ ...e, expected_value: e.expected_value === null ? null : num(e.expected_value) })),
+            items: hot.items
+              .map((e) => ({
+                ...e,
+                expected_value: e.expected_value === null ? null : num(e.expected_value),
+                expected_value_inr: e.expected_value === null ? null : paise(toInr(e.expected_value, e.currency_code, rates)),
+              }))
+              .sort((a, b) => (b.expected_value_inr ?? -1) - (a.expected_value_inr ?? -1))
+              .slice(0, 15),
           },
           overdue,
         },

@@ -3,6 +3,8 @@ const { workflowRepository } = require('./workflow.repository');
 const { auditService } = require('../audit/audit.service');
 const { notificationService } = require('../notification/notification.service');
 const { missingForStage, GATED_STAGES } = require('./stageGate');
+const { currencyService } = require('../master/currency.service');
+const { loadRates, toInr, paise } = require('../master/fx');
 const { NotFoundError, ConflictError, ValidationError, ForbiddenError, buildSearchClause } = require('../../core');
 
 /** Human label for a stage enum, for notification text (`FOLLOW_UP` → `Follow up`). */
@@ -105,6 +107,26 @@ function createEnquiryService(repository) {
   }
 
   /** Validates the customer / contact / owner references on a write. */
+  /**
+   * Adds the rupee equivalents next to the original-currency amounts: the
+   * expected value at the currency's current rate, the order value at the rate
+   * locked when it was won.
+   */
+  function withInr(e, rates) {
+    if (!e) return e;
+    return {
+      ...e,
+      expected_value_inr: e.expected_value === null || e.expected_value === undefined
+        ? null : paise(toInr(e.expected_value, e.currency_code, rates)),
+      order_value_inr: e.order_value === null || e.order_value === undefined
+        ? null : paise(toInr(e.order_value, e.currency_code, rates, e.order_fx_rate)),
+    };
+  }
+
+  async function withMoney(enquiry) {
+    return withInr(enquiry, await loadRates());
+  }
+
   /** A newly chosen application must exist and be active (inactive ones stay on old enquiries). */
   async function assertApplication(applicationId) {
     if (applicationId === undefined || applicationId === null) return;
@@ -143,7 +165,7 @@ function createEnquiryService(repository) {
 
   function pickWritable(dto, data = {}) {
     for (const f of ['title', 'customer_id', 'contact_id', 'enquiry_type', 'stage',
-      'description', 'expected_value', 'expected_close', 'owner_id', 'application_id']) {
+      'description', 'expected_value', 'expected_close', 'owner_id', 'application_id', 'currency_code']) {
       if (dto[f] !== undefined) data[f] = dto[f];
     }
     return data;
@@ -221,14 +243,16 @@ function createEnquiryService(repository) {
     async list(query) {
       const search = buildSearchClause(query.search, [...SEARCHABLE_FIELDS]);
       const where = { ...query.filters, ...(search || {}) };
-      return repository.findPage({ where, orderBy: query.orderBy, skip: query.skip, take: query.take });
+      const page = await repository.findPage({ where, orderBy: query.orderBy, skip: query.skip, take: query.take });
+      const rates = await loadRates();
+      return { ...page, items: page.items.map((e) => withInr(e, rates)) };
     },
 
     /** @param {number} id @throws {NotFoundError} */
     async getById(id) {
       const enquiry = await repository.findById(id);
       if (!enquiry) throw new NotFoundError('Enquiry');
-      return enquiry;
+      return withMoney(enquiry);
     },
 
     /**
@@ -259,11 +283,15 @@ function createEnquiryService(repository) {
       }
       await assertRefs({ customer_id: dto.customer_id, contact_id: dto.contact_id, owner_id });
       await assertApplication(dto.application_id);
+      // New enquiries start in the default currency (Master Data → Currencies).
+      const currency_code = dto.currency_code ?? await currencyService.defaultCode();
+      if (dto.currency_code) await currencyService.assertSelectable(dto.currency_code);
 
       // Every enquiry starts at NEW — a stage passed by the caller is ignored,
       // so creation can never skip the gates or the handoffs.
       const { stage: _ignored, ...fields } = dto;
       const data = pickWritable(fields, {
+        currency_code,
         stage: 'NEW',
         owner_id,
         // The raiser is both the field initiator (owner) and the first handler.
@@ -287,7 +315,7 @@ function createEnquiryService(repository) {
       });
 
       notifyOwner(enquiry, actor);
-      return enquiry;
+      return withMoney(enquiry);
     },
 
     /**
@@ -326,6 +354,14 @@ function createEnquiryService(repository) {
       }
 
       if (dto.application_id !== before.application_id) await assertApplication(dto.application_id);
+      if (dto.currency_code !== undefined && dto.currency_code !== before.currency_code) {
+        // A closed deal's amounts (and a won order's locked rate) belong to
+        // its currency — reopen it first to change.
+        if (before.stage === 'WON' || before.stage === 'LOST') {
+          throw new ConflictError('The currency of a closed enquiry cannot be changed — reopen it first');
+        }
+        await currencyService.assertSelectable(dto.currency_code);
+      }
 
       // Resolve the effective customer for contact validation (new or existing).
       const customer_id = dto.customer_id ?? before.customer_id;
@@ -373,7 +409,7 @@ function createEnquiryService(repository) {
 
       // Notify a newly assigned owner.
       if (dto.owner_id !== undefined && dto.owner_id !== before.owner_id) notifyOwner(enquiry, actor);
-      return enquiry;
+      return withMoney(enquiry);
     },
 
     /**
@@ -407,7 +443,7 @@ function createEnquiryService(repository) {
         actor,
         changes: { stage: { from: before.stage, to: toStage }, auto: true },
       });
-      return enquiry;
+      return withMoney(enquiry);
     },
 
     /**
@@ -427,6 +463,8 @@ function createEnquiryService(repository) {
         won_at: new Date(),
         order_no: dto.order_no ?? null,
         order_value: dto.order_value,
+        // Lock today's rate so this order's rupee value never moves.
+        order_fx_rate: (await loadRates())[before.currency_code] ?? 1,
         order_date: dto.order_date ?? new Date(),
         won_declaration: dto.won_declaration ?? null,
         won_terms: dto.won_terms ?? null,
@@ -455,7 +493,7 @@ function createEnquiryService(repository) {
         body: `${enquiry.title} — ${enquiry.customer?.name ?? 'customer'}`,
       });
 
-      return enquiry;
+      return withMoney(enquiry);
     },
 
     /** Marks an enquiry LOST with a reason. */
@@ -491,7 +529,7 @@ function createEnquiryService(repository) {
         body: `${enquiry.title} — ${dto.lost_reason}${dto.lost_to ? ` (went to ${dto.lost_to})` : ''}`,
       });
 
-      return enquiry;
+      return withMoney(enquiry);
     },
 
     /** Reopens a won/lost enquiry back into the active pipeline (Follow-up). */
@@ -507,7 +545,7 @@ function createEnquiryService(repository) {
         stage: 'FOLLOW_UP',
         stage_since: new Date(),
         handler_id: before.owner_id, // Follow-up is the field initiator's phase
-        won_at: null, order_no: null, order_value: null, order_date: null,
+        won_at: null, order_no: null, order_value: null, order_fx_rate: null, order_date: null,
         won_declaration: null, won_terms: null,
         lost_at: null, lost_reason: null, lost_to: null,
         updated_by: actor?.id ?? null,
@@ -523,7 +561,7 @@ function createEnquiryService(repository) {
         changes: { stage: { from: before.stage, to: 'FOLLOW_UP' }, reopened: true },
       });
 
-      return enquiry;
+      return withMoney(enquiry);
     },
 
     /**
@@ -576,7 +614,7 @@ function createEnquiryService(repository) {
         },
       });
 
-      return enquiry;
+      return withMoney(enquiry);
     },
 
     /**

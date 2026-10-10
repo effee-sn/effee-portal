@@ -44,7 +44,7 @@ const it = (name, fn) => test(name, async (t) => {
 
 // ── Lazy app handles (required only once the environment is settled) ────────
 let prisma; let enquiryService; let activityService; let attachmentService;
-let workflowService; let followup; let analyticsService; let salesConfigService;
+let workflowService; let followup; let analyticsService; let salesConfigService; let currencyService;
 
 const ids = { enquiries: [], users: [], apps: [] };
 const fx = {}; // fixtures: users, customer, previous workflow config
@@ -133,6 +133,7 @@ before(async () => {
   followup = require('../../src/modules/sales/followup.service');
   ({ analyticsService } = require('../../src/modules/sales/analytics.service'));
   ({ salesConfigService } = require('../../src/modules/sales/config.service'));
+  ({ currencyService } = require('../../src/modules/master/currency.service'));
   fx.previousProbabilities = await salesConfigService.listProbabilities();
 
   const role = await prisma.role.findFirst({ where: { deleted_at: null }, select: { id: true } });
@@ -168,6 +169,12 @@ after(async () => {
     await prisma.enquiryStageEvent.deleteMany({ where: { enquiry_id: { in: enquiryIds } } });
     await prisma.enquiry.deleteMany({ where: { id: { in: enquiryIds } } });
     if (ids.apps.length) await prisma.salesApplication.deleteMany({ where: { id: { in: ids.apps } } });
+    if (fx.currency) {
+      // Put the default back on INR before removing the test currency.
+      await prisma.currency.updateMany({ data: { is_default: false } });
+      await prisma.currency.update({ where: { code: 'INR' }, data: { is_default: true } });
+      await prisma.currency.deleteMany({ where: { code: fx.currency } });
+    }
     if (fx.previousProbabilities) {
       await salesConfigService.saveProbabilities({ items: fx.previousProbabilities }, actor(fx.field));
     }
@@ -671,5 +678,77 @@ describe('Sales documents: versioning', () => {
     assert.deepEqual([r1.version, r2.version], [1, 2]);
     const offers = (await attachmentService.listForEnquiry(e.id)).filter((d) => d.kind === 'OFFER');
     assert.ok(offers.every((o) => o.superseded_at === null));
+  });
+});
+
+describe('Currencies on enquiries', () => {
+  const letter = () => String.fromCharCode(65 + Math.floor(Math.random() * 26));
+  let owner; let usdId;
+
+  before(async () => {
+    if (env.unavailable) return;
+    fx.currency = `Q${letter()}${letter()}`;
+    await currencyService.create({ code: fx.currency, name: 'Test Dollar', symbol: 'T$', rate: 80 }, actor(fx.field));
+    // A dedicated owner so the dashboard figures below are this block's alone.
+    const role = await prisma.role.findFirst({ where: { deleted_at: null }, select: { id: true } });
+    owner = await prisma.user.create({
+      data: { name: `Fx ${suffix}`, email: `fx-${suffix}@sales.test`, password: 'x', role_id: role.id },
+      select: { id: true, email: true, name: true },
+    });
+    ids.users.push(owner.id);
+  });
+
+  it('a new enquiry starts in the default currency (INR)', async () => {
+    const e = await newEnquiry('GENERATED', fx.field, { expected_value: 5000 });
+    assert.equal(e.currency_code, 'INR');
+    assert.equal(e.expected_value_inr, 5000);
+  });
+
+  it('an enquiry in another currency shows its rupee value at the current rate', async () => {
+    const e = await newEnquiry('GENERATED', owner, { currency_code: fx.currency, expected_value: 1000 });
+    usdId = e.id;
+    assert.equal(e.currency_code, fx.currency);
+    assert.equal(Number(e.expected_value), 1000);
+    assert.equal(e.expected_value_inr, 80000);
+  });
+
+  it('dashboards total in INR', async () => {
+    const r = await analyticsService.overview({ owner_id: owner.id });
+    assert.equal(r.headline.open_value, 80000);
+    assert.equal(r.team[0].open_value, 80000);
+  });
+
+  it('a rate update moves open amounts, but a won order keeps the rate it was won at', async () => {
+    const e = await toOfferReleased();
+    await enquiryService.update(e.id, { currency_code: fx.currency }, actor(fx.internal));
+    await sendOffer(e.id, fx.internal); // → Follow-up, with Field
+    const won = await enquiryService.win(e.id, { order_value: 2000 }, actor(fx.field));
+    assert.equal(won.order_value_inr, 160000); // 2000 × 80
+
+    await currencyService.addRate(fx.currency, { rate: 90 }, actor(fx.field));
+    assert.equal((await enquiryService.getById(e.id)).order_value_inr, 160000, 'won order stays at 80');
+    assert.equal((await enquiryService.getById(usdId)).expected_value_inr, 90000, 'open amount uses the new 90');
+
+    await assert.rejects(
+      enquiryService.update(e.id, { currency_code: 'INR' }, actor(fx.field)),
+      { name: 'ConflictError' },
+      'a closed enquiry keeps its currency',
+    );
+  });
+
+  it('a currency in use cannot be deleted; an inactive one cannot be picked', async () => {
+    await assert.rejects(currencyService.delete(fx.currency, actor(fx.field)), { name: 'ConflictError' });
+    await currencyService.update(fx.currency, { is_active: false }, actor(fx.field));
+    await assert.rejects(newEnquiry('GENERATED', fx.field, { currency_code: fx.currency }), { name: 'ValidationError' });
+    await currencyService.update(fx.currency, { is_active: true }, actor(fx.field));
+  });
+
+  it('changing the default currency changes what new enquiries start in', async () => {
+    await currencyService.setDefault(fx.currency, actor(fx.field));
+    await assert.rejects(currencyService.update(fx.currency, { is_active: false }, actor(fx.field)), { name: 'ConflictError' });
+    const e = await newEnquiry('GENERATED', fx.field);
+    assert.equal(e.currency_code, fx.currency);
+    await currencyService.setDefault('INR', actor(fx.field));
+    assert.equal((await newEnquiry('GENERATED', fx.field)).currency_code, 'INR');
   });
 });

@@ -5,12 +5,14 @@ import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { ListSkeleton, TableSkeleton } from '@/components/Skeleton';
+import { invalidateCurrencies } from '@/lib/money';
 
 /**
  * Master Data → Currencies. Currencies with manually entered exchange rates
  * ("₹ for 1 unit"). Every rate change is a new history entry — nothing is
  * overwritten — and the entry with the latest effective date is current.
- * INR is the base currency (always 1).
+ * INR is the base currency (always 1) and can't be deleted. One currency is
+ * the *default* new records start in (INR at first); totals are always in INR.
  */
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
@@ -290,15 +292,25 @@ export default function CurrenciesPage() {
     return () => { cancelled = true; };
   }, [permLoading, canView]);
 
-  const upsert = (c) => setRows((prev) => {
+  const upsert = (c) => { invalidateCurrencies(); setRows((prev) => {
     const next = prev.some((r) => r.code === c.code) ? prev.map((r) => (r.code === c.code ? { ...r, ...c } : r)) : [...prev, c];
     return next.sort((a, b) => Number(b.is_base) - Number(a.is_base) || a.code.localeCompare(b.code));
-  });
+  }); };
+
+  const makeDefault = async (c) => {
+    setError('');
+    try {
+      const res = await apiPost(`/currencies/${c.code}/default`, {});
+      invalidateCurrencies();
+      // Exactly one default: clear the flag everywhere else.
+      setRows((prev) => prev.map((r) => (r.code === c.code ? { ...r, ...res.data } : { ...r, is_default: false })));
+    } catch (err) { setError(err.message); }
+  };
 
   const remove = async (c) => {
     if (!window.confirm(`Delete ${c.code} (${c.name}) and its rate history? This cannot be undone.`)) return;
     setError('');
-    try { await apiDelete(`/currencies/${c.code}`); setRows((prev) => prev.filter((r) => r.code !== c.code)); }
+    try { await apiDelete(`/currencies/${c.code}`); invalidateCurrencies(); setRows((prev) => prev.filter((r) => r.code !== c.code)); }
     catch (err) { setError(err.message); }
   };
 
@@ -306,7 +318,7 @@ export default function CurrenciesPage() {
     return (
       <div className="bg-white rounded border border-gray-200 overflow-hidden">
         <div className="h-12 border-b border-gray-200 animate-pulse bg-gray-50" />
-        <TableSkeleton cols={5} rows={4} />
+        <TableSkeleton cols={6} rows={4} />
       </div>
     );
   }
@@ -330,19 +342,20 @@ export default function CurrenciesPage() {
               style={{ backgroundColor: 'var(--ams-primary)' }}>New</button>
           )}
           <span className="text-sm font-medium text-gray-700 shrink-0 px-1">Currencies</span>
-          <span className="text-xs text-gray-400">Rates are ₹ for 1 unit · INR is the base currency</span>
+          <span className="text-xs text-gray-400">Rates are ₹ for 1 unit · totals are always in ₹ · new records start in the Default currency</span>
         </div>
 
         {error && <div className="mx-3 mt-3"><ErrorBox error={error} /></div>}
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm" style={{ minWidth: 640 }}>
+          <table className="w-full text-sm" style={{ minWidth: 760 }}>
             <thead>
               <tr className="border-b border-gray-200 text-left text-gray-500">
                 <th className="px-3 py-3 font-normal">Currency</th>
                 <th className="px-3 py-3 font-normal text-right">Current rate</th>
                 <th className="px-3 py-3 font-normal">Effective from</th>
                 <th className="px-3 py-3 font-normal text-center">History</th>
+                <th className="px-3 py-3 font-normal text-center" title="Enquiries using this currency">Used by</th>
                 <th className="px-3 py-3 font-normal">Status</th>
                 <th className="px-3 py-3"><span className="sr-only">Actions</span></th>
               </tr>
@@ -356,16 +369,22 @@ export default function CurrenciesPage() {
                     <span className="text-gray-700"> · {c.name}</span>
                     <span className="text-gray-400"> ({c.symbol})</span>
                     {c.is_base && <span className="ml-2 text-[10px] font-semibold text-gray-600 bg-gray-100 rounded px-1.5 py-0.5">Base</span>}
+                    {c.is_default && <span className="ml-2 text-[10px] font-semibold text-[var(--ams-primary)] bg-[var(--ams-primary-mid)] rounded px-1.5 py-0.5">Default</span>}
                   </td>
                   <td className="px-3 py-3 text-right tabular-nums font-medium text-gray-900">{fmtRate(c.rate)}</td>
                   <td className="px-3 py-3 text-gray-600 whitespace-nowrap">{c.is_base ? '—' : fmtDay(c.rate_effective_from)}</td>
                   <td className="px-3 py-3 text-center text-gray-500 tabular-nums">{c.is_base ? '—' : c.rate_entries}</td>
+                  <td className="px-3 py-3 text-center text-gray-500 tabular-nums">{c.usage ?? 0}</td>
                   <td className="px-3 py-3">
                     <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium ${c.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                       {c.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
                   <td className="px-3 py-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    {!c.is_default && c.is_active && canEdit && (
+                      <button onClick={() => makeDefault(c)} title="New records will start in this currency"
+                        className="mr-3 text-xs font-medium text-gray-600 hover:underline cursor-pointer">Make default</button>
+                    )}
                     {!c.is_base && canEdit && (
                       <>
                         <button onClick={() => setModal({ type: 'rates', code: c.code })}
@@ -374,7 +393,7 @@ export default function CurrenciesPage() {
                           className="ml-3 text-xs font-medium text-gray-600 hover:underline cursor-pointer">Edit</button>
                       </>
                     )}
-                    {!c.is_base && canDelete && (
+                    {!c.is_base && !c.is_default && canDelete && (c.usage ?? 0) === 0 && (
                       <button onClick={() => remove(c)} className="ml-3 text-xs font-medium text-red-600 hover:underline cursor-pointer">Delete</button>
                     )}
                   </td>

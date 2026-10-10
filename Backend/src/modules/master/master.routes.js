@@ -130,6 +130,12 @@ router.post(
   validate({ params: currencyValidation.currencyCodeParam, body: currencyValidation.addRateBody }),
   asyncHandler(currencyController.addRate)
 );
+router.post(
+  '/currencies/:code/default',
+  authorize('CURRENCY_EDIT'),
+  validate({ params: currencyValidation.currencyCodeParam }),
+  asyncHandler(currencyController.setDefaultCurrency)
+);
 router.delete(
   '/currencies/:code/rates/:rateId',
   authorize('CURRENCY_EDIT'),

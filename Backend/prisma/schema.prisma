@@ -766,11 +766,15 @@ model Currency {
   name                String
   symbol              String         @db.VarChar(8)
   is_base             Boolean        @default(false)
+  // The currency new records start in (exactly one; INR initially). Reports
+  // always total in the base currency, whatever the default is.
+  is_default          Boolean        @default(false)
   is_active           Boolean        @default(true)
   // Rupees for one unit of this currency (current).
   rate                Decimal        @db.Decimal(18, 6)
   rate_effective_from DateTime       @db.Date
   rates               CurrencyRate[]
+  enquiries           Enquiry[]
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -908,6 +912,12 @@ model Enquiry {
   // enquiry moves stage (stage_since becomes later than this).
   aging_reminded_at DateTime?
 
+  // Currency of every amount on this enquiry (expected value, order value).
+  // Totals convert to INR with the currency's current rate; a Won order locks
+  // the rate it was won at (order_fx_rate) so past revenue never moves.
+  currency      Currency @relation(fields: [currency_code], references: [code])
+  currency_code String   @default("INR") @db.VarChar(3)
+
   expected_value Decimal?  @db.Decimal(14, 2)
   expected_close DateTime?
 
@@ -931,6 +941,8 @@ model Enquiry {
   won_at          DateTime?
   order_no        String?
   order_value     Decimal?  @db.Decimal(14, 2)
+  // ₹ per unit of the enquiry currency, locked when the enquiry was won.
+  order_fx_rate   Decimal?  @db.Decimal(18, 6)
   order_date      DateTime?
   won_declaration String?   @db.Text
   won_terms       String?   @db.Text
@@ -959,6 +971,7 @@ model Enquiry {
   @@index([stage])
   @@index([enquiry_type])
   @@index([application_id])
+  @@index([currency_code])
   @@index([deleted_at])
   @@index([created_at])
 }

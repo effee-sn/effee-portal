@@ -7,9 +7,9 @@ const prisma = require('../../lib/prisma');
  */
 function createCurrencyRepository(db) {
   const currencySelect = Object.freeze({
-    code: true, name: true, symbol: true, is_base: true, is_active: true,
+    code: true, name: true, symbol: true, is_base: true, is_default: true, is_active: true,
     rate: true, rate_effective_from: true, created_at: true, updated_at: true,
-    _count: { select: { rates: true } },
+    _count: { select: { rates: true, enquiries: { where: { deleted_at: null } } } },
   });
 
   const rateSelect = Object.freeze({
@@ -26,7 +26,7 @@ function createCurrencyRepository(db) {
     listActiveOptions() {
       return db.currency.findMany({
         where: { is_active: true },
-        select: { code: true, name: true, symbol: true, is_base: true, rate: true, rate_effective_from: true },
+        select: { code: true, name: true, symbol: true, is_base: true, is_default: true, rate: true, rate_effective_from: true },
         orderBy: [{ is_base: 'desc' }, { code: 'asc' }],
       });
     },
@@ -111,6 +111,30 @@ function createCurrencyRepository(db) {
         data: { rate: latest.rate, rate_effective_from: latest.effective_from, updated_by: actorId },
         select: currencySelect,
       });
+    },
+
+    /** Records (including deleted enquiries) still pointing at this currency. @param {string} code */
+    countUsage(code) {
+      return db.enquiry.count({ where: { currency_code: code } });
+    },
+
+    /** Makes this currency the single default. @param {string} code @param {number|null} actorId */
+    setDefault(code, actorId) {
+      return db.$transaction([
+        db.currency.updateMany({ where: { is_default: true, NOT: { code } }, data: { is_default: false, updated_by: actorId } }),
+        db.currency.update({ where: { code }, data: { is_default: true, updated_by: actorId }, select: currencySelect }),
+      ]).then(([, currency]) => currency);
+    },
+
+    /** The default currency's code (INR if none is flagged). */
+    async defaultCode() {
+      const row = await db.currency.findFirst({ where: { is_default: true, is_active: true }, select: { code: true } });
+      return row?.code ?? 'INR';
+    },
+
+    /** @param {string} code */
+    findActive(code) {
+      return db.currency.findFirst({ where: { code, is_active: true }, select: { code: true, rate: true } });
     },
 
     /** @param {string} code */

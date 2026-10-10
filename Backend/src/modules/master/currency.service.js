@@ -6,6 +6,9 @@ const { NotFoundError, ConflictError, ValidationError } = require('../../core');
  * Currency business logic (Master Data → Currencies).
  *
  *   - INR is the base currency: rate 1, never edited, deactivated or deleted.
+ *   - One currency is the *default* — what new records start in (INR at
+ *     first; changeable here). It must stay active. Reports total in INR
+ *     regardless.
  *   - Rates are entered manually as "₹ for 1 unit" and kept as a history —
  *     a new rate is a new entry, never an overwrite. The entry with the latest
  *     effective date is the currency's current rate.
@@ -46,7 +49,7 @@ function createCurrencyService(repository) {
 
   const shape = (c) => {
     const { _count, ...rest } = c;
-    return { ...rest, rate: Number(c.rate), rate_entries: _count?.rates ?? 0 };
+    return { ...rest, rate: Number(c.rate), rate_entries: _count?.rates ?? 0, usage: _count?.enquiries ?? 0 };
   };
 
   return {
@@ -87,6 +90,10 @@ function createCurrencyService(repository) {
     async update(code, dto, actor) {
       const before = await load(code);
       if (before.is_base) throw new ConflictError('The base currency (INR) cannot be changed');
+
+      if (dto.is_active === false && before.is_default) {
+        throw new ConflictError('The default currency must stay active — make another currency the default first');
+      }
 
       const data = { updated_by: actor?.id ?? null };
       for (const f of ['name', 'symbol', 'is_active']) if (dto[f] !== undefined) data[f] = dto[f];
@@ -139,12 +146,45 @@ function createCurrencyService(repository) {
       return shape(after);
     },
 
-    /** Deletes a currency and its rate history. */
+    /** Makes a currency the default for new records. */
+    async setDefault(code, actor) {
+      const before = await load(code);
+      if (!before.is_active) throw new ConflictError('An inactive currency cannot be the default');
+      if (before.is_default) return shape(before);
+      const currency = await repository.setDefault(code, actor?.id ?? null);
+      await auditService.record({
+        action: auditService.Action.UPDATE, entity: 'Currency', entityId: code, actor,
+        changes: { is_default: { from: false, to: true } },
+      });
+      return shape(currency);
+    },
+
+    /** Code new records default to. */
+    defaultCode() {
+      return repository.defaultCode();
+    },
+
+    /**
+     * A currency newly chosen on a record must exist and be active.
+     * @param {string} code @throws {ValidationError}
+     */
+    async assertSelectable(code, field = 'currency_code') {
+      if (!(await repository.findActive(code))) {
+        throw new ValidationError('Validation failed', [
+          { field, message: `Currency ${code} does not exist or is inactive (Master Data → Currencies)` },
+        ]);
+      }
+    },
+
+    /** Deletes a currency and its rate history — only while nothing uses it. */
     async delete(code, actor) {
       const currency = await load(code);
       if (currency.is_base) throw new ConflictError('The base currency (INR) cannot be deleted');
-      // Once enquiries carry a currency, an in-use currency will be blocked
-      // here (mark it inactive instead).
+      if (currency.is_default) throw new ConflictError('The default currency cannot be deleted — make another currency the default first');
+      const used = await repository.countUsage(code);
+      if (used > 0) {
+        throw new ConflictError(`${code} is used by ${used} ${used === 1 ? 'enquiry' : 'enquiries'} and can't be deleted — mark it inactive instead`);
+      }
       await repository.delete(code);
       await auditService.record({
         action: auditService.Action.DELETE, entity: 'Currency', entityId: code, actor,

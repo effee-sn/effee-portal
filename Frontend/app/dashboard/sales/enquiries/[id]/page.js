@@ -13,6 +13,7 @@ import EnquiryProcess from '@/components/EnquiryProcess';
 import EnquiryAttachments from '@/components/EnquiryAttachments';
 import useNav from '@/lib/useNav';
 import useSalesConfig from '@/lib/useSalesConfig';
+import useCurrencies, { MoneyText, formatMoney } from '@/lib/money';
 import { DetailPageSkeleton } from '@/components/Skeleton';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
@@ -51,7 +52,9 @@ function Section({ title, children, right }) {
 }
 
 // ── Win modal ─────────────────────────────────────────────────────────────────
-function WinModal({ enquiryId, onClose, onDone }) {
+function WinModal({ enquiryId, currencyCode = 'INR', onClose, onDone }) {
+  const currencies = useCurrencies();
+  const cur = currencies?.byCode[currencyCode];
   const [form, setForm] = useState({
     order_no: '', order_value: '', order_date: toDateInput(new Date().toISOString()),
     won_declaration: '', won_terms: '',
@@ -76,8 +79,14 @@ function WinModal({ enquiryId, onClose, onDone }) {
         <div className="overflow-y-auto flex-1 px-6 space-y-4">
           {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm">{error}</div>}
           <div>
-            <label className={label}>Order Value (₹)<span className="text-red-500"> *</span></label>
+            <label className={label}>Order Value ({currencyCode})<span className="text-red-500"> *</span></label>
             <input name="order_value" type="number" min="0" step="0.01" value={form.order_value} onChange={change} required placeholder="240000" className="ams-input" />
+            {currencyCode !== 'INR' && cur && (
+              <p className="text-xs text-gray-500 mt-1">
+                Locked at today&apos;s rate: 1 {currencyCode} = {formatMoney(cur.rate, 'INR')}
+                {Number(form.order_value) > 0 && <> · ≈ {formatMoney(Number(form.order_value) * cur.rate, 'INR')}</>}
+              </p>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -205,12 +214,19 @@ function ReassignModal({ enquiry, users, onClose, onDone }) {
 // through the process bar and the offer/follow-up actions, which enforce gates.
 function EditModal({ enquiry, users, onClose, onDone }) {
   const config = useSalesConfig();
+  const currencies = useCurrencies();
+  // Active currencies, plus the enquiry's own even if it has since been deactivated.
+  const currencyOptions = (currencies?.list || []).some((c) => c.code === enquiry.currency_code)
+    ? currencies?.list || []
+    : [...(currencies?.list || []), { code: enquiry.currency_code, name: enquiry.currency?.name || enquiry.currency_code }];
+  const currencyLocked = enquiry.stage === 'WON' || enquiry.stage === 'LOST';
   // Active applications, plus the current one even if it has since been made inactive.
   const appOptions = (config?.applications || []).filter((a) => a.is_active || a.id === enquiry.application_id);
   const [form, setForm] = useState({
     title: enquiry.title || '', customer_id: enquiry.customer_id || '', contact_id: enquiry.contact_id || '',
     owner_id: enquiry.owner_id || '', enquiry_type: enquiry.enquiry_type || 'INCOMING',
     application_id: enquiry.application_id ? String(enquiry.application_id) : '',
+    currency_code: enquiry.currency_code || 'INR',
     expected_value: enquiry.expected_value ?? '', expected_close: toDateInput(enquiry.expected_close), description: enquiry.description || '',
   });
   const [error, setError]   = useState('');
@@ -231,6 +247,7 @@ function EditModal({ enquiry, users, onClose, onDone }) {
     setSaving(true); setError('');
     const payload = { ...form };
     if (typeLocked) delete payload.enquiry_type;
+    if (currencyLocked) delete payload.currency_code;
     try { const res = await apiPut(`/sales/enquiries/${enquiry.id}`, payload); onDone(res.data); onClose(); }
     catch (err) { setError(err.message); }
     finally { setSaving(false); }
@@ -278,7 +295,15 @@ function EditModal({ enquiry, users, onClose, onDone }) {
               </select>
             </div>
             <div>
-              <label className={label}>Expected Value (₹)</label>
+              <label className={label}>Currency</label>
+              <select name="currency_code" value={form.currency_code} onChange={change} disabled={!currencies || currencyLocked}
+                className="ams-input disabled:bg-gray-50 disabled:text-gray-500">
+                {currencyOptions.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.name}</option>)}
+              </select>
+              {currencyLocked && <p className="text-xs text-gray-400 mt-1">Fixed once the enquiry is closed.</p>}
+            </div>
+            <div>
+              <label className={label}>Expected Value ({form.currency_code})</label>
               <input name="expected_value" type="number" min="0" step="0.01" value={form.expected_value} onChange={change} className="ams-input" />
             </div>
             <div>
@@ -470,7 +495,9 @@ export default function EnquiryDetailPage() {
                   {canManage && <span className="text-[10px] font-semibold text-green-700 bg-green-50 rounded px-1 py-0.5">you</span>}
                 </span>
               )}
-              {enquiry.expected_value != null && <span>Value: {formatINR(enquiry.expected_value)}</span>}
+              {enquiry.expected_value != null && (
+                <span>Value: <MoneyText value={enquiry.expected_value} inr={enquiry.expected_value_inr} code={enquiry.currency_code} symbol={enquiry.currency?.symbol} /></span>
+              )}
             </div>
           </div>
           {(canManage || canDelete || canReassign) && (
@@ -512,7 +539,10 @@ export default function EnquiryDetailPage() {
       {enquiry.stage === 'WON' && (
         <div className="rounded-lg border border-green-200 bg-green-50 px-5 py-3 space-y-3">
           <div className="flex flex-wrap gap-x-8 gap-y-2">
-            <Field label="Order Value"><span className="font-semibold text-green-800">{formatINR(enquiry.order_value)}</span></Field>
+            <Field label="Order Value">
+              <MoneyText className="font-semibold text-green-800" value={enquiry.order_value} inr={enquiry.order_value_inr}
+                code={enquiry.currency_code} symbol={enquiry.currency?.symbol} />
+            </Field>
             <Field label="PO Number">{enquiry.order_no}</Field>
             <Field label="Order Date">{fmtDate(enquiry.order_date)}</Field>
           </div>
@@ -553,14 +583,19 @@ export default function EnquiryDetailPage() {
               <span title="Win probability at the current stage (Sales → Configuration)">
                 {salesConfig.probability[enquiry.stage]}%
                 {Number(enquiry.expected_value) > 0 && !['WON', 'LOST'].includes(enquiry.stage) && (
-                  <span className="text-gray-500"> · weighted {formatINR(Number(enquiry.expected_value) * salesConfig.probability[enquiry.stage] / 100)}</span>
+                  <span className="text-gray-500"> · weighted {formatINR(Number(enquiry.expected_value_inr ?? enquiry.expected_value) * salesConfig.probability[enquiry.stage] / 100)}</span>
                 )}
               </span>
             ) : null}
           </Field>
           <Field label="Owner">{enquiry.owner?.name}</Field>
           <Field label="Temperature">{enquiry.current_temperature ? <TempChip value={enquiry.current_temperature} /> : null}</Field>
-          <Field label="Expected Value">{formatINR(enquiry.expected_value)}</Field>
+          <Field label="Currency">{enquiry.currency_code}{enquiry.currency?.name ? ` · ${enquiry.currency.name}` : ''}</Field>
+          <Field label="Expected Value">
+            {enquiry.expected_value != null
+              ? <MoneyText value={enquiry.expected_value} inr={enquiry.expected_value_inr} code={enquiry.currency_code} symbol={enquiry.currency?.symbol} />
+              : null}
+          </Field>
           <Field label="Expected Close">{fmtDate(enquiry.expected_close)}</Field>
           <Field label="Created">{fmtDate(enquiry.created_at)}</Field>
           <Field label="Created by">{enquiry.created_by ? (users.find((u) => String(u.id) === String(enquiry.created_by))?.name || `#${enquiry.created_by}`) : '—'}</Field>
@@ -597,7 +632,7 @@ export default function EnquiryDetailPage() {
 
       {modal === 'edit'  && <EditModal enquiry={enquiry} users={users} onClose={() => setModal(null)} onDone={setEnquiry} />}
       {modal === 'reassign' && <ReassignModal enquiry={enquiry} users={users} onClose={() => setModal(null)} onDone={setEnquiry} />}
-      {modal === 'win'   && <WinModal enquiryId={enquiry.id} onClose={() => setModal(null)} onDone={setEnquiry} />}
+      {modal === 'win'   && <WinModal enquiryId={enquiry.id} currencyCode={enquiry.currency_code} onClose={() => setModal(null)} onDone={setEnquiry} />}
       {modal === 'lose'  && <LoseModal enquiryId={enquiry.id} onClose={() => setModal(null)} onDone={setEnquiry} />}
       {modal === 'delete' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">

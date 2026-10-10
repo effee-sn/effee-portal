@@ -32,6 +32,12 @@ const optionalContact = z.preprocess(
   z.coerce.number().int().positive().nullable().optional()
 );
 
+// A 3-letter currency code from Master Data → Currencies.
+const optionalCurrency = z.preprocess(
+  (v) => (v === '' || v === null ? undefined : v),
+  z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/, 'Choose a currency').optional()
+);
+
 const optionalOwner = z.preprocess(
   (v) => (v === '' || v === null ? undefined : v),
   z.coerce.number().int().positive().optional()
@@ -58,6 +64,7 @@ const createEnquiryBody = z.object({
   expected_close: optionalDate,
   owner_id:       optionalOwner,
   application_id: optionalContact,
+  currency_code:  optionalCurrency,
 });
 
 const updateEnquiryBody = z.object({
@@ -71,6 +78,7 @@ const updateEnquiryBody = z.object({
   expected_close: optionalDate,
   owner_id:       optionalOwner,
   application_id: optionalContact,
+  currency_code:  optionalCurrency,
 }).refine(
   (data) => Object.values(data).some((v) => v !== undefined),
   { message: 'At least one field must be provided' }

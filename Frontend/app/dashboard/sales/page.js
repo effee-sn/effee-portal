@@ -11,6 +11,7 @@ import {
   Card, Empty, Pulse, Stat, StageChip, compactINR,
 } from '@/components/DashboardKit';
 import useSalesConfig from '@/lib/useSalesConfig';
+import { formatMoney } from '@/lib/money';
 
 /**
  * Sales → Dashboard. How the sales team is doing over a period: headline
@@ -476,8 +477,12 @@ export default function SalesDashboardPage() {
                   <WatchRow key={e.id} href={`/dashboard/sales/enquiries/${e.id}`}
                     title={`${e.ref_no} · ${e.title}`}
                     sub={`${e.customer?.name || '—'} · ${e.owner?.name || '—'}`}
-                    right={<><StageChip stage={e.stage} /><p className="text-xs text-gray-700 tabular-nums mt-1" title={formatINR(e.expected_value)}>
-                      {e.expected_value ? compactINR(e.expected_value) : '—'}</p></>} />
+                    right={<><StageChip stage={e.stage} />
+                      <p className="text-xs text-gray-700 tabular-nums mt-1"
+                        title={e.expected_value_inr != null ? `≈ ${formatINR(e.expected_value_inr)}` : undefined}>
+                        {e.expected_value == null ? '—'
+                          : e.currency_code && e.currency_code !== 'INR' ? formatMoney(e.expected_value, e.currency_code) : compactINR(e.expected_value)}
+                      </p></>} />
                 )} />
               <WatchList title="Overdue follow-ups" data={data.watch.overdue} empty="No follow-ups are overdue."
                 render={(a) => {

@@ -39,6 +39,11 @@ const deleteRate = async (req, res) => {
   ApiResponse.ok(res, await currencyService.deleteRate(req.params.code, req.params.rateId, requestContext(req)));
 };
 
+/** `POST /currencies/:code/default` */
+const setDefaultCurrency = async (req, res) => {
+  ApiResponse.ok(res, await currencyService.setDefault(req.params.code, requestContext(req)));
+};
+
 /** `DELETE /currencies/:code` */
 const deleteCurrency = async (req, res) => {
   await currencyService.delete(req.params.code, requestContext(req));
@@ -47,5 +52,5 @@ const deleteCurrency = async (req, res) => {
 
 module.exports = {
   listCurrencies, getCurrencyOptions, getCurrency, createCurrency, updateCurrency,
-  addRate, deleteRate, deleteCurrency,
+  addRate, deleteRate, setDefaultCurrency, deleteCurrency,
 };
