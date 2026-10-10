@@ -312,6 +312,9 @@ export default function SalesDashboardPage() {
             <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Sales dashboard</h1>
             <p className="text-sm text-gray-500 mt-0.5">
               {data ? `${fmtDate(data.period.from)} – ${fmtDate(data.period.to)}` : 'How the sales team is doing'}
+              <span className="text-gray-400" title="Open deals at the current rate; won orders at the rate locked when they were won (Master Data → Currencies)">
+                {' '}· amounts in ₹
+              </span>
               {refreshing && data && <span className="ml-2 text-gray-400">Updating…</span>}
             </p>
           </div>

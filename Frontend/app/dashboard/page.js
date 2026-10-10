@@ -270,7 +270,7 @@ export default function DashboardPage() {
       {/* Sales snapshot */}
       {sales && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-          <Card title="Sales overview" className="lg:col-span-1" action={<CardLink href="/dashboard/sales">Sales dashboard →</CardLink>}>
+          <Card title={<>Sales overview <span className="font-normal text-gray-400" title="Other currencies converted at their rates (Master Data → Currencies)">· in ₹</span></>} className="lg:col-span-1" action={<CardLink href="/dashboard/sales">Sales dashboard →</CardLink>}>
             <div className="grid grid-cols-2 gap-px bg-gray-100 rounded-b-lg overflow-hidden">
               <Stat label="Open pipeline" value={compactINR(sales.open_value)} title={formatINR(sales.open_value)}
                 sub={`${sales.open_count} open ${sales.open_count === 1 ? 'enquiry' : 'enquiries'}`} />
