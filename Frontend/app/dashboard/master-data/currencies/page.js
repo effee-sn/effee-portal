@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { ListSkeleton, TableSkeleton } from '@/components/Skeleton';
 import { invalidateCurrencies } from '@/lib/money';
+import { isoCurrencies } from '@/lib/currencyCatalog';
+import SearchableSelect from '@/components/SearchableSelect';
 
 /**
  * Master Data → Currencies. Currencies with manually entered exchange rates
@@ -69,17 +71,29 @@ function RateFields({ form, change, code }) {
   );
 }
 
-function NewCurrencyModal({ onClose, onSaved }) {
+function NewCurrencyModal({ existingCodes, onClose, onSaved }) {
   const [form, setForm] = useState({ code: '', name: '', symbol: '', rate: '', effective_from: todayISO(), note: '' });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Every ISO currency not added yet; search matches code or name.
+  const options = useMemo(() => isoCurrencies()
+    .filter((c) => !existingCodes.includes(c.code))
+    .map((c) => ({ value: c.code, label: `${c.code} — ${c.name}`, sub: c.symbol !== c.code ? c.symbol : '' })), [existingCodes]);
+
+  const pickCurrency = (code) => {
+    const c = isoCurrencies().find((x) => x.code === code);
+    setForm((f) => ({ ...f, code, name: c?.name || '', symbol: c?.symbol || code }));
+    setError('');
+  };
   const change = (e) => {
     const { name, value } = e.target;
-    setForm((f) => ({ ...f, [name]: name === 'code' ? value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) : value }));
+    setForm((f) => ({ ...f, [name]: value }));
     setError('');
   };
   const submit = async (e) => {
     e.preventDefault();
+    if (!form.code) { setError('Choose a currency'); return; }
     setSaving(true); setError('');
     try { onSaved((await apiPost('/currencies', form)).data); onClose(); }
     catch (err) { setError(err.message); }
@@ -87,22 +101,26 @@ function NewCurrencyModal({ onClose, onSaved }) {
   };
   return (
     <Modal title="New currency" onClose={onClose}>
-      <form onSubmit={submit} className="overflow-y-auto px-6 py-4 space-y-4">
+      {/* No scroll container here: the short form lets the currency search list overflow instead of being clipped. */}
+      <form onSubmit={submit} className="px-6 py-4 space-y-4">
         <ErrorBox error={error} />
-        <div className="grid grid-cols-[6rem_minmax(0,1fr)_5rem] gap-3">
-          <div>
-            <label className={label}>Code<span className="text-red-500"> *</span></label>
-            <input name="code" value={form.code} onChange={change} required placeholder="USD" className="ams-input font-mono uppercase" />
-          </div>
-          <div>
-            <label className={label}>Name<span className="text-red-500"> *</span></label>
-            <input name="name" value={form.name} onChange={change} required maxLength={80} placeholder="US Dollar" className="ams-input" />
-          </div>
-          <div>
-            <label className={label}>Symbol<span className="text-red-500"> *</span></label>
-            <input name="symbol" value={form.symbol} onChange={change} required maxLength={8} placeholder="$" className="ams-input" />
-          </div>
+        <div>
+          <label className={label}>Currency<span className="text-red-500"> *</span></label>
+          <SearchableSelect options={options} value={form.code} onChange={pickCurrency}
+            placeholder="Search by code or name — e.g. USD, Dirham" />
         </div>
+        {form.code && (
+          <div className="grid grid-cols-[minmax(0,1fr)_6rem] gap-3">
+            <div>
+              <label className={label}>Name</label>
+              <input name="name" value={form.name} onChange={change} required maxLength={80} className="ams-input" />
+            </div>
+            <div>
+              <label className={label}>Symbol</label>
+              <input name="symbol" value={form.symbol} onChange={change} required maxLength={8} className="ams-input" />
+            </div>
+          </div>
+        )}
         <RateFields form={form} change={change} code={form.code} />
         <div className="flex gap-3 pt-1">
           <button type="button" onClick={onClose} className="btn-secondary flex-1 justify-center py-2">Cancel</button>
@@ -409,7 +427,9 @@ export default function CurrenciesPage() {
         )}
       </div>
 
-      {modal?.type === 'new' && <NewCurrencyModal onClose={() => setModal(null)} onSaved={upsert} />}
+      {modal?.type === 'new' && (
+        <NewCurrencyModal existingCodes={rows.map((r) => r.code)} onClose={() => setModal(null)} onSaved={upsert} />
+      )}
       {modal?.type === 'edit' && <EditCurrencyModal currency={modal.currency} onClose={() => setModal(null)} onSaved={upsert} />}
       {modal?.type === 'rates' && (
         <RatesModal code={modal.code} canEdit={canEdit} onClose={() => setModal(null)}
