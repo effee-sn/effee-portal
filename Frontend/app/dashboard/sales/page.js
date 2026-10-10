@@ -26,6 +26,8 @@ import { formatMoney } from '@/lib/money';
 // Two-series colours (validated: chroma, CVD separation, contrast vs white).
 const WON_COLOR = '#8B3F7A';
 const LOST_COLOR = '#D97706';
+// Offered vs Won pairs blue with the same Won plum (validated together).
+const OFFERED_COLOR = '#2563EB';
 
 const stageLabel = (s) => STAGE_STYLE[s]?.label || s;
 
@@ -155,6 +157,41 @@ function Legend() {
 }
 
 /** Won vs Lost per month — grouped columns, counts written above each bar. */
+/** Offered vs Won value per month (₹) — grouped columns, value on hover. */
+function OfferedWonChart({ months }) {
+  const max = Math.max(1, ...months.flatMap((m) => [m.offered_value, m.won_value]));
+  if (!months.some((m) => m.offered_value || m.won_value)) {
+    return <Empty>No priced offers sent or orders won in the last 12 months.</Empty>;
+  }
+  return (
+    <div className="px-4 pt-3 pb-4">
+      <div className="overflow-x-auto">
+        <ul className="grid grid-cols-12 gap-1 min-w-[520px]" aria-label="Value offered and won per month, in rupees">
+          {months.map((m) => {
+            const [y, mo] = m.key.split('-').map(Number);
+            const name = new Date(y, mo - 1, 1).toLocaleDateString('en-IN', { month: 'short' });
+            const full = new Date(y, mo - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+            return (
+              <li key={m.key} className="rounded-md hover:bg-gray-50 px-0.5 pt-1"
+                title={`${full} — Offered ${formatINR(m.offered_value)}${m.offers ? ` (${m.offers} ${m.offers === 1 ? 'enquiry' : 'enquiries'})` : ''} · Won ${formatINR(m.won_value)}`}>
+                <div className="h-36 flex items-end justify-center gap-[2px] border-b border-gray-200">
+                  {[{ v: m.offered_value, c: OFFERED_COLOR }, { v: m.won_value, c: WON_COLOR }].map((b, i) => (
+                    <div key={i} className="flex flex-col items-center justify-end h-full w-1/3 max-w-4">
+                      <div className="w-full rounded-t-[4px]"
+                        style={{ height: b.v ? `${Math.max(3, (b.v / max) * 100)}%` : 0, backgroundColor: b.c }} />
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[11px] text-gray-500 text-center mt-1">{name}</p>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function MonthlyChart({ months }) {
   const max = Math.max(1, ...months.flatMap((m) => [m.won, m.lost]));
   const any = months.some((m) => m.won || m.lost);
@@ -416,6 +453,28 @@ export default function SalesDashboardPage() {
               )}
             </Card>
           </div>
+
+          {/* Offered vs Won (value) */}
+          <Card title="Offered vs won · last 12 months"
+            action={(
+              <div className="flex items-center gap-4 text-xs text-gray-600" aria-hidden="true">
+                <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: OFFERED_COLOR }} />Offered</span>
+                <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: WON_COLOR }} />Won</span>
+              </div>
+            )}>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-gray-100 border-b border-gray-100">
+              <Stat label="Offered in period" value={compactINR(h.offered_value)} title={formatINR(h.offered_value)}
+                sub={h.offered_count ? `${h.offered_count} ${h.offered_count === 1 ? 'enquiry' : 'enquiries'} · latest offer each` : 'No priced offers sent'} />
+              <Stat label="Won in period" value={compactINR(h.won_value)} title={formatINR(h.won_value)}
+                sub={h.offered_value ? `${Math.round((h.won_value / h.offered_value) * 100)}% of offered value` : undefined} />
+              <Stat label="Avg discount" value={h.avg_discount_pct === null ? '—' : `${h.avg_discount_pct}%`}
+                sub={h.discount_samples ? `Final offer → order · ${h.discount_samples} won` : 'Final offer → order'} />
+            </div>
+            <OfferedWonChart months={data.monthly} />
+            <p className="px-4 pb-3 -mt-1 text-[11px] text-gray-500">
+              Offered: the last priced offer sent to each enquiry that month. Values in ₹ — offers at the rate when sent, orders at the rate when won.
+            </p>
+          </Card>
 
           {/* 6. Team performance */}
           <Card title="Team performance">

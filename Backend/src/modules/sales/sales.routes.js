@@ -21,7 +21,7 @@ const {
 const attachmentValidation = require('./attachment.validation');
 const { docUpload, handleUploadErrors } = require('./attachment.upload');
 const {
-  listAttachments, uploadAttachment, downloadAttachment, markSent, deleteAttachment,
+  listAttachments, uploadAttachment, downloadAttachment, markSent, deleteAttachment, setOfferValue,
 } = require('./attachment.controller');
 
 const { updateWorkflowBody } = require('./workflow.validation');
@@ -216,6 +216,13 @@ router.post(
   authorize('SALES_EDIT'),
   validate({ params: attachmentValidation.attachmentIdParam, body: attachmentValidation.sentBody }),
   asyncHandler(markSent)
+);
+
+router.put(
+  '/attachments/:id/offer-value',
+  authorize('SALES_EDIT'),
+  validate({ params: attachmentValidation.attachmentIdParam, body: attachmentValidation.offerValueBody }),
+  asyncHandler(setOfferValue)
 );
 
 router.delete(

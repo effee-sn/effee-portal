@@ -17,6 +17,8 @@ function createAttachmentRepository(db) {
     stage: true,
     version: true,
     superseded_at: true,
+    offer_value: true,
+    offer_fx_rate: true,
     sent_at: true,
     sent_by: true,
     created_at: true,
@@ -101,7 +103,7 @@ function createAttachmentRepository(db) {
     findEnquiry(enquiryId) {
       return db.enquiry.findFirst({
         where: active({ id: enquiryId }),
-        select: { id: true, owner_id: true, handler_id: true, ref_no: true, stage: true },
+        select: { id: true, owner_id: true, handler_id: true, ref_no: true, stage: true, currency_code: true },
       });
     },
   };

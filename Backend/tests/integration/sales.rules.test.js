@@ -66,7 +66,7 @@ const upload = (enquiryId, kind, by) => attachmentService.record(enquiryId, {
   filename: `test-${suffix}-${Math.random().toString(36).slice(2)}`,
   mimetype: 'application/pdf',
   size: 1,
-}, { kind }, actor(by));
+}, { kind, ...(kind === 'OFFER' ? { offer_value: 100000 } : {}) }, actor(by));
 
 const log = (enquiryId, by, extra = {}) => activityService.create(enquiryId, {
   type: 'CALL', activity_at: new Date(), subject: 'test activity', ...extra,
@@ -750,5 +750,59 @@ describe('Currencies on enquiries', () => {
     assert.equal(e.currency_code, fx.currency);
     await currencyService.setDefault('INR', actor(fx.field));
     assert.equal((await newEnquiry('GENERATED', fx.field)).currency_code, 'INR');
+  });
+});
+
+describe('Offer price', () => {
+  let e; let priced;
+  const testFile = () => ({
+    originalname: 'offer.pdf', filename: `test-${suffix}-${Math.random().toString(36).slice(2)}`, mimetype: 'application/pdf', size: 1,
+  });
+
+  it('every new offer revision needs a price', async () => {
+    e = await toOfferReleased();
+    await assert.rejects(
+      attachmentService.record(e.id, testFile(), { kind: 'OFFER' }, actor(fx.internal)),
+      { name: 'ValidationError' },
+    );
+    priced = await attachmentService.record(e.id, testFile(), { kind: 'OFFER', offer_value: 120000 }, actor(fx.internal));
+    assert.equal(Number(priced.offer_value), 120000);
+  });
+
+  it('an unpriced offer cannot be sent; a price can be added until it is sent', async () => {
+    const legacy = await attachmentService.record(e.id, testFile(), { kind: 'OFFER', offer_value: 1 }, actor(fx.internal));
+    await prisma.enquiryAttachment.update({ where: { id: legacy.id }, data: { offer_value: null } }); // as before prices existed
+    await assert.rejects(attachmentService.markSent(legacy.id, true, actor(fx.internal)), { name: 'ConflictError' });
+    await attachmentService.setOfferValue(legacy.id, 110000, actor(fx.internal));
+    assert.equal(Number((await prisma.enquiryAttachment.findUnique({ where: { id: legacy.id } })).offer_value), 110000);
+  });
+
+  it('sending locks the price and its rupee rate', async () => {
+    const sent = await attachmentService.markSent(priced.id, true, actor(fx.internal));
+    assert.equal(Number(sent.offer_fx_rate), 1, 'an INR enquiry locks rate 1');
+    await assert.rejects(attachmentService.setOfferValue(priced.id, 1, actor(fx.field)), { name: 'ConflictError' });
+  });
+
+  it('the dashboard shows the value offered and the discount from the final offer to the order', async () => {
+    // A dedicated owner so these figures are this block's alone.
+    const role = await prisma.role.findFirst({ where: { deleted_at: null }, select: { id: true } });
+    const owner = await prisma.user.create({
+      data: { name: `Offer ${suffix}`, email: `offer-${suffix}@sales.test`, password: 'x', role_id: role.id },
+      select: { id: true, email: true },
+    });
+    ids.users.push(owner.id);
+
+    const deal = await toOfferReleased();
+    await prisma.enquiry.update({ where: { id: deal.id }, data: { owner_id: owner.id } });
+    await sendOffer(deal.id, fx.internal); // ₹1,00,000 offer → Follow-up, back with the owner
+    await enquiryService.win(deal.id, { order_value: 90000 }, actor(owner));
+
+    const r = await analyticsService.overview({ owner_id: owner.id });
+    assert.equal(r.headline.offered_value, 100000);
+    assert.equal(r.headline.offered_count, 1);
+    assert.equal(r.headline.avg_discount_pct, 10);
+    const thisMonth = r.monthly[r.monthly.length - 1];
+    assert.equal(thisMonth.offered_value, 100000);
+    assert.equal(thisMonth.won_value, 90000);
   });
 });

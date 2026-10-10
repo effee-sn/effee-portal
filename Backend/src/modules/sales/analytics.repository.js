@@ -63,8 +63,44 @@ function createAnalyticsRepository(db) {
     won(f) {
       return db.enquiry.findMany({
         where: { ...base(f), stage: 'WON', won_at: { gte: f.from, lt: f.to } },
-        select: { owner_id: true, order_value: true, currency_code: true, order_fx_rate: true, created_at: true, won_at: true },
+        select: { id: true, owner_id: true, order_value: true, currency_code: true, order_fx_rate: true, created_at: true, won_at: true },
       });
+    },
+
+    /**
+     * Priced offers sent to customers since `since` (up to the period end),
+     * on enquiries matching the filter — for the Offered vs Won trend.
+     * @param {Filter} f @param {Date} since
+     */
+    offersSent(f, since) {
+      return db.enquiryAttachment.findMany({
+        where: {
+          kind: 'OFFER', deleted_at: null, offer_value: { not: null },
+          sent_at: { gte: since, lt: f.to },
+          enquiry: base(f),
+        },
+        select: {
+          enquiry_id: true, sent_at: true, offer_value: true, offer_fx_rate: true,
+          enquiry: { select: { currency_code: true } },
+        },
+        orderBy: { sent_at: 'asc' },
+      });
+    },
+
+    /**
+     * The last priced offer sent on each of these enquiries — what the
+     * customer accepted (or negotiated down from).
+     * @param {number[]} enquiryIds
+     */
+    async finalOffers(enquiryIds) {
+      if (!enquiryIds.length) return [];
+      const rows = await db.enquiryAttachment.findMany({
+        where: { kind: 'OFFER', deleted_at: null, offer_value: { not: null }, sent_at: { not: null }, enquiry_id: { in: enquiryIds } },
+        select: { enquiry_id: true, offer_value: true, sent_at: true },
+        orderBy: [{ sent_at: 'desc' }, { id: 'desc' }],
+      });
+      const seen = new Set();
+      return rows.filter((r) => (seen.has(r.enquiry_id) ? false : seen.add(r.enquiry_id)));
     },
 
     /** @param {Filter} f */

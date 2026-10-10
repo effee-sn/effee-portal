@@ -614,15 +614,18 @@ export default function EnquiryDetailPage() {
       {enquiry.stage === 'NEW' ? (
         enquiry.enquiry_type === 'INCOMING' ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-            <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={visibleDocKinds(enquiry.stage)} onChanged={load} />
+            <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={visibleDocKinds(enquiry.stage)} onChanged={load}
+            currencyCode={enquiry.currency_code} currencySymbol={enquiry.currency?.symbol} />
             <div id="activity"><EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} stage={enquiry.stage} onChanged={load} /></div>
           </div>
         ) : (
-          <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={visibleDocKinds(enquiry.stage)} onChanged={load} />
+          <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={visibleDocKinds(enquiry.stage)} onChanged={load}
+            currencyCode={enquiry.currency_code} currencySymbol={enquiry.currency?.symbol} />
         )
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-          <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={visibleDocKinds(enquiry.stage)} onChanged={load} />
+          <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={visibleDocKinds(enquiry.stage)} onChanged={load}
+            currencyCode={enquiry.currency_code} currencySymbol={enquiry.currency?.symbol} />
           <div id="activity"><EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} stage={enquiry.stage} onChanged={load} /></div>
         </div>
       )}

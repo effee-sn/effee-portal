@@ -1147,6 +1147,12 @@ model EnquiryAttachment {
   // (Offers are never superseded — every revision stays live.)
   superseded_at DateTime?
 
+  // Offer price (OFFER rows only), in the enquiry's currency. Fixed once the
+  // offer is sent; offer_fx_rate is the ₹ rate locked at that moment, so the
+  // offer's rupee value never moves.
+  offer_value   Decimal? @db.Decimal(14, 2)
+  offer_fx_rate Decimal? @db.Decimal(18, 6)
+
   // Offer send record.
   sent_at DateTime?
   sent_by Int?

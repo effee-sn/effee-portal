@@ -6,7 +6,8 @@ const { storageDir } = require('./attachment.upload');
 const { enquiryService } = require('./enquiry.service');
 const { auditService } = require('../audit/audit.service');
 const { notificationService } = require('../notification/notification.service');
-const { NotFoundError, ForbiddenError, BadRequestError, ConflictError } = require('../../core');
+const { loadRates } = require('../master/fx');
+const { NotFoundError, ForbiddenError, BadRequestError, ConflictError, ValidationError } = require('../../core');
 
 // Kinds that hold a single *current* document. Re-uploading creates the next
 // version and keeps the old one as superseded history. OFFER is the exception —
@@ -63,6 +64,13 @@ function createAttachmentService(repository) {
         discard(file); // don't leave the multer-saved file behind
         throw err;
       }
+      // Every new offer revision carries its price.
+      if (dto.kind === 'OFFER' && (dto.offer_value === undefined || dto.offer_value === null)) {
+        discard(file);
+        throw new ValidationError('Validation failed', [
+          { field: 'offer_value', message: 'Enter the offer price for this revision' },
+        ]);
+      }
 
       // Next version of this kind. For single-instance kinds the previous
       // current doc becomes superseded history (still downloadable).
@@ -81,6 +89,7 @@ function createAttachmentService(repository) {
         note: dto.note ?? null,
         stage: enquiry.stage, // stamp the stage this document was uploaded in
         version,
+        offer_value: dto.kind === 'OFFER' ? dto.offer_value : null,
         created_by: actor?.id ?? null,
         updated_by: actor?.id ?? null,
       });
@@ -90,7 +99,10 @@ function createAttachmentService(repository) {
         entity: 'EnquiryAttachment',
         entityId: attachment.id,
         actor,
-        changes: { enquiry_id: enquiryId, kind: dto.kind, file_name: file.originalname, version },
+        changes: {
+          enquiry_id: enquiryId, kind: dto.kind, file_name: file.originalname, version,
+          ...(dto.kind === 'OFFER' ? { offer_value: dto.offer_value } : {}),
+        },
       });
 
       return attachment;
@@ -125,10 +137,15 @@ function createAttachmentService(repository) {
       if (before.superseded_at) throw new ConflictError('An older version cannot be marked as sent');
       const enquiry = await loadEnquiry(before.enquiry_id);
       assertCanManage(enquiry, actor);
+      if (sent && before.offer_value === null) {
+        throw new ConflictError('Add the offer price before marking this offer as sent');
+      }
 
       const attachment = await repository.update(id, {
         sent_at: sent ? new Date() : null,
         sent_by: sent ? (actor?.id ?? null) : null,
+        // Lock the rupee rate the offer went out at; unsending releases it.
+        offer_fx_rate: sent ? ((await loadRates())[enquiry.currency_code] ?? 1) : null,
         updated_by: actor?.id ?? null,
       });
 
@@ -167,6 +184,40 @@ function createAttachmentService(repository) {
         });
       }
 
+      return attachment;
+    },
+
+    /**
+     * Sets an offer revision's price. Allowed until the offer is sent; an
+     * already-sent offer recorded before prices existed can be priced once
+     * (its rate is locked now).
+     * @param {number} id
+     * @param {number} value
+     * @param {import('../../core/http/requestContext').ActorContext} [actor]
+     */
+    async setOfferValue(id, value, actor) {
+      const before = await repository.findById(id);
+      if (!before) throw new NotFoundError('Attachment');
+      if (before.kind !== 'OFFER') throw new ConflictError('Only offers have a price');
+      const enquiry = await loadEnquiry(before.enquiry_id);
+      assertCanManage(enquiry, actor);
+      if (before.sent_at && before.offer_value !== null) {
+        throw new ConflictError('The price of a sent offer is fixed — upload a revised offer instead');
+      }
+
+      const data = { offer_value: value, updated_by: actor?.id ?? null };
+      if (before.sent_at && before.offer_fx_rate === null) {
+        data.offer_fx_rate = (await loadRates())[enquiry.currency_code] ?? 1;
+      }
+      const attachment = await repository.update(id, data);
+
+      await auditService.record({
+        action: auditService.Action.UPDATE,
+        entity: 'EnquiryAttachment',
+        entityId: id,
+        actor,
+        changes: { offer_value: { from: before.offer_value, to: value } },
+      });
       return attachment;
     },
 

@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { apiGet, apiPost, apiDelete, apiPostForm, downloadFile } from '@/lib/api';
+import { apiGet, apiPost, apiPut, apiDelete, apiPostForm, downloadFile } from '@/lib/api';
 import { STAGE_STYLE } from '@/lib/salesOptions';
 import { ListSkeleton } from '@/components/Skeleton';
+import { formatMoney } from '@/lib/money';
 
 /** Small chip naming the stage a document was uploaded in. */
 function StageTag({ stage }) {
@@ -83,13 +84,14 @@ const ALL_KINDS = ['FORMAT_PDF', 'FORMAT_EXCEL', 'CONCEPT', 'COSTING', 'OFFER'];
  * current version restores the one before it.
  */
 export default function EnquiryAttachments({
-  enquiryId, canEdit, kinds = ALL_KINDS, bare = false, onChanged,
+  enquiryId, canEdit, kinds = ALL_KINDS, bare = false, onChanged, currencyCode = 'INR', currencySymbol,
 }) {
   const [items, setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy]     = useState(false);
   const [error, setError]   = useState('');
-  const [pending, setPending] = useState(null); // { kind, file, note } awaiting confirm
+  const [pending, setPending] = useState(null); // { kind, file, note, price } awaiting confirm
+  const [priceEdit, setPriceEdit] = useState(null); // { id, value } — pricing an existing offer
   const [openHistory, setOpenHistory] = useState({}); // kind -> bool
   const fileRef = useRef(null);
   const pendingKind = useRef(null);
@@ -117,7 +119,7 @@ export default function EnquiryAttachments({
   const onFile = (e) => {
     const file = e.target.files?.[0];
     e.target.value = ''; // allow re-picking the same file
-    if (file) setPending({ kind: pendingKind.current, file, note: '' });
+    if (file) setPending({ kind: pendingKind.current, file, note: '', price: '' });
   };
 
   const upload = async () => {
@@ -127,6 +129,7 @@ export default function EnquiryAttachments({
       fd.append('file', pending.file);
       fd.append('kind', pending.kind);
       if (pending.note.trim()) fd.append('note', pending.note.trim());
+      if (pending.kind === 'OFFER') fd.append('offer_value', pending.price);
       await apiPostForm(`/sales/enquiries/${enquiryId}/attachments`, fd);
       setPending(null);
       await reload();
@@ -152,6 +155,19 @@ export default function EnquiryAttachments({
     catch (err) { setError(err.message); }
     finally { setBusy(false); }
   };
+
+  const savePrice = async () => {
+    setBusy(true); setError('');
+    try {
+      await apiPut(`/sales/attachments/${priceEdit.id}/offer-value`, { offer_value: priceEdit.value });
+      setPriceEdit(null);
+      await load();
+    } catch (err) { setError(err.message); }
+    finally { setBusy(false); }
+  };
+
+  const money = (v) => formatMoney(v, currencyCode, currencySymbol);
+  const needsPrice = pending?.kind === 'OFFER' && (pending.price === '' || Number(pending.price) < 0);
 
   const toggleSent = async (a) => {
     setBusy(true); setError('');
@@ -187,13 +203,21 @@ export default function EnquiryAttachments({
           <span className="text-gray-500"> · becomes v{(items.filter((a) => a.kind === kind)[0]?.version || 0) + 1}, the current v{currentOf(kind).version} moves to history</span>
         )}
       </p>
+      {kind === 'OFFER' && (
+        <label className="flex items-center gap-2 text-xs text-gray-700">
+          <span className="font-medium whitespace-nowrap">Offer price ({currencyCode})<span className="text-red-500"> *</span></span>
+          <input type="number" min="0" step="0.01" inputMode="decimal" value={pending.price} autoFocus
+            onChange={(e) => setPending((p) => ({ ...p, price: e.target.value }))}
+            placeholder="Total offered to the customer" className="flex-1 min-w-0 text-sm border border-gray-300 rounded px-2 py-1 bg-white" />
+        </label>
+      )}
       <input value={pending.note} onChange={(e) => setPending((p) => ({ ...p, note: e.target.value }))}
         maxLength={500} placeholder="What changed? (optional) — e.g. revised after price discussion"
         aria-label="Version note" className="w-full text-sm border border-gray-300 rounded px-2 py-1 bg-white" />
       <div className="flex justify-end gap-2">
         <button type="button" onClick={() => setPending(null)} disabled={busy}
           className="text-xs text-gray-500 hover:text-gray-800 cursor-pointer">Cancel</button>
-        <button type="button" onClick={upload} disabled={busy}
+        <button type="button" onClick={upload} disabled={busy || needsPrice} title={needsPrice ? 'Enter the offer price first' : undefined}
           className="px-2.5 py-1 text-xs font-medium text-white rounded-sm cursor-pointer disabled:opacity-50"
           style={{ backgroundColor: 'var(--ams-primary)' }}>
           {busy ? 'Uploading…' : 'Upload'}
@@ -302,12 +326,37 @@ export default function EnquiryAttachments({
                           )}
                           <StageTag stage={a.stage} />
                         </div>
+                        {priceEdit?.id === a.id ? (
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs text-gray-600">Price ({currencyCode})</span>
+                            <input type="number" min="0" step="0.01" inputMode="decimal" value={priceEdit.value} autoFocus
+                              onChange={(e) => setPriceEdit((p) => ({ ...p, value: e.target.value }))}
+                              aria-label="Offer price" className="w-36 text-sm border border-gray-300 rounded px-2 py-0.5" />
+                            <button type="button" onClick={savePrice} disabled={busy || priceEdit.value === ''}
+                              className="text-xs font-medium text-[var(--ams-primary)] hover:underline cursor-pointer disabled:opacity-40">Save</button>
+                            <button type="button" onClick={() => setPriceEdit(null)} disabled={busy}
+                              className="text-xs text-gray-500 hover:text-gray-800 cursor-pointer">Cancel</button>
+                          </div>
+                        ) : (
+                          <p className="text-sm mt-0.5">
+                            {a.offer_value != null
+                              ? <span className="font-semibold text-gray-900 tabular-nums">{money(a.offer_value)}</span>
+                              : <span className="text-xs text-amber-700">No price recorded</span>}
+                            {canEdit && (!a.sent_at || a.offer_value == null) && (
+                              <button type="button" onClick={() => setPriceEdit({ id: a.id, value: a.offer_value != null ? String(a.offer_value) : '' })}
+                                className="ml-2 text-xs text-gray-500 hover:text-gray-800 hover:underline cursor-pointer">
+                                {a.offer_value != null ? 'Edit price' : 'Add price'}
+                              </button>
+                            )}
+                          </p>
+                        )}
                         <Meta a={a} />
                         {a.sent_at && <span className="text-[11px] text-green-600">Sent to customer · {fmtDate(a.sent_at)}</span>}
                       </div>
                       {canEdit && (
                         <div className="flex items-center gap-2 shrink-0 pt-0.5">
-                          <button onClick={() => toggleSent(a)} disabled={busy}
+                          <button onClick={() => toggleSent(a)} disabled={busy || (!a.sent_at && a.offer_value == null)}
+                            title={!a.sent_at && a.offer_value == null ? 'Add the offer price first' : undefined}
                             className={`text-xs cursor-pointer ${a.sent_at ? 'text-gray-500 hover:text-gray-800' : 'text-green-600 hover:text-green-800'}`}>
                             {a.sent_at ? 'Unmark sent' : 'Mark sent'}
                           </button>

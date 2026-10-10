@@ -33,7 +33,13 @@ const deleteAttachment = async (req, res) => {
   ApiResponse.message(res, 'Document deleted successfully');
 };
 
+/** `PUT /sales/attachments/:id/offer-value` */
+const setOfferValue = async (req, res) => {
+  ApiResponse.ok(res, await attachmentService.setOfferValue(req.params.id, req.body.offer_value, requestContext(req)));
+};
+
 module.exports = {
+  setOfferValue,
   listAttachments,
   uploadAttachment,
   downloadAttachment,

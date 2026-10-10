@@ -91,12 +91,12 @@ function createAnalyticsService(repository, config = salesConfigService) {
   }
 
   /** Last 12 calendar months up to the month of the period's end. */
-  function monthly(closed, f, rates) {
+  function monthly(closed, offers, f, rates) {
     const last = new Date(f.to.getTime() - 1);
     const months = [];
     for (let i = 11; i >= 0; i -= 1) {
       const d = new Date(last.getFullYear(), last.getMonth() - i, 1);
-      months.push({ key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, won: 0, lost: 0, won_value: 0 });
+      months.push({ key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, won: 0, lost: 0, won_value: 0, offered_value: 0, offers: 0 });
     }
     const byKey = Object.fromEntries(months.map((m) => [m.key, m]));
     for (const e of closed) {
@@ -106,7 +106,18 @@ function createAnalyticsService(repository, config = salesConfigService) {
       if (!m) continue;
       if (e.stage === 'WON') { m.won += 1; m.won_value += toInr(e.order_value, e.currency_code, rates, e.order_fx_rate); } else m.lost += 1;
     }
-    for (const m of months) m.won_value = Math.round(m.won_value);
+    // Offered: per enquiry, only the last offer it was sent in each month, so
+    // a revision sent the same month replaces (not adds to) the earlier one.
+    const lastPerMonth = new Map();
+    for (const o of offers) {
+      const key = `${o.sent_at.getFullYear()}-${String(o.sent_at.getMonth() + 1).padStart(2, '0')}`;
+      if (byKey[key]) lastPerMonth.set(`${key}|${o.enquiry_id}`, { key, o }); // offers arrive oldest first
+    }
+    for (const { key, o } of lastPerMonth.values()) {
+      byKey[key].offered_value += toInr(o.offer_value, o.enquiry.currency_code, rates, o.offer_fx_rate);
+      byKey[key].offers += 1;
+    }
+    for (const m of months) { m.won_value = Math.round(m.won_value); m.offered_value = Math.round(m.offered_value); }
     return months;
   }
 
@@ -121,7 +132,7 @@ function createAnalyticsService(repository, config = salesConfigService) {
 
       // Every money figure below is in INR: open amounts at today's rate, won
       // orders at the rate locked when they were won.
-      const [rates, openRows, stageRows, probability, won, lost, raised, exits, closed, stalled, hot, overdue, owners] = await Promise.all([
+      const [rates, openRows, stageRows, probability, won, lost, raised, exits, closed, offers, stalled, hot, overdue, owners] = await Promise.all([
         loadRates(),
         repository.openByOwner(f),
         repository.openByStage(f),
@@ -131,6 +142,7 @@ function createAnalyticsService(repository, config = salesConfigService) {
         repository.raised(f),
         repository.withStageExits(f),
         repository.closedSince(f, trendFrom),
+        repository.offersSent(f, trendFrom),
         repository.stalled(f),
         repository.hot(f),
         repository.overdueFollowups(f),
@@ -141,6 +153,21 @@ function createAnalyticsService(repository, config = salesConfigService) {
       const openInr = (r) => toInr(r._sum.expected_value, r.currency_code, rates);
       const wonValue = Math.round(won.reduce((n, e) => n + orderInr(e), 0));
       const daysToClose = won.map((e) => (e.won_at.getTime() - e.created_at.getTime()) / DAY_MS);
+
+      // Discount from the final offer to the order, per won deal — same
+      // currency on both sides, so it's a plain percentage.
+      const finalOffer = Object.fromEntries(
+        (await repository.finalOffers(won.map((e) => e.id))).map((o) => [o.enquiry_id, Number(o.offer_value)])
+      );
+      const discounts = won
+        .filter((e) => finalOffer[e.id] > 0 && e.order_value !== null)
+        .map((e) => ((finalOffer[e.id] - Number(e.order_value)) / finalOffer[e.id]) * 100);
+
+      // Offered in the period: the last priced offer sent per enquiry.
+      const offeredInPeriod = new Map();
+      for (const o of offers) if (o.sent_at >= f.from) offeredInPeriod.set(o.enquiry_id, o);
+      const offeredValue = Math.round([...offeredInPeriod.values()]
+        .reduce((n, o) => n + toInr(o.offer_value, o.enquiry.currency_code, rates, o.offer_fx_rate), 0));
 
       // ── Team performance: one row per field initiator seen in any block ──
       const team = new Map();
@@ -172,13 +199,18 @@ function createAnalyticsService(repository, config = salesConfigService) {
           lost: lost.length,
           win_rate: rate(won.length, lost.length),
           avg_deal: won.length ? Math.round(wonValue / won.length) : null,
+          offered_value: offeredValue,
+          offered_count: offeredInPeriod.size,
+          // Positive = we came down from the final offer; negative = order above it.
+          avg_discount_pct: discounts.length ? round1(discounts.reduce((a, b) => a + b, 0) / discounts.length) : null,
+          discount_samples: discounts.length,
           avg_days_to_close: daysToClose.length
             ? round1(daysToClose.reduce((a, b) => a + b, 0) / daysToClose.length)
             : null,
         },
         funnel: funnel(raised),
         time_in_stage: timeInStage(exits, f),
-        monthly: monthly(closed, f, rates),
+        monthly: monthly(closed, offers, f, rates),
         lost: {
           total: lost.length,
           reasons: tally(lost.map((e) => e.lost_reason), 'No reason given').slice(0, 8),
