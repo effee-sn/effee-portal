@@ -72,6 +72,14 @@ export const AREAS = [
     ],
   },
   {
+    key: 'reports',
+    label: 'Reports',
+    subtitle: 'MIS reports',
+    items: [
+      { label: 'All reports', href: '/dashboard/reports', perm: 'REPORT_VIEW' },
+    ],
+  },
+  {
     key: 'master-data',
     label: 'Master Data',
     subtitle: 'Shared reference data',

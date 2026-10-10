@@ -208,6 +208,7 @@ enum PermissionAction {
   DELETE
   APPROVE
   FINANCE
+  EXPORT
 }
 
 model RolePermission {

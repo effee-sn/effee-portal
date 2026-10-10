@@ -44,7 +44,7 @@ const it = (name, fn) => test(name, async (t) => {
 
 // ── Lazy app handles (required only once the environment is settled) ────────
 let prisma; let enquiryService; let activityService; let attachmentService;
-let workflowService; let followup; let analyticsService; let salesConfigService; let currencyService;
+let workflowService; let followup; let analyticsService; let salesConfigService; let currencyService; let reportsService;
 
 const ids = { enquiries: [], users: [], apps: [] };
 const fx = {}; // fixtures: users, customer, previous workflow config
@@ -134,6 +134,7 @@ before(async () => {
   ({ analyticsService } = require('../../src/modules/sales/analytics.service'));
   ({ salesConfigService } = require('../../src/modules/sales/config.service'));
   ({ currencyService } = require('../../src/modules/master/currency.service'));
+  ({ reportsService } = require('../../src/modules/reports/reports.service'));
   fx.previousProbabilities = await salesConfigService.listProbabilities();
 
   const role = await prisma.role.findFirst({ where: { deleted_at: null }, select: { id: true } });
@@ -804,5 +805,100 @@ describe('Offer price', () => {
     const thisMonth = r.monthly[r.monthly.length - 1];
     assert.equal(thisMonth.offered_value, 100000);
     assert.equal(thisMonth.won_value, 90000);
+  });
+});
+
+describe('Sales MIS reports', () => {
+  let owner; let wonId; let lostId;
+  const run = (key, extra = {}) => reportsService.run('sales', key, { owner_id: owner.id, ...extra }, { is_system: true, permissions: [] });
+
+  before(async () => {
+    if (env.unavailable) return;
+    const role = await prisma.role.findFirst({ where: { deleted_at: null }, select: { id: true } });
+    owner = await prisma.user.create({
+      data: { name: `Mis ${suffix}`, email: `mis-${suffix}@sales.test`, password: 'x', role_id: role.id },
+      select: { id: true, email: true, name: true },
+    });
+    ids.users.push(owner.id);
+
+    // One won deal (offer ₹1,00,000 → order ₹95,000), one lost, one open.
+    const w = await toOfferReleased();
+    await prisma.enquiry.update({ where: { id: w.id }, data: { owner_id: owner.id } });
+    await sendOffer(w.id, fx.internal);
+    await enquiryService.win(w.id, { order_value: 95000, order_no: 'PO-MIS' }, actor(owner));
+    wonId = w.id;
+
+    const l = await newEnquiry('GENERATED', owner, { expected_value: 40000 });
+    await enquiryService.lose(l.id, { lost_reason: 'Budget cut', lost_to: 'Rival' }, actor(owner));
+    lostId = l.id;
+
+    await newEnquiry('INCOMING', owner, { expected_value: 25000 });
+    await log(lostId, owner); // a follow-up logged by the owner
+  });
+
+  it('Monthly MIS: this month carries the raised, offered, won and lost figures', async () => {
+    const r = await run('monthly-mis');
+    const t = r.totals;
+    assert.equal(t.raised, 3);
+    assert.equal(t.offers, 1);
+    assert.equal(t.offered_inr, 100000);
+    assert.equal(t.won, 1);
+    assert.equal(t.won_inr, 95000);
+    assert.equal(t.lost, 1);
+    assert.equal(t.win_rate, 50);
+    assert.ok(r.rows.length >= 1 && r.rows.every((m) => typeof m.month === 'string'));
+  });
+
+  it('Enquiry Register lists each enquiry once, with probability and weighted value', async () => {
+    const r = await run('enquiry-register');
+    assert.equal(r.rows.length, 3);
+    const open = r.rows.find((row) => row.type === 'Incoming');
+    assert.equal(open.value_inr, 25000);
+    assert.equal(open.weighted_inr, 25000 * (open.probability / 100));
+    assert.equal(r.rows.find((row) => row.id === lostId).weighted_inr, 0, 'a lost deal weighs nothing');
+  });
+
+  it('Won Orders: PO, locked rate, final offer and discount', async () => {
+    const r = await run('won-orders');
+    assert.equal(r.rows.length, 1);
+    const row = r.rows[0];
+    assert.equal(row.id, wonId);
+    assert.equal(row.po_no, 'PO-MIS');
+    assert.equal(row.rate, 1);
+    assert.equal(row.order_inr, 95000);
+    assert.equal(row.final_offer, 100000);
+    assert.equal(row.discount, 5);
+  });
+
+  it('Lost Enquiries: reason, competitor and value lost', async () => {
+    const r = await run('lost-enquiries');
+    assert.deepEqual(
+      r.rows.map((row) => [row.reason, row.went_to, row.value_inr, row.lost_at_stage]),
+      [['Budget cut', 'Rival', 40000, 'New']],
+    );
+  });
+
+  it('Offer Register and Salesperson Performance', async () => {
+    const offers = await run('offer-register');
+    assert.equal(offers.rows.length, 1);
+    assert.equal(offers.rows[0].price_inr, 100000);
+    assert.ok(offers.rows[0].sent_on);
+
+    const perf = await run('salesperson-performance');
+    assert.equal(perf.rows.length, 1);
+    const p = perf.rows[0];
+    assert.deepEqual([p.raised, p.open, p.won, p.lost, p.win_rate, p.activities], [3, 1, 1, 1, 50, 1]);
+    assert.equal(p.won_inr, 95000);
+  });
+
+  it('a user without sales access cannot open sales reports; exports are audited', async () => {
+    await assert.rejects(
+      reportsService.run('sales', 'monthly-mis', {}, { is_system: false, permissions: ['REPORT_VIEW'] }),
+      { name: 'ForbiddenError' },
+    );
+    const file = await reportsService.export('sales', 'won-orders', { owner_id: owner.id }, 'xlsx',
+      { id: owner.id, email: owner.email, is_system: false, permissions: ['REPORT_VIEW', 'REPORT_EXPORT', 'SALES_VIEW'] });
+    assert.ok(file.buffer.length > 0 && file.filename.endsWith('.xlsx'));
+    assert.equal(await prisma.auditLog.count({ where: { action: 'EXPORT', actor_id: owner.id } }), 1);
   });
 });

@@ -55,6 +55,7 @@ const MODULES = [
   { name: 'PROJECT',    slug: 'project',    description: 'Projects' },
   { name: 'CUSTOMER',   slug: 'customer',   description: 'Master data — customers & contacts' },
   { name: 'CURRENCY',   slug: 'currency',   description: 'Master data — currencies & exchange rates' },
+  { name: 'REPORT',     slug: 'report',     description: 'Reports (MIS) — view and export' },
   { name: 'SALES_CONFIG', slug: 'sales-config', description: 'Sales configuration — applications, stage probabilities' },
 ];
 
@@ -125,6 +126,10 @@ const PERMISSIONS = [
   { module: 'currency', action: 'CREATE', code: 'CURRENCY_CREATE' },
   { module: 'currency', action: 'EDIT',   code: 'CURRENCY_EDIT' },
   { module: 'currency', action: 'DELETE', code: 'CURRENCY_DELETE' },
+
+  // Reports (MIS). Each report set also needs its module's view permission.
+  { module: 'report', action: 'VIEW',   code: 'REPORT_VIEW' },
+  { module: 'report', action: 'EXPORT', code: 'REPORT_EXPORT' },
 
   // Sales configuration — applications list and stage probabilities.
   { module: 'sales-config', action: 'VIEW',   code: 'SALES_CONFIG_VIEW' },

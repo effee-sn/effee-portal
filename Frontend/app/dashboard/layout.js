@@ -97,7 +97,7 @@ export default function DashboardLayout({ children }) {
   };
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-white">
+    <div className="h-screen flex flex-col overflow-hidden bg-white print:h-auto print:overflow-visible print:block">
       <header className="flex items-center px-2 py-3 shrink-0 z-40 print:hidden" style={{ backgroundColor: '#1f2330' }}>
         {/* App switcher — opens the left drawer */}
         <div className="shrink-0">
@@ -281,7 +281,7 @@ export default function DashboardLayout({ children }) {
         </div>
       )}
 
-      <main className="flex-1 overflow-y-auto bg-white">{children}</main>
+      <main className="flex-1 overflow-y-auto bg-white print:overflow-visible">{children}</main>
     </div>
   );
 }

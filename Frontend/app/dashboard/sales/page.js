@@ -11,6 +11,8 @@ import {
   Card, Empty, Pulse, Stat, StageChip, compactINR,
 } from '@/components/DashboardKit';
 import useSalesConfig from '@/lib/useSalesConfig';
+import { PRESETS, presetRange } from '@/lib/periods';
+import PeriodPicker from '@/components/PeriodPicker';
 import { formatMoney } from '@/lib/money';
 
 /**
@@ -30,29 +32,6 @@ const LOST_COLOR = '#D97706';
 const OFFERED_COLOR = '#2563EB';
 
 const stageLabel = (s) => STAGE_STYLE[s]?.label || s;
-
-// ── Period presets ───────────────────────────────────────────────────────────
-const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-function presetRange(key) {
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const y = today.getFullYear(); const m = today.getMonth();
-  switch (key) {
-    case 'month':   return { from: iso(new Date(y, m, 1)), to: iso(today) };
-    case 'quarter': return { from: iso(new Date(y, m - 2, 1)), to: iso(today) };
-    case 'fy':      return { from: iso(new Date(m >= 3 ? y : y - 1, 3, 1)), to: iso(today) }; // Indian FY: 1 April
-    case 'year':    return { from: iso(new Date(y, m - 11, 1)), to: iso(today) };
-    default:        return null;
-  }
-}
-
-const PRESETS = [
-  { key: 'month', label: 'This month' },
-  { key: 'quarter', label: 'Last 3 months' },
-  { key: 'fy', label: 'This FY' },
-  { key: 'year', label: 'Last 12 months' },
-  { key: 'custom', label: 'Custom' },
-];
 
 const fmtDate = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -330,12 +309,6 @@ export default function SalesDashboardPage() {
 
   const refreshing = loadedUrl !== url;
 
-  const choosePreset = (key) => {
-    setPreset(key);
-    const r = presetRange(key);
-    if (r) setRange(r);
-  };
-
   const h = data?.headline;
   const filtered = Boolean(ownerId || type || appId);
 
@@ -358,27 +331,8 @@ export default function SalesDashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-md border border-gray-300 bg-white overflow-hidden" role="group" aria-label="Period">
-            {PRESETS.map((p) => (
-              <button key={p.key} type="button" onClick={() => choosePreset(p.key)} aria-pressed={preset === p.key}
-                className={`px-3 py-1.5 text-xs font-medium border-r border-gray-200 last:border-r-0 cursor-pointer ${preset === p.key
-                  ? 'bg-[var(--ams-primary)] text-white' : 'text-gray-700 hover:bg-gray-50'}`}>
-                {p.label}
-              </button>
-            ))}
-          </div>
-
-          {preset === 'custom' && (
-            <div className="flex items-center gap-1.5 text-xs text-gray-600">
-              <input type="date" value={range.from} max={range.to} aria-label="From"
-                onChange={(e) => e.target.value && setRange((r) => ({ ...r, from: e.target.value }))}
-                className="text-sm border border-gray-300 rounded px-2 py-1 bg-white" />
-              <span>to</span>
-              <input type="date" value={range.to} min={range.from} aria-label="To"
-                onChange={(e) => e.target.value && setRange((r) => ({ ...r, to: e.target.value }))}
-                className="text-sm border border-gray-300 rounded px-2 py-1 bg-white" />
-            </div>
-          )}
+          <PeriodPicker presets={PRESETS} preset={preset} range={range}
+            onChange={(next) => { setPreset(next.preset); setRange(next.range); }} />
 
           <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} aria-label="Field person"
             className="text-sm border border-gray-300 rounded px-2 py-1.5 text-gray-700 bg-white cursor-pointer">
