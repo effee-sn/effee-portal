@@ -757,6 +757,45 @@ enum AttachmentKind {
   OFFER
 }
 
+/// A currency (Master Data → Currencies). INR is the base currency: rate 1,
+/// can't be edited or deleted. `rate` / `rate_effective_from` mirror the
+/// current entry of the rate history (the latest effective date), so readers
+/// never have to walk the history.
+model Currency {
+  code                String         @id @db.VarChar(3)
+  name                String
+  symbol              String         @db.VarChar(8)
+  is_base             Boolean        @default(false)
+  is_active           Boolean        @default(true)
+  // Rupees for one unit of this currency (current).
+  rate                Decimal        @db.Decimal(18, 6)
+  rate_effective_from DateTime       @db.Date
+  rates               CurrencyRate[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by Int?
+  updated_by Int?
+}
+
+/// One entry in a currency's rate history. Rates are entered manually and are
+/// never overwritten — a new rate is a new row; the latest effective one is
+/// the currency's current rate.
+model CurrencyRate {
+  id             Int      @id @default(autoincrement())
+  currency       Currency @relation(fields: [currency_code], references: [code], onDelete: Cascade)
+  currency_code  String   @db.VarChar(3)
+  // Rupees for one unit of the currency.
+  rate           Decimal  @db.Decimal(18, 6)
+  effective_from DateTime @db.Date
+  note           String?
+
+  created_at DateTime @default(now())
+  created_by Int?
+
+  @@index([currency_code, effective_from])
+}
+
 /// A customer company we sell to. state / state_code is the place of supply and
 /// decides intra- vs inter-state GST on its quotations.
 model Customer {

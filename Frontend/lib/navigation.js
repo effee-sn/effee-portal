@@ -77,6 +77,7 @@ export const AREAS = [
     subtitle: 'Shared reference data',
     items: [
       { label: 'Customers', href: '/dashboard/master-data/customers', perm: 'CUSTOMER_VIEW' },
+      { label: 'Currencies', href: '/dashboard/master-data/currencies', perm: 'CURRENCY_VIEW' },
     ],
   },
   {

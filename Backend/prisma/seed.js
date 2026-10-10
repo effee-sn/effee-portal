@@ -54,6 +54,7 @@ const MODULES = [
   { name: 'DEPARTMENT', slug: 'department', description: 'Departments' },
   { name: 'PROJECT',    slug: 'project',    description: 'Projects' },
   { name: 'CUSTOMER',   slug: 'customer',   description: 'Master data — customers & contacts' },
+  { name: 'CURRENCY',   slug: 'currency',   description: 'Master data — currencies & exchange rates' },
   { name: 'SALES_CONFIG', slug: 'sales-config', description: 'Sales configuration — applications, stage probabilities' },
 ];
 
@@ -118,6 +119,12 @@ const PERMISSIONS = [
   { module: 'customer', action: 'CREATE', code: 'CUSTOMER_CREATE' },
   { module: 'customer', action: 'EDIT',   code: 'CUSTOMER_EDIT' },
   { module: 'customer', action: 'DELETE', code: 'CUSTOMER_DELETE' },
+
+  // Master data — currencies & exchange rates.
+  { module: 'currency', action: 'VIEW',   code: 'CURRENCY_VIEW' },
+  { module: 'currency', action: 'CREATE', code: 'CURRENCY_CREATE' },
+  { module: 'currency', action: 'EDIT',   code: 'CURRENCY_EDIT' },
+  { module: 'currency', action: 'DELETE', code: 'CURRENCY_DELETE' },
 
   // Sales configuration — applications list and stage probabilities.
   { module: 'sales-config', action: 'VIEW',   code: 'SALES_CONFIG_VIEW' },

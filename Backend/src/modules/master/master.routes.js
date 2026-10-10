@@ -12,15 +12,18 @@ const {
   createCustomer, updateCustomer, deleteCustomer,
 } = require('./customer.controller');
 
+const currencyValidation = require('./currency.validation');
+const currencyController = require('./currency.controller');
+
 const contactValidation = require('./contact.validation');
 const {
   listContacts, createContact, updateContact, deleteContact,
 } = require('./contact.controller');
 
 /**
- * Master data — shared reference entities (customers, contacts) used across
- * modules. Gated by its own CUSTOMER_* permissions rather than SALES_*, since
- * customers are not owned by the sales module.
+ * Master data — shared reference entities (customers, contacts, currencies)
+ * used across modules. Each has its own permissions (CUSTOMER_*, CURRENCY_*)
+ * rather than SALES_*, since they are not owned by the sales module.
  */
 const router = Router();
 
@@ -96,6 +99,48 @@ router.delete(
   authorize('CUSTOMER_DELETE'),
   validate({ params: contactValidation.contactIdParam }),
   asyncHandler(deleteContact)
+);
+
+// ── Currencies (manually maintained rates with history) ──────────────────────
+// Options are open to any signed-in user: forms in other modules (e.g. a sales
+// enquiry) need the active currencies and their rates.
+router.get('/currencies/options', asyncHandler(currencyController.getCurrencyOptions));
+router.get('/currencies', authorize('CURRENCY_VIEW'), asyncHandler(currencyController.listCurrencies));
+router.post(
+  '/currencies',
+  authorize('CURRENCY_CREATE'),
+  validate({ body: currencyValidation.createCurrencyBody }),
+  asyncHandler(currencyController.createCurrency)
+);
+router.get(
+  '/currencies/:code',
+  authorize('CURRENCY_VIEW'),
+  validate({ params: currencyValidation.currencyCodeParam }),
+  asyncHandler(currencyController.getCurrency)
+);
+router.put(
+  '/currencies/:code',
+  authorize('CURRENCY_EDIT'),
+  validate({ params: currencyValidation.currencyCodeParam, body: currencyValidation.updateCurrencyBody }),
+  asyncHandler(currencyController.updateCurrency)
+);
+router.post(
+  '/currencies/:code/rates',
+  authorize('CURRENCY_EDIT'),
+  validate({ params: currencyValidation.currencyCodeParam, body: currencyValidation.addRateBody }),
+  asyncHandler(currencyController.addRate)
+);
+router.delete(
+  '/currencies/:code/rates/:rateId',
+  authorize('CURRENCY_EDIT'),
+  validate({ params: currencyValidation.rateIdParam }),
+  asyncHandler(currencyController.deleteRate)
+);
+router.delete(
+  '/currencies/:code',
+  authorize('CURRENCY_DELETE'),
+  validate({ params: currencyValidation.currencyCodeParam }),
+  asyncHandler(currencyController.deleteCurrency)
 );
 
 module.exports = router;
