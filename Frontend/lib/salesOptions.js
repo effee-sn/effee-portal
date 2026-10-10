@@ -135,3 +135,71 @@ export function formatINR(value) {
   if (Number.isNaN(n)) return '—';
   return n.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 });
 }
+
+/**
+ * What each stage means, for help tooltips (e.g. Sales → Configuration).
+ * `who` holds the enquiry in that stage; `enter` is what has to be in place to
+ * reach it (the gates enforced by the backend — see stageGate.js).
+ */
+export const STAGE_INFO = {
+  NEW: {
+    what: 'The enquiry has just been raised by the field person.',
+    who: 'Field person (owner)',
+    enter: 'Created automatically when the enquiry is raised.',
+  },
+  CONTACTED: {
+    what: 'Incoming enquiries only — the field person has made first contact with the customer and gathered the requirement.',
+    who: 'Field person',
+    enter: 'At least one logged activity.',
+  },
+  REVIEW: {
+    what: 'Internal review meeting with management on whether and how to take the enquiry forward (participants + minutes).',
+    who: 'Internal sales',
+    enter: 'The enquiry format (PDF or Excel) uploaded.',
+  },
+  CONCEPT: {
+    what: 'The technical concept and the power-source calculation are prepared.',
+    who: 'Internal sales',
+    enter: 'A review marked “no future review”.',
+  },
+  COSTING: {
+    what: 'The costing for the proposed solution is worked out.',
+    who: 'Internal sales',
+    enter: 'Concept document and power-source calculation uploaded.',
+  },
+  COSTING_REVIEW: {
+    what: 'The costing is reviewed and approved before an offer is made.',
+    who: 'Internal sales',
+    enter: 'Costing document uploaded.',
+  },
+  OFFER_RELEASED: {
+    what: 'The offer is prepared. Marking it sent to the customer moves the enquiry to Follow-up.',
+    who: 'Internal sales',
+    enter: 'Costing review document uploaded.',
+  },
+  FOLLOW_UP: {
+    what: 'The offer is with the customer and the field person follows up. A follow-up flagged “needs negotiation” moves it to Negotiation.',
+    who: 'Field person',
+    enter: 'Automatic — when the offer is marked sent.',
+  },
+  NEGOTIATION: {
+    what: 'The customer wants revised price or terms; a revised offer is prepared.',
+    who: 'Internal sales',
+    enter: 'Automatic — a follow-up flagged “needs negotiation”.',
+  },
+  NEGOTIATION_FOLLOW_UP: {
+    what: 'The revised offer is with the customer and the field person follows up. Can loop back to Negotiation.',
+    who: 'Field person',
+    enter: 'Automatic — when the revised offer is marked sent.',
+  },
+  WON: {
+    what: 'The customer has confirmed the order (PO). Always 100%.',
+    who: 'Field person (closes it)',
+    enter: 'An offer marked sent to the customer.',
+  },
+  LOST: {
+    what: 'The deal is lost — the reason and who it went to are recorded. Always 0%.',
+    who: 'Field person (closes it)',
+    enter: 'Can be marked lost from any open stage.',
+  },
+};

@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
-import { STAGE_STYLE } from '@/lib/salesOptions';
+import { STAGE_INFO, STAGE_STYLE } from '@/lib/salesOptions';
+import InfoTip from '@/components/InfoTip';
 import { Card } from '@/components/DashboardKit';
 import { SkeletonLine, TableSkeleton } from '@/components/Skeleton';
 import { invalidateSalesConfig } from '@/lib/useSalesConfig';
@@ -93,10 +94,20 @@ function ProbabilityCard({ canEdit }) {
             const bad = !r.fixed && (draft[r.stage] === '' || !/^\d+$/.test(draft[r.stage]) || Number(draft[r.stage]) > 100);
             return (
               <li key={r.stage} className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_5.5rem] items-center gap-3 px-2 py-1.5 rounded-md hover:bg-gray-50">
-                <span className="text-sm text-gray-700 truncate">
-                  {STAGE_STYLE[r.stage]?.label || r.stage}
-                  {r.stage === 'CONTACTED' && <span className="text-[11px] text-gray-400"> · incoming</span>}
-                </span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-sm text-gray-700 truncate">
+                    {STAGE_STYLE[r.stage]?.label || r.stage}
+                    {r.stage === 'CONTACTED' && <span className="text-[11px] text-gray-400"> · incoming</span>}
+                  </span>
+                  {STAGE_INFO[r.stage] && (
+                    <InfoTip label={`About ${STAGE_STYLE[r.stage]?.label || r.stage}`} className="shrink-0">
+                      <span className="block font-semibold mb-0.5">{STAGE_STYLE[r.stage]?.label}</span>
+                      <span className="block">{STAGE_INFO[r.stage].what}</span>
+                      <span className="block mt-1.5 text-gray-300"><span className="text-white">Who:</span> {STAGE_INFO[r.stage].who}</span>
+                      <span className="block text-gray-300"><span className="text-white">To reach it:</span> {STAGE_INFO[r.stage].enter}</span>
+                    </InfoTip>
+                  )}
+                </div>
                 <span className="relative h-2 rounded-sm bg-gray-100" aria-hidden="true">
                   {v > 0 && <span className="absolute inset-y-0 left-0 rounded-r-[4px]"
                     style={{ width: `${Math.min(100, v)}%`, backgroundColor: 'var(--ams-primary)' }} />}
