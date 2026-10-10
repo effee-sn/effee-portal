@@ -901,4 +901,43 @@ describe('Sales MIS reports', () => {
     assert.ok(file.buffer.length > 0 && file.filename.endsWith('.xlsx'));
     assert.equal(await prisma.auditLog.count({ where: { action: 'EXPORT', actor_id: owner.id } }), 1);
   });
+
+  // ── Phase 2 ──
+  it('Customer-wise and Application-wise group the same figures', async () => {
+    for (const key of ['customer-wise', 'application-wise']) {
+      const r = await run(key);
+      assert.equal(r.rows.length, 1, key);
+      const row = r.rows[0];
+      assert.deepEqual(
+        [row.raised, row.open, row.open_inr, row.offers, row.offered_inr, row.won, row.won_inr, row.lost, row.win_rate],
+        [3, 1, 25000, 1, 100000, 1, 95000, 1, 50],
+        key,
+      );
+    }
+    assert.equal((await run('application-wise')).rows[0].name, '(none)', 'enquiries without an application group together');
+  });
+
+  it('Follow-up & Activity counts interactions per person who logged them', async () => {
+    const r = await run('followup-activity');
+    const mine = r.rows.find((row) => row.id === owner.id);
+    assert.equal(mine.CALL, 1);
+    assert.equal(mine.total, 1);
+    const internal = r.rows.find((row) => row.id === fx.internal.id);
+    assert.equal(internal.reviews, 1, 'the internal review on the won deal');
+  });
+
+  it('Stalled / Aging flags an enquiry once it passes its stage limit', async () => {
+    let r = await run('stalled-aging');
+    assert.equal(r.rows.length, 1);
+    assert.equal(r.rows[0].status, 'Within limit');
+    assert.equal(r.rows[0].value_inr, 25000);
+
+    await prisma.enquiry.update({
+      where: { id: r.rows[0].id },
+      data: { stage_since: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000) },
+    });
+    r = await run('stalled-aging');
+    assert.equal(r.rows[0].status, 'Stalled');
+    assert.equal(r.rows[0].over_by, 10 - r.rows[0].limit);
+  });
 });

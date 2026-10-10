@@ -162,8 +162,11 @@ export default function ReportViewer({ module, reportKey, canExport }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <PeriodPicker presets={REPORT_PRESETS} preset={preset} range={range}
-            onChange={(next) => { setPreset(next.preset); setRange(next.range); }} />
+          {/* Some reports show the position right now and ignore the period. */}
+          {(!data || supports('period')) && (
+            <PeriodPicker presets={REPORT_PRESETS} preset={preset} range={range}
+              onChange={(next) => { setPreset(next.preset); setRange(next.range); }} />
+          )}
 
           {supports('owner') && (
             <select value={filters.owner_id} onChange={(e) => setFilter('owner_id', e.target.value)} aria-label="Owner" className={select}>

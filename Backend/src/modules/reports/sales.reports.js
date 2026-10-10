@@ -1,6 +1,7 @@
 const { salesReportsRepository } = require('./sales.reports.repository');
 const { salesConfigService } = require('../sales/config.service');
 const { loadRates, toInr, paise } = require('../master/fx');
+const { STAGE_AGING_DAYS } = require('../sales/followup.service');
 
 /**
  * Sales MIS report definitions.
@@ -32,6 +33,70 @@ function createSalesReports(repository, config = salesConfigService) {
   const num = (v) => (v === null || v === undefined ? null : Number(v));
   const pct = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 10 : null);
   const sum = (rows, key) => paise(rows.reduce((n, r) => n + (Number(r[key]) || 0), 0));
+
+  /**
+   * Per-customer / per-application breakdown, shared by both "-wise" reports:
+   * raised, offers sent and won/lost in the period; open right now.
+   * @param {'customer_id'|'application_id'} dim
+   */
+  async function breakdown(f, dim, names) {
+    const [rates, raised, open, offers, won, lost] = await Promise.all([
+      loadRates(), repository.raisedBy(f, dim), repository.openBy(f, dim), repository.offersSent(f),
+      repository.won(f), repository.lost(f),
+    ]);
+    const groups = new Map();
+    const g = (id) => {
+      const k = id ?? 0; // 0 = none (e.g. no application set)
+      if (!groups.has(k)) groups.set(k, { id: k, raised: 0, last_raised: null, open: 0, open_inr: 0, offers: 0, offered_inr: 0, won: 0, won_inr: 0, lost: 0 });
+      return groups.get(k);
+    };
+    for (const r of raised) { const x = g(r[dim]); x.raised = r._count._all; x.last_raised = day(r._max.created_at); }
+    for (const r of open) { const x = g(r[dim]); x.open += r._count._all; x.open_inr += toInr(r._sum.expected_value, r.currency_code, rates); }
+    // Offers: the last priced offer sent per enquiry in the period.
+    const lastOffer = new Map();
+    for (const o of offers) lastOffer.set(o.enquiry_id, o);
+    for (const o of lastOffer.values()) {
+      const x = g(o.enquiry[dim]); x.offers += 1;
+      x.offered_inr += toInr(o.offer_value, o.enquiry.currency_code, rates, o.offer_fx_rate);
+    }
+    for (const e of won) { const x = g(e[dim]); x.won += 1; x.won_inr += toInr(e.order_value, e.currency_code, rates, e.order_fx_rate); }
+    for (const e of lost) g(e[dim]).lost += 1;
+
+    const label = await names([...groups.keys()]);
+    const rows = [...groups.values()]
+      .map((x) => ({
+        ...x, name: x.id ? label[x.id] ?? `#${x.id}` : '(none)',
+        open_inr: paise(x.open_inr), offered_inr: paise(x.offered_inr), won_inr: paise(x.won_inr),
+        win_rate: pct(x.won, x.won + x.lost),
+      }))
+      .sort((a, b) => b.won_inr - a.won_inr || b.open_inr - a.open_inr || a.name.localeCompare(b.name));
+    const won_n = sum(rows, 'won');
+    const lost_n = sum(rows, 'lost');
+    return {
+      rows,
+      totals: {
+        name: `Total · ${rows.length}`, raised: sum(rows, 'raised'), open: sum(rows, 'open'), open_inr: sum(rows, 'open_inr'),
+        offers: sum(rows, 'offers'), offered_inr: sum(rows, 'offered_inr'), won: won_n, won_inr: sum(rows, 'won_inr'),
+        lost: lost_n, win_rate: pct(won_n, won_n + lost_n),
+      },
+    };
+  }
+
+  const breakdownColumns = (nameLabel) => [
+    { key: 'name', label: nameLabel, type: 'text' },
+    { key: 'raised', label: 'Raised', type: 'int' },
+    { key: 'last_raised', label: 'Last enquiry', type: 'date' },
+    { key: 'open', label: 'Open now', type: 'int' },
+    { key: 'open_inr', label: 'Open value (₹)', type: 'inr', hint: 'Right now, at the current rate' },
+    { key: 'offers', label: 'Offers sent', type: 'int' },
+    { key: 'offered_inr', label: 'Offered (₹)', type: 'inr', hint: 'Last priced offer sent per enquiry in the period' },
+    { key: 'won', label: 'Won', type: 'int' },
+    { key: 'won_inr', label: 'Won value (₹)', type: 'inr' },
+    { key: 'lost', label: 'Lost', type: 'int' },
+    { key: 'win_rate', label: 'Win rate %', type: 'pct' },
+  ];
+
+  const MEDIUMS = ['CALL', 'MEETING', 'TEAMS', 'SITE_VISIT', 'EMAIL'];
 
   /** One row per enquiry per month: the last offer it was sent that month. */
   function lastOfferPerMonth(offers) {
@@ -370,6 +435,141 @@ function createSalesReports(repository, config = salesConfigService) {
             offers: sum(rows, 'offers'), won: won_n, won_inr: sum(rows, 'won_inr'), lost: lost_n,
             win_rate: pct(won_n, won_n + lost_n), activities: sum(rows, 'activities'),
           },
+        };
+      },
+    },
+    // ── 7. Customer-wise ──────────────────────────────────────────────────────
+    {
+      key: 'customer-wise',
+      title: 'Customer-wise Report',
+      description: 'Per customer: enquiries raised, open now, offers sent, orders won and lost, values in ₹ and the win rate.',
+      filters: ['period', 'owner', 'type', 'application'],
+      columns: breakdownColumns('Customer'),
+      build: (f) => breakdown(f, 'customer_id', (ids) => repository.customerNames(ids)),
+    },
+
+    // ── 8. Application-wise ───────────────────────────────────────────────────
+    {
+      key: 'application-wise',
+      title: 'Application-wise Report',
+      description: 'Per application (Annealing, Hardening, …): enquiries raised, open now, offers sent, orders won and lost, values in ₹.',
+      filters: ['period', 'owner', 'type', 'customer'],
+      columns: breakdownColumns('Application'),
+      build: (f) => breakdown(f, 'application_id', (ids) => repository.applicationNames(ids)),
+    },
+
+    // ── 9. Follow-up & Activity ───────────────────────────────────────────────
+    {
+      key: 'followup-activity',
+      title: 'Follow-up & Activity Report',
+      description: 'Per person: customer interactions logged in the period by kind, reviews held, follow-ups scheduled, and follow-ups overdue right now.',
+      filters: ['period', 'owner', 'type', 'application', 'customer'],
+      columns: [
+        { key: 'name', label: 'Person', type: 'text' },
+        { key: 'CALL', label: 'Calls', type: 'int' },
+        { key: 'MEETING', label: 'Meetings', type: 'int' },
+        { key: 'TEAMS', label: 'Teams', type: 'int' },
+        { key: 'SITE_VISIT', label: 'Site visits', type: 'int' },
+        { key: 'EMAIL', label: 'Emails', type: 'int' },
+        { key: 'total', label: 'Total interactions', type: 'int' },
+        { key: 'reviews', label: 'Reviews held', type: 'int', hint: 'Internal review meetings logged' },
+        { key: 'scheduled', label: 'Follow-ups scheduled', type: 'int', hint: 'Interactions that set a next follow-up date' },
+        { key: 'overdue', label: 'Overdue now', type: 'int', hint: 'Follow-ups past their date on enquiries this person holds right now' },
+      ],
+      async build(f) {
+        const [counts, scheduled, overdue] = await Promise.all([
+          repository.activityCounts(f), repository.followupsScheduled(f), repository.overdueFollowups(f),
+        ]);
+        const people = new Map();
+        const p = (id) => {
+          if (!people.has(id)) people.set(id, { id, CALL: 0, MEETING: 0, TEAMS: 0, SITE_VISIT: 0, EMAIL: 0, total: 0, reviews: 0, scheduled: 0, overdue: 0 });
+          return people.get(id);
+        };
+        for (const c of counts) {
+          if (!c.created_by) continue;
+          const x = p(c.created_by);
+          if (c.is_review) x.reviews += c._count._all;
+          else { x[c.type] += c._count._all; x.total += c._count._all; }
+        }
+        for (const c of scheduled) if (c.created_by) p(c.created_by).scheduled = c._count._all;
+        for (const o of overdue) {
+          const holder = o.enquiry.handler_id ?? o.enquiry.owner_id;
+          if (holder) p(holder).overdue += 1;
+        }
+        const names = await repository.userNames([...people.keys()]);
+        const rows = [...people.values()]
+          .map((x) => ({ ...x, name: names[x.id] ?? `User #${x.id}` }))
+          .sort((a, b) => b.total - a.total || b.overdue - a.overdue || a.name.localeCompare(b.name));
+        const totals = { name: 'Total' };
+        for (const k of [...MEDIUMS, 'total', 'reviews', 'scheduled', 'overdue']) totals[k] = sum(rows, k);
+        return { rows, totals };
+      },
+    },
+
+    // ── 10. Stalled / Aging ───────────────────────────────────────────────────
+    {
+      key: 'stalled-aging',
+      title: 'Stalled / Aging Report',
+      description: 'Every open enquiry right now with how long it has sat in its stage against the stage limit — stalled ones first.',
+      filters: ['owner', 'type', 'application', 'customer', 'stage'],
+      columns: [
+        { key: 'ref_no', label: 'Ref', type: 'text', link: 'enquiry' },
+        { key: 'customer', label: 'Customer', type: 'text' },
+        { key: 'title', label: 'Title', type: 'text' },
+        { key: 'stage', label: 'Stage', type: 'text' },
+        { key: 'status', label: 'Status', type: 'text' },
+        { key: 'days_in_stage', label: 'Days in stage', type: 'int' },
+        { key: 'limit', label: 'Stage limit (days)', type: 'int' },
+        { key: 'over_by', label: 'Over by (days)', type: 'int' },
+        { key: 'holder', label: 'With', type: 'text' },
+        { key: 'owner', label: 'Owner', type: 'text' },
+        { key: 'last_activity', label: 'Last activity', type: 'date' },
+        { key: 'age', label: 'Enquiry age (days)', type: 'int' },
+        { key: 'currency', label: 'Currency', type: 'text' },
+        { key: 'value', label: 'Expected value', type: 'amount' },
+        { key: 'value_inr', label: 'Value (₹)', type: 'inr', hint: 'At the current rate' },
+        { key: 'temperature', label: 'Temperature', type: 'text' },
+      ],
+      async build(f) {
+        const [rates, open] = await Promise.all([loadRates(), repository.openEnquiries(f)]);
+        const last = await repository.lastActivity(open.map((e) => e.id));
+        const now = Date.now();
+        const rows = open
+          .filter((e) => e.stage !== 'WON' && e.stage !== 'LOST')
+          .map((e) => {
+            const days = Math.floor((now - e.stage_since.getTime()) / DAY_MS);
+            const limit = STAGE_AGING_DAYS[e.stage] ?? null;
+            const over = limit === null ? null : days - limit;
+            return {
+              id: e.id,
+              ref_no: e.ref_no,
+              customer: e.customer?.name ?? null,
+              title: e.title,
+              stage: STAGE[e.stage] ?? e.stage,
+              status: over !== null && over >= 0 ? 'Stalled' : 'Within limit',
+              days_in_stage: days,
+              limit,
+              over_by: over !== null && over >= 0 ? over : null,
+              holder: (e.handler ?? e.owner)?.name ?? null,
+              owner: e.owner?.name ?? null,
+              last_activity: day(last[e.id] ?? null),
+              age: Math.floor((now - e.created_at.getTime()) / DAY_MS),
+              currency: e.currency_code,
+              value: num(e.expected_value),
+              value_inr: e.expected_value === null ? null : paise(toInr(e.expected_value, e.currency_code, rates)),
+              temperature: e.current_temperature ? TEMP[e.current_temperature] : null,
+            };
+          })
+          // Stalled first, most overdue first; then the rest by days in stage.
+          .sort((a, b) => (b.over_by ?? -1) - (a.over_by ?? -1) || b.days_in_stage - a.days_in_stage);
+        const stalled = rows.filter((r) => r.status === 'Stalled');
+        return {
+          rows,
+          totals: {
+            ref_no: `Total · ${rows.length} open (${stalled.length} stalled)`,
+            value_inr: sum(rows, 'value_inr'),
+          },
+          notes: ['Shows the position right now — the period does not apply. A stage is stalled once its days reach the stage limit.'],
         };
       },
     },
