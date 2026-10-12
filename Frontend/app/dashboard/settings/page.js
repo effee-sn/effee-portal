@@ -126,7 +126,7 @@ function ProfileTab({ me }) {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
       {/* Account Overview */}
       <Section title="Account Overview">
         <div className="flex items-center gap-4 mb-5">
@@ -310,7 +310,7 @@ function CompanyTab() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
       {/* Company Info */}
       <Section title="Company Information" description="Appears on emails and reports sent to your team">
         <form onSubmit={handleSaveInfo} className="space-y-4">
@@ -430,8 +430,8 @@ function SecurityTab() {
   };
 
   return (
-    <div className="space-y-5">
-      <SsoSettings />
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
+      <div className="xl:col-span-2"><SsoSettings /></div>
 
       <Section title="Login Security" description="Control how many login attempts are allowed before an IP is temporarily blocked">
         <form onSubmit={handleSave} className="space-y-4">
@@ -505,7 +505,7 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('profile');
 
   if (permLoading || !me) return (
-    <div className="space-y-4 animate-pulse max-w-2xl p-4">
+    <div className="space-y-4 animate-pulse p-4">
       <div className="h-6 w-28 bg-gray-200 rounded" />
       <div className="h-px w-full bg-gray-200 rounded" />
       {[1, 2, 3].map((i) => (
@@ -518,7 +518,7 @@ export default function SettingsPage() {
   );
 
   return (
-    <div className="max-w-2xl p-4 pb-8">
+    <div className="p-4 pb-8">
       {/* Page header */}
       <div className="mb-4">
         <h1 className="text-lg font-semibold text-gray-800">Settings</h1>
