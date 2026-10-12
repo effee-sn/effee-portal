@@ -1,11 +1,15 @@
 const prisma = require('../../lib/prisma');
 const { notificationService } = require('../notification/notification.service');
 const { stageLabel } = require('./enquiry.service');
+const config = require('../../config/env');
+const { formatTime } = require('../../lib/timezone');
 
 /**
  * Sales reminders, run by the periodic sweep (see followup.scheduler):
  *
- *   - **Follow-up / review due** — an activity's follow-up date has arrived.
+ *   - **Follow-up / review coming up** — a timed follow-up (a call at 3 PM,
+ *     a review at 5:30) is reminded LEAD minutes before (15 by default); a
+ *     date-only follow-up at its morning time (9:00 local) that day.
  *   - **Stage aging** — an enquiry has sat in one stage past its threshold.
  *
  * Both go to the enquiry's *current handler* (the person who must act now),
@@ -30,24 +34,31 @@ const STAGE_AGING_DAYS = Object.freeze({
 /**
  * @returns {Promise<{ checked: number, sent: number }>}
  */
-async function runDueFollowupReminders() {
-  const now = new Date();
+async function runDueFollowupReminders(now = new Date()) {
+  const lead = new Date(now.getTime() + config.FOLLOWUP_REMINDER.LEAD_MINUTES * 60 * 1000);
   const due = await prisma.enquiryActivity.findMany({
     where: {
       deleted_at: null,
       follow_up_ended: false,
       reminded_at: null,
-      follow_up_at: { not: null, lte: now },
+      follow_up_at: { not: null },
       enquiry: { deleted_at: null, stage: { notIn: ['WON', 'LOST'] } },
-      // A review's next date only matters while the enquiry is still at Review;
-      // once it has moved on, the old date is stale and must not nag anyone.
-      OR: [{ is_review: false }, { is_review: true, enquiry: { stage: 'REVIEW' } }],
+      AND: [
+        // A review's next date only matters while the enquiry is still at Review;
+        // once it has moved on, the old date is stale and must not nag anyone.
+        { OR: [{ is_review: false }, { is_review: true, enquiry: { stage: 'REVIEW' } }] },
+        // Timed: within the lead window (or already past, if a sweep was missed).
+        // Date-only: once its morning reminder time has come.
+        { OR: [{ follow_up_timed: true, follow_up_at: { lte: lead } }, { follow_up_timed: false, follow_up_at: { lte: now } }] },
+      ],
     },
     select: {
       id: true,
       subject: true,
       next_medium: true,
       is_review: true,
+      follow_up_at: true,
+      follow_up_timed: true,
       enquiry: { select: { id: true, ref_no: true, title: true, owner_id: true, handler_id: true } },
     },
     orderBy: { follow_up_at: 'asc' },
@@ -68,7 +79,9 @@ async function runDueFollowupReminders() {
       // handler is whoever holds the enquiry now.
       userIds: [a.enquiry.handler_id ?? a.enquiry.owner_id],
       type: notificationService.Type.FOLLOWUP_DUE,
-      title: `${a.is_review ? 'Review' : 'Follow-up'} due: ${a.enquiry.ref_no}`,
+      // "Review at 5:30 pm: ENQ-…" for a timed one; "Follow-up today: ENQ-…" for a day.
+      title: `${a.is_review ? 'Review' : 'Follow-up'} ${a.follow_up_timed
+        ? `at ${formatTime(a.follow_up_at, config.APP_TIMEZONE)}` : 'today'}: ${a.enquiry.ref_no}`,
       body: `${a.subject}${!a.is_review && a.next_medium ? ` · ${a.next_medium}` : ''} — ${a.enquiry.title}`,
       entityType: 'Enquiry',
       entityId: String(a.enquiry.id),

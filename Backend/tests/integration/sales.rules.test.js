@@ -463,6 +463,55 @@ describe('Sales rules: reminders', () => {
     assert.equal(await notified(fx.internal.id, 'FOLLOWUP_DUE', id), 0);
   });
 
+  it('a timed follow-up is reminded 15 minutes before — not earlier, not after', async () => {
+    const id = (await toOfferReleased()).id;
+    await sendOffer(id, fx.internal); // Field holds
+    const at = new Date(Date.now() + 60 * 60 * 1000); // a call one hour from now
+    await log(id, fx.field, { follow_up_at: at });
+    const titles = async () => (await prisma.notification.findMany({
+      where: { user_id: fx.field.id, type: 'FOLLOWUP_DUE', entity_id: String(id) }, select: { title: true },
+    })).map((n) => n.title);
+
+    await followup.runDueFollowupReminders(new Date(at.getTime() - 30 * 60 * 1000)); // 30 min before
+    assert.equal((await titles()).length, 0, 'too early at 30 minutes before');
+
+    await followup.runDueFollowupReminders(new Date(at.getTime() - 15 * 60 * 1000)); // exactly 15 min before
+    const sent = await titles();
+    assert.equal(sent.length, 1, 'reminded at 15 minutes before');
+    assert.match(sent[0], /^Follow-up at \d{1,2}:\d{2}\s?(am|pm): /i, 'the title says when');
+
+    await followup.runDueFollowupReminders(at);
+    assert.equal((await titles()).length, 1, 'only once');
+  });
+
+  it('a date-only follow-up is stored at 9:00 AM (India) and reminded that morning', async () => {
+    const id = (await toOfferReleased()).id;
+    await sendOffer(id, fx.internal);
+    const a = await log(id, fx.field, { follow_up_at: '2031-03-14' });
+    const row = await prisma.enquiryActivity.findUnique({ where: { id: a.id }, select: { follow_up_at: true, follow_up_timed: true } });
+    assert.equal(row.follow_up_at.toISOString(), '2031-03-14T03:30:00.000Z', '09:00 IST');
+    assert.equal(row.follow_up_timed, false);
+
+    await followup.runDueFollowupReminders(new Date('2031-03-14T03:20:00.000Z')); // 8:50 IST
+    assert.equal(await notified(fx.field.id, 'FOLLOWUP_DUE', id), 0, 'not before 9:00');
+    await followup.runDueFollowupReminders(new Date('2031-03-14T03:31:00.000Z')); // 9:01 IST
+    const n = await prisma.notification.findFirst({ where: { user_id: fx.field.id, type: 'FOLLOWUP_DUE', entity_id: String(id) } });
+    assert.match(n.title, /^Follow-up today: /);
+  });
+
+  it('rescheduling a follow-up re-arms its reminder', async () => {
+    const id = (await toOfferReleased()).id;
+    await sendOffer(id, fx.internal);
+    const a = await log(id, fx.field, { follow_up_at: new Date(Date.now() - 864e5) });
+    await followup.runDueFollowupReminders();
+    assert.equal(await notified(fx.field.id, 'FOLLOWUP_DUE', id), 1);
+
+    const later = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    await activityService.update(a.id, { follow_up_at: later }, actor(fx.field));
+    await followup.runDueFollowupReminders(new Date(later.getTime() - 10 * 60 * 1000));
+    assert.equal(await notified(fx.field.id, 'FOLLOWUP_DUE', id), 2, 'reminded again for the new time');
+  });
+
   it('a stalled stage reminds the holder once per stage, and re-arms after a stage change', async () => {
     const id = (await newEnquiry('GENERATED')).id;
     await upload(id, 'FORMAT_PDF', fx.field);

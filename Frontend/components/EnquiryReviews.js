@@ -41,11 +41,12 @@ function ReviewModal({ enquiryId, review, users, onClose, onSaved }) {
         is_review: true,
         type: 'MEETING',
         subject: form.subject,
-        activity_at: form.activity_at,
+        activity_at: form.activity_at ? new Date(form.activity_at).toISOString() : form.activity_at,
         internal_participants: form.internal_participants,
         minutes: form.minutes,
         follow_up_ended: form.no_future_review,
-        follow_up_at: form.no_future_review ? '' : form.follow_up_at,
+        // Exact moments go as ISO so the server never guesses the timezone.
+        follow_up_at: form.no_future_review || !form.follow_up_at ? '' : new Date(form.follow_up_at).toISOString(),
       };
       if (isEdit) await apiPut(`/sales/activities/${review.id}`, payload);
       else await apiPost(`/sales/enquiries/${enquiryId}/activities`, payload);

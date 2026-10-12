@@ -2,6 +2,8 @@ const { activityRepository } = require('./activity.repository');
 const { enquiryService } = require('./enquiry.service');
 const { auditService } = require('../audit/audit.service');
 const { notificationService } = require('../notification/notification.service');
+const config = require('../../config/env');
+const { zonedTime } = require('../../lib/timezone');
 const { NotFoundError, ForbiddenError } = require('../../core');
 
 /**
@@ -37,10 +39,26 @@ function createActivityService(repository) {
     return { ...row, internal_participants: internal };
   }
 
-  /** Maps a validated DTO to writable columns (serialising participant ids). */
+  /**
+   * Maps a validated DTO to writable columns (serialising participant ids).
+   *
+   * Follow-up timing: an exact date-time is reminded LEAD minutes before; a
+   * day ('YYYY-MM-DD') is stored at the morning reminder time in the business
+   * timezone. Any new follow-up date re-arms its reminder.
+   */
   function pickWritable(dto, data = {}) {
+    if (dto.follow_up_at !== undefined) {
+      if (typeof dto.follow_up_at === 'string') {
+        data.follow_up_at = zonedTime(dto.follow_up_at, config.FOLLOWUP_REMINDER.DAY_TIME, config.APP_TIMEZONE);
+        data.follow_up_timed = false;
+      } else {
+        data.follow_up_at = dto.follow_up_at;
+        data.follow_up_timed = true;
+      }
+      data.reminded_at = null;
+    }
     for (const f of ['type', 'activity_at', 'duration_min', 'subject', 'minutes', 'outcome',
-      'customer_participants', 'next_action', 'follow_up_at', 'next_medium', 'temperature',
+      'customer_participants', 'next_action', 'next_medium', 'temperature',
       'follow_up_ended', 'needs_negotiation', 'is_review']) {
       if (dto[f] !== undefined) data[f] = dto[f];
     }

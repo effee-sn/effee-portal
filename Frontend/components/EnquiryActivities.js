@@ -13,7 +13,18 @@ const toLocalInput = (d) => {
   const x = new Date(d);
   return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}T${pad(x.getHours())}:${pad(x.getMinutes())}`;
 };
-const toDateInput = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : '');
+// Local calendar date / time of an instant, for the date and time inputs.
+const toDateInput = (iso) => {
+  if (!iso) return '';
+  const x = new Date(iso);
+  return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`;
+};
+const toTimeInput = (iso) => {
+  if (!iso) return '';
+  const x = new Date(iso);
+  return `${pad(x.getHours())}:${pad(x.getMinutes())}`;
+};
+const fmtTime = (iso) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 const fmtDateTime = (iso) => new Date(iso).toLocaleString(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
 const isOverdue = (iso, ended) => iso && !ended && new Date(iso) < new Date(new Date().toDateString());
@@ -44,6 +55,8 @@ function ActivityModal({ enquiryId, activity, users, stage, onClose, onSaved }) 
     customer_participants: activity?.customer_participants || '',
     next_action: activity?.next_action || '',
     follow_up_at: toDateInput(activity?.follow_up_at),
+    // Only a timed follow-up has a meaningful time; a date-only one is stored at 9:00.
+    follow_up_time: activity?.follow_up_timed ? toTimeInput(activity.follow_up_at) : '',
     next_medium: activity?.next_medium || '',
     temperature: activity?.temperature || '',
     follow_up_ended: activity?.follow_up_ended || false,
@@ -67,9 +80,19 @@ function ActivityModal({ enquiryId, activity, users, stage, onClose, onSaved }) 
     e.preventDefault();
     setSaving(true); setError('');
     try {
+      // Send exact moments as ISO (the browser knows the user's timezone); a
+      // follow-up without a time goes as a plain date and is reminded at 9:00.
+      const { follow_up_time: time, ...rest } = form;
+      const payload = {
+        ...rest,
+        activity_at: form.activity_at ? new Date(form.activity_at).toISOString() : form.activity_at,
+        follow_up_at: form.follow_up_at
+          ? (time ? new Date(`${form.follow_up_at}T${time}`).toISOString() : form.follow_up_at)
+          : '',
+      };
       const res = isEdit
-        ? await apiPut(`/sales/activities/${activity.id}`, form)
-        : await apiPost(`/sales/enquiries/${enquiryId}/activities`, form);
+        ? await apiPut(`/sales/activities/${activity.id}`, payload)
+        : await apiPost(`/sales/enquiries/${enquiryId}/activities`, payload);
       onSaved();
       onClose();
     } catch (err) { setError(err.message); }
@@ -135,8 +158,15 @@ function ActivityModal({ enquiryId, activity, users, stage, onClose, onSaved }) 
             <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Follow-up</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className={label}>Next follow-up date</label>
-                <input name="follow_up_at" type="date" value={form.follow_up_at} onChange={change} className="ams-input" />
+                <label className={label}>Next follow-up</label>
+                <div className="flex gap-2">
+                  <input name="follow_up_at" type="date" value={form.follow_up_at} onChange={change} aria-label="Follow-up date" className="ams-input min-w-0" />
+                  <input name="follow_up_time" type="time" value={form.follow_up_time} onChange={change} disabled={!form.follow_up_at}
+                    aria-label="Follow-up time (optional)" className="ams-input w-28 shrink-0 disabled:bg-gray-50" />
+                </div>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  {form.follow_up_at && form.follow_up_time ? 'Reminder 15 min before.' : 'Time optional — without it, reminder at 9:00 AM that day.'}
+                </p>
               </div>
               <div>
                 <label className={label}>Next medium</label>
@@ -246,7 +276,7 @@ export default function EnquiryActivities({ enquiryId, canEdit, users = [], stag
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium">Follow-up ended</span>
               ) : a.follow_up_at ? (
                 <span className={`inline-flex items-center px-1.5 py-0.5 rounded font-medium ${isOverdue(a.follow_up_at, a.follow_up_ended) ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
-                  Next: {fmtDate(a.follow_up_at)}{a.next_medium ? ` · ${MEDIUM_LABEL[a.next_medium]}` : ''}{isOverdue(a.follow_up_at, a.follow_up_ended) ? ' · overdue' : ''}
+                  Next: {fmtDate(a.follow_up_at)}{a.follow_up_timed ? ` · ${fmtTime(a.follow_up_at)}` : ''}{a.next_medium ? ` · ${MEDIUM_LABEL[a.next_medium]}` : ''}{isOverdue(a.follow_up_at, a.follow_up_ended) ? ' · overdue' : ''}
                 </span>
               ) : null}
               {a.next_action && <span className="text-gray-500">{a.next_action}</span>}

@@ -1108,6 +1108,10 @@ model EnquiryActivity {
   // Enquiry.current_temperature). `follow_up_ended` closes the follow-up loop.
   next_action     String?       @db.Text
   follow_up_at    DateTime?
+  // True when the follow-up has a time of day (a call at 3 PM, a review at
+  // 5:30) — reminded LEAD minutes before. A date-only follow-up is stored at
+  // the morning reminder time (9:00 local) and reminded then.
+  follow_up_timed Boolean       @default(false)
   next_medium     ActivityType?
   temperature     Temperature?
   follow_up_ended Boolean       @default(false)

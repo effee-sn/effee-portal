@@ -125,6 +125,21 @@ const config = Object.freeze({
   ALLOWED_ORIGINS: list('ALLOWED_ORIGIN', ['http://localhost:3000']),
 
   /**
+   * Business timezone for wall-clock rules (e.g. "remind at 9:00 AM"),
+   * independent of the server's own timezone.
+   */
+  APP_TIMEZONE: (process.env.APP_TIMEZONE || 'Asia/Kolkata').trim(),
+
+  /**
+   * Follow-up / review reminders: how many minutes before a timed follow-up
+   * the reminder goes out, and when a date-only follow-up is reminded.
+   */
+  FOLLOWUP_REMINDER: {
+    LEAD_MINUTES: integer('FOLLOWUP_REMINDER_LEAD_MINUTES', 15),
+    DAY_TIME:     (process.env.FOLLOWUP_REMINDER_DAY_TIME || '09:00').trim(),
+  },
+
+  /**
    * Microsoft sign-in (Entra ID, OpenID Connect). All optional — SSO is only
    * offered once tenant, client id, secret and redirect URI are set AND an
    * administrator switches it on in Settings.

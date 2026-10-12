@@ -14,6 +14,19 @@ const optionalDate = z.preprocess(
   z.coerce.date().optional()
 );
 
+/**
+ * A follow-up is either a calendar day ('YYYY-MM-DD' — reminded in the
+ * morning) or an exact moment (ISO date-time — reminded ahead of time). The
+ * day form is kept as a string so the service can tell the two apart.
+ */
+const followUpAt = z.preprocess(
+  (v) => (v === '' || v === null ? undefined : v),
+  z.union([
+    z.string().regex(/^d{4}-d{2}-d{2}$/, 'Use a valid date'),
+    z.coerce.date({ invalid_type_error: 'Use a valid date and time' }),
+  ]).optional()
+);
+
 const optionalInt = z.preprocess(
   (v) => (v === '' || v === null ? undefined : v),
   z.coerce.number().int().positive().optional()
@@ -53,7 +66,7 @@ const createActivityBody = z.object({
   internal_participants: participantIds,
   customer_participants: optionalText(1000),
   next_action:           optionalText(2000),
-  follow_up_at:          optionalDate,
+  follow_up_at:          followUpAt,
   next_medium:           optionalMedium,
   temperature:           optionalTemp,
   follow_up_ended:       optionalBool,
@@ -71,7 +84,7 @@ const updateActivityBody = z.object({
   internal_participants: participantIds,
   customer_participants: optionalText(1000),
   next_action:           optionalText(2000),
-  follow_up_at:          optionalDate,
+  follow_up_at:          followUpAt,
   next_medium:           optionalMedium,
   temperature:           optionalTemp,
   follow_up_ended:       optionalBool,

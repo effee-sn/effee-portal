@@ -20,6 +20,7 @@ function createActivityRepository(db) {
     customer_participants: true,
     next_action: true,
     follow_up_at: true,
+    follow_up_timed: true,
     next_medium: true,
     temperature: true,
     follow_up_ended: true,

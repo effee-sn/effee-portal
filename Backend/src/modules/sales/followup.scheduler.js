@@ -8,10 +8,15 @@ const { logger } = require('../../core');
  * A `running` guard prevents overlap if a sweep runs long.
  */
 
-const INTERVAL_MS = 15 * 60 * 1000; // every 15 minutes
+// Every minute, so a "15 minutes before" reminder lands on time (each sweep
+// is a couple of indexed queries). Stalled-stage reminders are day-scale, so
+// they run on every 15th sweep only.
+const INTERVAL_MS = 60 * 1000;
+const AGING_EVERY = 15;
 const FIRST_RUN_MS = 20 * 1000;     // shortly after boot
 
 let running = false;
+let sweeps = 0;
 let timer = null;
 
 async function sweep() {
@@ -20,8 +25,11 @@ async function sweep() {
   try {
     const followups = await runDueFollowupReminders();
     if (followups.sent > 0) logger.info(followups, 'Follow-up reminders sent');
-    const aging = await runStageAgingReminders();
-    if (aging.sent > 0) logger.info(aging, 'Stage-aging reminders sent');
+    if (sweeps % AGING_EVERY === 0) {
+      const aging = await runStageAgingReminders();
+      if (aging.sent > 0) logger.info(aging, 'Stage-aging reminders sent');
+    }
+    sweeps += 1;
   } catch (err) {
     logger.error({ err }, 'Follow-up reminder sweep failed');
   } finally {
