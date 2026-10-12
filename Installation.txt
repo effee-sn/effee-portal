@@ -1,19 +1,30 @@
 Effee Portal — Installation & Deployment Guide
 ==============================================
 
-Effee Portal is a service-ticketing platform with role-based access control.
-The frontend (Next.js) and backend (Express + Prisma) run as two separate apps
-that talk over REST.
+Effee Portal is the company's internal business portal: Service (tickets and
+department tasks), Sales (enquiries to orders), Projects, Master Data
+(customers, contacts, currencies), Reports (MIS) and Administration, with
+role-based access control. The frontend (Next.js) and backend (Express +
+Prisma) run as two separate apps that talk over REST.
 
-There is NO web install wizard. Setup is: create an empty database, fill in an
-environment file, run the setup/seed script, then start the two apps.
+There is NO web install wizard. Setup is: create an empty database, fill in the
+environment files, run the setup script, then start the two apps.
+
+The portal is an in-house application and is meant to run on the internal
+network (office LAN / company VPN), not on the public internet.
 
 
 1. Prerequisites
 ----------------
-  Node.js      v18 or higher         https://nodejs.org
-  MySQL 8+  or MariaDB 10.4+          https://mysql.com  /  https://mariadb.org
-  Git          any                   https://git-scm.com
+  Node.js      v20.9 or higher (v22 LTS recommended)   https://nodejs.org
+               (Next.js 16 does not run on Node 18.)
+  MySQL 8+  or MariaDB 10.6+                           https://mysql.com / https://mariadb.org
+  Git          any                                     https://git-scm.com
+
+  Production server (around 10–30 users):
+    4 vCPU, 8 GB RAM, 128 GB SSD, Ubuntu Server 24.04 LTS (22.04 also fine),
+    PM2 (process manager), nginx (reverse proxy), an HTTPS certificate for the
+    portal's domain.
 
 
 2. Get the project
@@ -38,41 +49,65 @@ Create an EMPTY database — the setup step creates all the tables.
   cd Backend
   cp .env.example .env
 
-Then edit .env. Key values:
+Then edit .env. Every setting is explained in .env.example; the main ones:
 
-  DATABASE_URL       mysql://user:password@localhost:3306/effeeportal   (required)
-  JWT_SECRET         a random string, at least 32 characters            (required)
-                     generate one with:
-                     node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
-  NODE_ENV           development (local) or production (server)
-  PORT               4000 by default
-  ALLOWED_ORIGIN     comma-separated browser origins allowed to call the API
-                     (e.g. http://localhost:3000, or your site URL in production)
-  TRUST_PROXY_HOPS   number of reverse proxies in front (0 = direct, 1 = behind nginx)
+  Core (required)
+    DATABASE_URL       mysql://user:password@localhost:3306/effeeportal
+    JWT_SECRET         a random string, at least 32 characters
+                       node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+    NODE_ENV           development (local) or production (server)
+    PORT               4000 by default
+    ALLOWED_ORIGIN     the portal's address as users open it, e.g.
+                       https://portal.effee-induction.com  (http://localhost:3000 locally)
+                       Also used for the links in emails and notifications.
+    TRUST_PROXY_HOPS   0 = direct, 1 = behind nginx
 
-  Seeding — bootstrap Super Admin account:
-  SEED_ADMIN_EMAIL       the admin login email
-  SEED_ADMIN_PASSWORD    leave blank in development (a random password is printed
-                         once); REQUIRED when NODE_ENV=production
-  SEED_ADMIN_PHONE       optional
+  First Super Admin (used by the seeder)
+    SEED_ADMIN_EMAIL       the admin login email
+    SEED_ADMIN_PASSWORD    leave blank in development (a random password is
+                           printed once); REQUIRED when NODE_ENV=production.
+                           Remove it from .env after the first setup.
+    SEED_ADMIN_PHONE       optional
 
-  Browser push (optional — see section 8):
-  VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT
+  Email (section 9)
+    SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_FROM_NAME / SMTP_FROM_EMAIL
+    EMAIL_NOTIFICATIONS    true = email every in-app notification as well
+
+  Browser push (section 8)
+    VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT
+
+  Microsoft sign-in (section 10)
+    MS_SSO_TENANT_ID / MS_SSO_CLIENT_ID / MS_SSO_CLIENT_SECRET /
+    MS_SSO_REDIRECT_URI / MS_SSO_ALLOWED_GROUP_ID
+
+  Reminders & timezone (section 11)
+    APP_TIMEZONE                     Asia/Kolkata
+    FOLLOWUP_REMINDER_LEAD_MINUTES   15
+    FOLLOWUP_REMINDER_DAY_TIME       09:00
+
+  Secrets (passwords, the client secret, JWT_SECRET) live ONLY in .env, never
+  in the database. .env is excluded from Git — never commit it.
 
 
 5. Install and set up the backend
 ---------------------------------
   cd Backend
   npm install
-  npm run setup        # prisma generate + db push + seed
+  npm run setup        # prisma generate + prisma migrate deploy + seed
+
+  `npm run setup` applies the database MIGRATIONS (not `prisma db push`). The
+  migrations also insert built-in data the portal needs — the INR base
+  currency, the sales stage probabilities and the starter applications — so
+  always set a database up through migrations.
 
   IMPORTANT: npm may block package install scripts, so `npm install` on its own
   does NOT generate the Prisma client. `npm run setup` runs `prisma generate`
-  explicitly, so use it. If you ever see "@prisma/client did not initialize yet",
-  run `npx prisma generate`.
+  explicitly. If you ever see "@prisma/client did not initialize yet", run
+  `npx prisma generate`.
 
-  The seeder prints a randomly generated Super Admin password ONCE (when
-  SEED_ADMIN_PASSWORD is not set). Copy it now — it is stored nowhere else.
+  The seeder creates the built-in roles, modules, permissions, departments,
+  company settings and the Super Admin. When SEED_ADMIN_PASSWORD is not set it
+  prints a random Super Admin password ONCE — copy it now.
 
   Start the backend:
     npm run dev          # development, auto-reload  → http://localhost:4000
@@ -84,11 +119,16 @@ Then edit .env. Key values:
 ------------------------------------
   cd ../Frontend
   npm install
+  cp .env.local.example .env.local
 
-  Create a file named .env.local inside the Frontend folder:
+  .env.local:
     NEXT_PUBLIC_API_URL=http://localhost:4000/api
     NEXT_PUBLIC_UPLOADS_URL=http://localhost:4000
-  (Change localhost to your server's domain/IP when deploying remotely.)
+  On the server use the portal's HTTPS address instead, e.g.
+    NEXT_PUBLIC_API_URL=https://portal.effee-induction.com/api
+    NEXT_PUBLIC_UPLOADS_URL=https://portal.effee-induction.com
+  NEXT_PUBLIC_* values are built into the frontend — after changing them you
+  must run `npm run build` again.
 
   Start the frontend:
     npm run dev          # development  → http://localhost:3000
@@ -97,65 +137,163 @@ Then edit .env. Key values:
     npm start
 
 
-7. Log in
----------
-Open http://localhost:3000 and log in with SEED_ADMIN_EMAIL and the password the
-seeder printed (or the one you set in SEED_ADMIN_PASSWORD).
+7. First login and initial setup
+--------------------------------
+Open the portal and log in with SEED_ADMIN_EMAIL and its password. Then:
+
+  Administrator → Roles        give each role its permissions (Service, Sales,
+                               Projects, Customers, Currencies, Reports,
+                               Sales configuration …). Admin roles have all.
+  Administrator → Users        add the users (email = their Microsoft 365
+                               address if Microsoft sign-in will be used).
+  Administrator → Departments  departments for service work.
+  Administrator → Flow Builder Services flow, and the Sales tab: select the
+                               internal sales person.
+  Administrator → Settings     company name and logo; Security (login limits,
+                               Microsoft sign-in).
+  Master Data → Currencies     INR is built in; add USD, EUR … with rates.
+  Sales → Configuration        stage probabilities and the applications list.
 
 
-8. Notifications & browser push (optional)
-------------------------------------------
-In-app notifications (the bell in the top bar) work out of the box — no setup.
+8. Notifications & browser push
+-------------------------------
+In-app notifications (the bell in the top bar) work out of the box.
 
-Browser push (desktop notifications, even when the portal tab is closed) is
-optional and needs three things:
+Browser push (desktop/phone pop-ups, even when the portal is closed) needs:
 
-  a) The web-push package — already in package.json, installed by `npm install`.
-
-  b) VAPID keys in the backend .env. Generate a pair:
+  a) VAPID keys in the backend .env. Generate a pair once:
        node -e "console.log(require('web-push').generateVAPIDKeys())"
-     then set and restart the backend:
+     then set them and restart the backend:
        VAPID_PUBLIC_KEY=<publicKey>
        VAPID_PRIVATE_KEY=<privateKey>
-       VAPID_SUBJECT=mailto:you@yourdomain.com     (a real contact you own)
+       VAPID_SUBJECT=mailto:admin@effee-induction.com
+     Keep the same keys for good — changing them breaks every existing
+     subscription.
 
-  c) HTTPS. Browsers only allow push on a secure origin (HTTPS); the only
-     exception is localhost. Over plain HTTP the "Enable desktop notifications"
-     option does not appear — but in-app notifications still work.
+  b) HTTPS with a certificate the users' browsers trust (localhost excepted).
+     Over plain HTTP the "Enable desktop notifications" option does not appear.
 
-If the VAPID keys are absent, push is simply disabled; in-app notifications are
-unaffected.
+  c) Each user enables it once from the bell. Permission is per website: if
+     the portal's domain changes, users enable it again on the new domain.
+
+If the VAPID keys are absent, push is disabled; in-app notifications and email
+are unaffected.
 
 
-9. Production deployment
+9. Email
+--------
+SMTP settings live only in the backend .env. Two ways to send through
+Microsoft 365:
+
+  Authenticated SMTP (recommended — works from any network):
+    SMTP_HOST=smtp.office365.com
+    SMTP_PORT=587
+    SMTP_USER=noreply@effee-induction.com     (a licensed mailbox with SMTP AUTH enabled)
+    SMTP_PASS=<that mailbox's password>
+    SMTP_FROM_EMAIL=noreply@effee-induction.com
+
+  Direct Send (no login):
+    SMTP_HOST=<tenant>.mail.protection.outlook.com
+    SMTP_PORT=25
+    SMTP_USER= / SMTP_PASS=   (empty)
+    Needs outgoing port 25 to be open and the sending IP to be allowed by the
+    domain's SPF record. Many cloud and home networks block port 25 or are on
+    spam blocklists — use port 587 in that case.
+
+  EMAIL_NOTIFICATIONS=true emails every in-app notification too. Password-reset
+  emails are always sent. Check the setup with Administrator → Settings →
+  Company → Email → Send test email.
+
+
+10. Microsoft sign-in (SSO) — optional
+--------------------------------------
+Lets users sign in with their Microsoft 365 account. Roles and permissions stay
+in the portal. Off until configured and switched on.
+
+  a) Your Microsoft 365 administrator registers the portal in Microsoft Entra
+     ID (single tenant), with the redirect URI (platform: Web)
+       https://<portal-domain>/api/v1/auth/sso/microsoft/callback
+     and gives you the Tenant ID, Client ID and a Client secret.
+     Recommended: Enterprise application → Properties → "Assignment required"
+     = Yes, and assign the group of people allowed to use the portal.
+  b) Backend .env:
+       MS_SSO_TENANT_ID=…
+       MS_SSO_CLIENT_ID=…
+       MS_SSO_CLIENT_SECRET=…
+       MS_SSO_REDIRECT_URI=https://<portal-domain>/api/v1/auth/sso/microsoft/callback
+       MS_SSO_ALLOWED_GROUP_ID=…     (optional; also add the "groups" claim in Entra)
+     The redirect URI must be IDENTICAL in Entra and in .env.
+  c) Restart the backend, then Administrator → Settings → Security →
+     Microsoft sign-in: enable it. Optionally switch off password sign-in for
+     users (the Super Admin can always sign in with a password).
+  d) Each person needs a portal user with the same email as their Microsoft
+     account (unless "create users automatically" is switched on).
+
+  The server needs outgoing HTTPS to login.microsoftonline.com. Full steps
+  are on the Microsoft sign-in card in Settings.
+
+
+11. Reminders & timezone
 ------------------------
-On the server (Node, MySQL/MariaDB, a process manager such as PM2, and a reverse
-proxy such as nginx are assumed):
+A background check runs every minute inside the backend:
+  - a follow-up or review WITH a time is reminded FOLLOWUP_REMINDER_LEAD_MINUTES
+    before it (15 by default) — a 5:30 meeting is reminded at 5:15;
+  - a follow-up with a DATE only is reminded at FOLLOWUP_REMINDER_DAY_TIME
+    (09:00) that day;
+  - enquiries stuck in a stage past its time limit are reminded once per stage.
+Times follow APP_TIMEZONE (Asia/Kolkata), whatever the server's own timezone.
 
-  cd Backend
-  npm install                 # installs deps — run whenever a release adds one
-  # ensure .env has: NODE_ENV=production, a strong JWT_SECRET, DATABASE_URL,
-  # SEED_ADMIN_PASSWORD, and (optionally) the VAPID keys
-  npm run deploy              # prisma generate + prisma migrate deploy + seed
-  pm2 restart effee-api      # first time: pm2 start src/server.js --name effee-api
 
-  cd ../Frontend
-  npm install
-  npm run build
-  pm2 restart effee-web      # first time: pm2 start "npm start" --name effee-web
+12. Production deployment
+-------------------------
+On the server (Node, MySQL/MariaDB, PM2 and nginx with HTTPS assumed):
+
+  First install: sections 3–6 with NODE_ENV=production, then start with PM2:
+    cd Backend   && pm2 start src/server.js --name effee-api
+    cd Frontend  && pm2 start "npm start" --name effee-web
+    pm2 save
+
+  Every update:
+    git pull
+
+    cd Backend
+    npm install                 # only needed when a release adds a dependency
+    npx prisma migrate deploy   # apply new database changes
+    npx prisma generate
+    npm run seed                # only when a release adds permissions (see notes)
+    pm2 restart effee-api
+
+    cd ../Frontend
+    npm install                 # only needed when a release adds a dependency
+    npm run build
+    pm2 restart effee-web
+
+  `npm run deploy` (in Backend) does generate + migrate deploy + seed in one go.
 
   Notes:
-   - `npm run deploy` runs the SEEDER, which re-asserts the built-in roles'
-     permissions (super-admin / admin / manager / staff). If you customised a
-     built-in role's permissions in the UI and don't want them reset, run
-     migrations only instead:
-         npx prisma generate && npx prisma migrate deploy
-     Custom roles created in the UI are never touched by the seeder.
-   - `npm install` is NOT part of the deploy script. Run it whenever a release
-     adds a dependency (e.g. web-push), or the API fails to boot with
-     "Cannot find module".
-   - Always restart BOTH effee-api and effee-web after a deploy.
-   - Serve the site over HTTPS — required for secure logins and for browser push.
+   - The seeder adds new modules and permissions, and re-asserts the BUILT-IN
+     roles' permissions (super-admin / admin / manager / staff). If you
+     customised a built-in role in the UI and don't want it reset, skip the
+     seed. Custom roles created in the UI are never touched.
+   - Always restart BOTH effee-api and effee-web after an update, then
+     hard-refresh the browser (Ctrl + Shift + R).
+   - Never run `next build` while `next dev` is running on the same folder —
+     it corrupts the dev cache (fix: stop dev, delete Frontend/.next, start again).
+   - nginx: serve the frontend (port 3000) at / and proxy /api and /uploads to
+     the backend (port 4000). Set TRUST_PROXY_HOPS=1 in the backend .env.
+   - Back up the database regularly and copy the backups off the server.
+     Uploaded documents live in Backend/storage/ and Backend/uploads/ — back
+     those up too.
+
+  Changing the portal's domain:
+    1. Backend .env: ALLOWED_ORIGIN (and MS_SSO_REDIRECT_URI — change it in
+       Entra too). Restart effee-api.
+    2. Frontend .env.local: NEXT_PUBLIC_API_URL and NEXT_PUBLIC_UPLOADS_URL,
+       then `npm run build` and restart effee-web.
+    3. HTTPS certificate for the new domain.
+    4. Browser push: keep the same VAPID keys; clear old subscriptions once
+       (SQL: DELETE FROM PushSubscription;) and users enable push again.
+       Everyone signs in again on the new domain.
 
 
 Ports (defaults)
@@ -165,32 +303,64 @@ Ports (defaults)
   MySQL / MariaDB  3306
 
 
+Tests (developers)
+------------------
+  cd Backend
+  npm test                 # unit tests
+  npm run test:sales       # sales rules, dashboards, reports (needs a DEV database)
+  npm run test:currency    # currencies
+  npm run test:sso         # Microsoft sign-in
+  The integration tests create and remove their own data and refuse to run
+  when NODE_ENV=production. Never point them at the live database.
+
+
 Troubleshooting
 ---------------
 "@prisma/client did not initialize yet" / Prisma client errors
     `npm install` didn't run `prisma generate` (blocked install scripts).
     Run: npx prisma generate      (or `npm run setup`).
 
-"Cannot connect to database"
+"Cannot connect to database" / P1001
     MySQL/MariaDB not running, wrong DATABASE_URL, or the database doesn't exist.
     Create it (section 3) and check the credentials.
 
-"Cannot find module 'web-push'"  (backend won't start after a pull)
+"Cannot find module …"  (backend won't start after a pull)
     A dependency was added but not installed on this machine.
-    Run: npm install   in Backend, then restart.
+    Run: npm install   in Backend (or Frontend), then restart.
 
 Migration failed / P3009 "migrate found a failed migration"
     One-time recovery, then re-deploy:
       npx prisma migrate resolve --rolled-back <migration_name>
       npx prisma migrate deploy
 
+P3005 "The database schema is not empty"
+    The database was created with `prisma db push` instead of migrations.
+    Set databases up with `npm run setup` / `npx prisma migrate deploy`.
+
 500 errors right after a deploy (e.g. "unknown column")
     The database migrated but the old backend process is still running.
     Restart it: pm2 restart effee-api      (and effee-web).
 
+New menu items or pages don't appear after an update
+    The frontend wasn't rebuilt, or the browser has the old version cached.
+    Run `npm run build` + `pm2 restart effee-web`, then Ctrl + Shift + R.
+    New permissions (e.g. REPORT_VIEW) also need `npm run seed` and the role
+    to be given the permission in Administrator → Roles.
+
 "Enable desktop notifications" does not appear
-    Browser push needs HTTPS (localhost excepted) AND the VAPID keys (section 8).
-    Over plain HTTP, only in-app notifications are available.
+    Browser push needs HTTPS with a trusted certificate (localhost excepted)
+    AND the VAPID keys (section 8).
+
+Test email fails: "550 5.7.1 … blocked using Spamhaus" or a timeout
+    Direct Send (port 25) from a blocked IP or network. Use authenticated SMTP
+    on port 587 (section 9).
+
+Microsoft sign-in: "redirect URI mismatch" (AADSTS50011)
+    MS_SSO_REDIRECT_URI in .env differs from the one registered in Entra.
+    They must match character for character.
+
+Microsoft sign-in: "There's no portal account for …"
+    Add a portal user with exactly that email (Administrator → Users).
 
 Config error aborts startup in production
     A required or weak value (e.g. JWT_SECRET under 32 characters). Fix the .env
