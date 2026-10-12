@@ -125,6 +125,22 @@ const config = Object.freeze({
   ALLOWED_ORIGINS: list('ALLOWED_ORIGIN', ['http://localhost:3000']),
 
   /**
+   * Microsoft sign-in (Entra ID, OpenID Connect). All optional — SSO is only
+   * offered once tenant, client id, secret and redirect URI are set AND an
+   * administrator switches it on in Settings.
+   *   MS_SSO_REDIRECT_URI  the backend callback registered in Entra, e.g.
+   *                        https://portal.example.com/api/v1/auth/sso/microsoft/callback
+   *   MS_SSO_ALLOWED_GROUP_ID  optional: only members of this Entra group may sign in
+   */
+  MS_SSO: {
+    TENANT_ID:        (process.env.MS_SSO_TENANT_ID || '').trim(),
+    CLIENT_ID:        (process.env.MS_SSO_CLIENT_ID || '').trim(),
+    CLIENT_SECRET:    process.env.MS_SSO_CLIENT_SECRET || '',
+    REDIRECT_URI:     (process.env.MS_SSO_REDIRECT_URI || '').trim(),
+    ALLOWED_GROUP_ID: (process.env.MS_SSO_ALLOWED_GROUP_ID || '').trim(),
+  },
+
+  /**
    * bcrypt work factor. 12 is the current sensible floor for new applications;
    * raising it later is safe because the cost is embedded in each stored hash.
    */

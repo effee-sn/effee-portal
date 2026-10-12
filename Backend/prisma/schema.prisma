@@ -240,9 +240,32 @@ model CompanySettings {
   login_window_minutes Int @default(15)
   max_upload_mb        Int @default(5)
 
+  // Microsoft sign-in (SSO). The tenant / client credentials live in .env
+  // (MS_SSO_*); these are the administrator's switches.
+  sso_microsoft_enabled Boolean @default(false)
+  // When SSO is on: may non-admin users still sign in with a password? The
+  // Super Admin always can (emergency access).
+  sso_password_login    Boolean @default(true)
+  // Create a portal user on first Microsoft sign-in (with the default role),
+  // instead of requiring an administrator to add them first.
+  sso_auto_create       Boolean @default(false)
+  sso_default_role_id   Int?
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
   updated_by Int?
+}
+
+/// One in-flight Microsoft sign-in: the state / nonce / PKCE verifier sent to
+/// Microsoft, checked (and deleted) when the user comes back. Stored in the
+/// database so any server instance can finish the sign-in. Expires in minutes.
+model SsoLoginState {
+  state         String   @id @db.VarChar(64)
+  nonce         String   @db.VarChar(64)
+  code_verifier String   @db.VarChar(128)
+  created_at    DateTime @default(now())
+
+  @@index([created_at])
 }
 
 model PasswordResetToken {

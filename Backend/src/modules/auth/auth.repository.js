@@ -20,8 +20,25 @@ function createAuthRepository(db) {
     findForLogin(email) {
       return db.user.findUnique({
         where: { email },
-        include: { role: { select: { name: true, slug: true } } },
+        include: { role: { select: { name: true, slug: true, is_system: true } } },
       });
+    },
+
+    /**
+     * Creates a portal user on first Microsoft sign-in. The password is a
+     * random, never-disclosed hash: the account signs in through Microsoft.
+     * @param {{ name: string, email: string, password: string, role_id: number }} data
+     */
+    createSsoUser(data) {
+      return db.user.create({
+        data: { ...data, is_verified: true },
+        include: { role: { select: { name: true, slug: true, is_system: true } } },
+      });
+    },
+
+    /** @param {number} id */
+    roleExists(id) {
+      return db.role.findFirst({ where: { id, deleted_at: null }, select: { id: true, is_system: true } });
     },
 
     /**

@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const config = require('../../config/env');
 const { authRepository } = require('./auth.repository');
 const { auditService } = require('../audit/audit.service');
+const { createSsoService } = require('./sso.service');
 const { validatePassword } = require('../../lib/passwordPolicy');
 const { sendMailCritical, isSmtpConfigured } = require('../../lib/mailer');
 const { forgotPassword: forgotPasswordTemplate } = require('../../lib/emailTemplates');
@@ -22,8 +23,13 @@ const {
  * to be uniform across status code, message body, *and* response time.
  *
  * @param {ReturnType<typeof import('./auth.repository').createAuthRepository>} repository
+ * @param {{ passwordLoginAllowed?: (user: object) => Promise<boolean> }} [policy]
+ *   Whether a user may sign in with a password (Microsoft SSO can switch it
+ *   off for everyone but the Super Admin). Allowed when not supplied.
  */
-function createAuthService(repository) {
+function createAuthService(repository, policy = {}) {
+  const passwordLoginAllowed = policy.passwordLoginAllowed || (async () => true);
+
   /**
    * A bcrypt hash of a throwaway value, used to keep the failed-login path's
    * timing comparable to the success path.
@@ -66,7 +72,7 @@ function createAuthService(repository) {
     }
   }
 
-  return {
+  const service = {
     /**
      * Verifies credentials and issues a token.
      *
@@ -109,6 +115,34 @@ function createAuthService(repository) {
         throw new ForbiddenError('Account is inactive', ErrorCode.ACCOUNT_INACTIVE);
       }
 
+      // With Microsoft sign-in on and password sign-in switched off, only the
+      // Super Admin may use a password (emergency access). Checked after the
+      // password verifies, like the status check above.
+      if (!(await passwordLoginAllowed(user))) {
+        await auditService.record({
+          action: auditService.Action.LOGIN_FAILED,
+          entity: 'User',
+          entityId: user.id,
+          actor: { ...context, id: user.id, email: user.email },
+          changes: { reason: 'password_login_disabled' },
+        });
+        throw new ForbiddenError('Password sign-in is turned off — use “Sign in with Microsoft”.', ErrorCode.SSO_REQUIRED);
+      }
+
+      const token = await service.issueSession(user, context, 'password');
+      const { password: _discarded, ...safeUser } = user;
+      return { token, user: safeUser };
+    },
+
+    /**
+     * Issues a session token for an authenticated user and records the login.
+     * Shared by password and Microsoft sign-in.
+     * @param {{ id: number, email: string, role: { slug: string } }} user
+     * @param {object} context request context (ip, user agent, …)
+     * @param {'password'|'microsoft'} method
+     * @returns {Promise<string>}
+     */
+    async issueSession(user, context, method) {
       const token = jwt.sign(
         { id: user.id, email: user.email, role: user.role.slug },
         config.JWT.SECRET,
@@ -120,10 +154,9 @@ function createAuthService(repository) {
         entity: 'User',
         entityId: user.id,
         actor: { ...context, id: user.id, email: user.email },
+        ...(method === 'microsoft' ? { changes: { method } } : {}),
       });
-
-      const { password: _discarded, ...safeUser } = user;
-      return { token, user: safeUser };
+      return token;
     },
 
     /**
@@ -256,6 +289,11 @@ function createAuthService(repository) {
 
       // Unknown address: respond exactly as for a known one, do no further work.
       if (!user) return { message: RESET_RESPONSE };
+      // Password sign-in switched off for this user (Microsoft SSO): a reset
+      // link would be useless, so send none — but answer the same way.
+      if (!(await passwordLoginAllowed(await repository.findForLogin(user.email)))) {
+        return { message: RESET_RESPONSE };
+      }
 
       const token = crypto.randomBytes(32).toString('hex');
       const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
@@ -316,8 +354,15 @@ function createAuthService(repository) {
       });
     },
   };
+  return service;
 }
 
-const authService = createAuthService(authRepository);
+// The two services reference each other (SSO issues sessions; password login
+// asks SSO whether passwords are allowed), so they are bound late.
+let ssoService = null;
+const authService = createAuthService(authRepository, {
+  passwordLoginAllowed: (user) => ssoService.passwordLoginAllowed(user),
+});
+ssoService = createSsoService({ issueSession: (user, context, method) => authService.issueSession(user, context, method) });
 
-module.exports = { authService, createAuthService };
+module.exports = { authService, createAuthService, ssoService };

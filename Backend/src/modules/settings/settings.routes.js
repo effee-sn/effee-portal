@@ -8,12 +8,13 @@ const authenticate      = require('../../middleware/authenticate');
 const requireSystemRole = require('../../middleware/requireSystemRole');
 const { asyncHandler, validate, BadRequestError } = require('../../core');
 const {
-  updateCompanyBody, updateSecurityBody, testEmailBody,
+  updateCompanyBody, updateSecurityBody, testEmailBody, updateSsoBody,
 } = require('./settings.validation');
 const {
   getSettings, getBranding, updateCompanyInfo,
   updateSecuritySettings, testEmail, uploadLogo,
 } = require('./settings.controller');
+const { getSsoSettings, updateSsoSettings } = require('../auth/sso.controller');
 
 const router = Router();
 
@@ -143,6 +144,15 @@ router.post(
   requireSystemRole,
   handleUploadErrors(logoUpload.single('logo')),
   asyncHandler(uploadLogo)
+);
+
+// Microsoft sign-in (SSO) — Super Admin only.
+router.get('/sso', requireSystemRole, asyncHandler(getSsoSettings));
+router.put(
+  '/sso',
+  requireSystemRole,
+  validate({ body: updateSsoBody }),
+  asyncHandler(updateSsoSettings)
 );
 
 module.exports = router;

@@ -48,7 +48,16 @@ const testEmailBody = z.object({
   test_to: schemas.email,
 });
 
+// Microsoft sign-in switches (credentials live in .env).
+const updateSsoBody = z.object({
+  enabled:         z.boolean().optional(),
+  password_login:  z.boolean().optional(),
+  auto_create:     z.boolean().optional(),
+  default_role_id: z.preprocess((v) => (v === '' ? null : v), z.coerce.number().int().positive().nullable().optional()),
+}).refine((d) => Object.values(d).some((v) => v !== undefined), { message: 'Nothing to update' });
+
 module.exports = {
+  updateSsoBody,
   updateCompanyBody,
   updateSecurityBody,
   testEmailBody,

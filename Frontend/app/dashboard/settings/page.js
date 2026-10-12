@@ -5,6 +5,7 @@ import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPut, apiPost } from '@/lib/api';
 import { UPLOADS_URL } from '@/lib/config';
+import SsoSettings from '@/components/SsoSettings';
 
 // ── Shared UI ─────────────────────────────────────────────────────────────────
 function Section({ title, description, children }) {
@@ -430,6 +431,8 @@ function SecurityTab() {
 
   return (
     <div className="space-y-5">
+      <SsoSettings />
+
       <Section title="Login Security" description="Control how many login attempts are allowed before an IP is temporarily blocked">
         <form onSubmit={handleSave} className="space-y-4">
           <Alert type={secMsg.type} message={secMsg.text} />

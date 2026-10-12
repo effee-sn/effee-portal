@@ -3,6 +3,7 @@ const { Router } = require('express');
 const authenticate = require('../../middleware/authenticate');
 const { asyncHandler, validate } = require('../../core');
 const {
+  createRateLimiter,
   loginRateLimiter,
   forgotPasswordRateLimiter,
   resetPasswordRateLimiter,
@@ -15,6 +16,10 @@ const {
   login, getMe, getProfile, updateProfile,
   changePassword, forgotPassword, resetPassword,
 } = require('./auth.controller');
+const { getSsoConfig, startMicrosoft, microsoftCallback } = require('./sso.controller');
+
+// Microsoft sign-in hops: generous for real users, a ceiling for scripted abuse.
+const ssoRateLimiter = createRateLimiter({ name: 'sso', max: 30, windowMs: 15 * 60 * 1000 });
 
 const router = Router();
 
@@ -47,6 +52,12 @@ router.post(
   validate({ body: resetPasswordBody }),
   asyncHandler(resetPassword)
 );
+
+// Microsoft sign-in (SSO). Browser navigations, not API calls: both answer
+// with a redirect.
+router.get('/sso/config', asyncHandler(getSsoConfig));
+router.get('/sso/microsoft/start', ssoRateLimiter, asyncHandler(startMicrosoft));
+router.get('/sso/microsoft/callback', ssoRateLimiter, asyncHandler(microsoftCallback));
 
 // ── Authenticated endpoints ──────────────────────────────────────────────────
 

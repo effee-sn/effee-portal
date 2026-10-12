@@ -1,12 +1,40 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { apiPost } from '@/lib/api';
+import { apiGet, apiPost } from '@/lib/api';
+import { API_URL } from '@/lib/config';
 import useNav from '@/lib/useNav';
+
+/** The Microsoft logo (four squares), as Microsoft's sign-in button guidance shows it. */
+function MicrosoftLogo() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true">
+      <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+      <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+      <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+    </svg>
+  );
+}
 
 function LoginForm() {
   const nav = useNav();
+  // What sign-in methods to offer (Administrator → Settings → Security).
+  const [sso, setSso] = useState({ microsoft: false, password_login: 'all' });
+  const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiGet('/auth/sso/config', { silent: true })
+      .then((res) => { if (!cancelled && res?.data) setSso(res.data); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  // Password sign-in is admin-only when SSO is on and passwords are switched
+  // off for users — keep the form one click away for the Super Admin.
+  const passwordHidden = sso.microsoft && sso.password_login === 'admin_only' && !showPassword;
 
   const [form, setForm]       = useState({ email: '', password: '' });
   const [error, setError]     = useState('');
@@ -32,7 +60,37 @@ function LoginForm() {
     }
   };
 
+  const microsoftButton = sso.microsoft && (
+    <a href={`${API_URL}/auth/sso/microsoft/start`}
+      className="w-full inline-flex items-center justify-center gap-3 px-4 py-2.5 border border-gray-300 rounded-md bg-white text-sm font-semibold text-gray-800 hover:bg-gray-50 transition">
+      <MicrosoftLogo />
+      Sign in with Microsoft
+    </a>
+  );
+
+  if (passwordHidden) {
+    return (
+      <div className="space-y-4">
+        {microsoftButton}
+        <p className="text-xs text-gray-500 text-center">Use your Microsoft 365 work account.</p>
+        <button type="button" onClick={() => setShowPassword(true)}
+          className="block mx-auto text-xs text-gray-400 hover:text-gray-700 hover:underline cursor-pointer">
+          Administrator sign-in
+        </button>
+      </div>
+    );
+  }
+
   return (
+    <div className="space-y-4">
+    {microsoftButton && (
+      <>
+        {microsoftButton}
+        <div className="flex items-center gap-3 text-[11px] uppercase tracking-wider text-gray-400">
+          <span className="flex-1 h-px bg-gray-200" />or<span className="flex-1 h-px bg-gray-200" />
+        </div>
+      </>
+    )}
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && (
         <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm">{error}</div>
@@ -74,6 +132,7 @@ function LoginForm() {
         {loading ? 'Signing in…' : 'Sign In'}
       </button>
     </form>
+    </div>
   );
 }
 
