@@ -78,12 +78,18 @@ const forgotPassword = async (req, res) => {
  *
  * @type {import('express').RequestHandler}
  */
+/** `GET /auth/reset-password/status?token=…` — can this link still be used? */
+const resetLinkStatus = async (req, res) => {
+  res.json(await authService.checkResetToken(String(req.query.token || '')));
+};
+
 const resetPassword = async (req, res) => {
   await authService.resetPassword(req.body, requestContext(req));
   res.json({ message: 'Password reset successfully. You can now log in.' });
 };
 
 module.exports = {
+  resetLinkStatus,
   login,
   getMe,
   getProfile,

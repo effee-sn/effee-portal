@@ -206,10 +206,17 @@ function createAuthRepository(db) {
      * @returns {Promise<void>}
      */
     async redeemResetToken({ token, userId, passwordHash }) {
-      await db.$transaction([
-        db.user.update({ where: { id: userId }, data: { password: passwordHash } }),
-        db.passwordResetToken.update({ where: { token }, data: { used: true } }),
-      ]);
+      // Claim the token first, conditionally: of two simultaneous submits only
+      // one can flip used=false → true, and only that one sets the password.
+      return db.$transaction(async (tx) => {
+        const claim = await tx.passwordResetToken.updateMany({
+          where: { token, used: false, expires_at: { gt: new Date() } },
+          data: { used: true },
+        });
+        if (claim.count !== 1) return false;
+        await tx.user.update({ where: { id: userId }, data: { password: passwordHash } });
+        return true;
+      });
     },
   };
 }

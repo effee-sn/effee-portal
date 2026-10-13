@@ -1,10 +1,41 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { API_URL } from '@/lib/config';
 import useNav from '@/lib/useNav';
+
+/** Why a link can't be used, worded for an invite or a reset. */
+function DeadLink({ reason, isInvite }) {
+  const copy = {
+    used: isInvite
+      ? ['This link has already been used', 'Your password is already set. Sign in with it — or use “Forgot password” if you don’t remember it.']
+      : ['This link has already been used', 'Your password was changed with this link. Sign in, or request a new link if you need to reset it again.'],
+    expired: isInvite
+      ? ['This link has expired', 'Ask your administrator to resend the invite, or request a new link below.']
+      : ['This link has expired', 'Reset links are valid for 1 hour. Request a new one below.'],
+    invalid: ['This link isn’t valid', 'It may be incomplete or replaced by a newer link. Request a new one below.'],
+  }[reason] || ['This link can’t be used', 'Request a new one below.'];
+
+  return (
+    <div className="text-center space-y-4 py-2">
+      <div className="w-14 h-14 bg-amber-50 border border-amber-100 rounded-full flex items-center justify-center mx-auto">
+        <svg className="w-7 h-7 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+      </div>
+      <div>
+        <p className="text-sm font-semibold text-gray-700">{copy[0]}</p>
+        <p className="text-xs text-gray-500 mt-1">{copy[1]}</p>
+      </div>
+      <div className="flex gap-2 justify-center">
+        <Link href="/login" className="btn-primary inline-flex justify-center">Sign in</Link>
+        <Link href="/forgot-password" className="btn-secondary inline-flex justify-center">Request a new link</Link>
+      </div>
+    </div>
+  );
+}
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
@@ -17,6 +48,26 @@ function ResetPasswordForm() {
   const [loading,   setLoading]   = useState(false);
   const [error,     setError]     = useState('');
   const [done,      setDone]      = useState(false);
+  // null = checking; then 'valid' | 'used' | 'expired' | 'invalid'.
+  const [linkStatus, setLinkStatus] = useState(null);
+
+  // Check the link as soon as the page opens, so a used or expired link says
+  // so straight away instead of showing a form that can only fail.
+  useEffect(() => {
+    if (!token) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/auth/reset-password/status?token=${encodeURIComponent(token)}`);
+        const data = await res.json();
+        if (!cancelled) setLinkStatus(res.ok ? (data.valid ? 'valid' : data.reason || 'invalid') : 'valid');
+      } catch {
+        // Can't check (network): show the form; the submit still validates.
+        if (!cancelled) setLinkStatus('valid');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [token]);
 
   if (!token) {
     return (
@@ -49,7 +100,12 @@ function ResetPasswordForm() {
         body: JSON.stringify({ token, new_password: passwords.new_password }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Something went wrong');
+      if (!res.ok) {
+        // Used or expired in the meantime (e.g. in another tab): show the explanation.
+        if (/already been used/i.test(data.message || '')) { setLinkStatus('used'); return; }
+        if (/invalid or has expired/i.test(data.message || '')) { setLinkStatus('expired'); return; }
+        throw new Error(data.message || 'Something went wrong');
+      }
       setDone(true);
       setTimeout(() => nav('/login'), 3000);
     } catch (err) {
@@ -75,6 +131,11 @@ function ResetPasswordForm() {
       </div>
     );
   }
+
+  if (linkStatus === null) {
+    return <p className="text-center text-sm text-gray-400 py-6">Checking your link…</p>;
+  }
+  if (linkStatus !== 'valid') return <DeadLink reason={linkStatus} isInvite={isInvite} />;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">

@@ -15,6 +15,7 @@ const {
 const {
   login, getMe, getProfile, updateProfile,
   changePassword, forgotPassword, resetPassword,
+  resetLinkStatus,
 } = require('./auth.controller');
 const { getSsoConfig, startMicrosoft, microsoftCallback } = require('./sso.controller');
 
@@ -45,6 +46,9 @@ router.post(
   validate({ body: forgotPasswordBody }),
   asyncHandler(forgotPassword)
 );
+
+// Rate limited like the reset itself: it tests a token.
+router.get('/reset-password/status', resetPasswordRateLimiter, asyncHandler(resetLinkStatus));
 
 router.post(
   '/reset-password',

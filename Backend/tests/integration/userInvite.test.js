@@ -85,7 +85,9 @@ describe('New-user invite', () => {
 
   it('the link sets the password, after which the user can sign in; it works once', async () => {
     const token = tokenFrom(outbox.at(-1));
+    assert.deepEqual(await authService.checkResetToken(token), { valid: true }, 'usable before use');
     await authService.resetPassword({ token, new_password: 'NewPassw0rd!x' }, ctx);
+    assert.deepEqual(await authService.checkResetToken(token), { valid: false, reason: 'used' }, 'the page sees it as used');
     const session = await authService.login({ email: user.email, password: 'NewPassw0rd!x' }, ctx);
     assert.ok(session.token);
     await assert.rejects(authService.resetPassword({ token, new_password: 'Another0ne!x' }, ctx), { name: 'ValidationError' });
@@ -100,6 +102,15 @@ describe('New-user invite', () => {
     assert.notEqual(first, second);
     await assert.rejects(authService.resetPassword({ token: first, new_password: 'Old1nk!xx' }, ctx), { name: 'ValidationError' });
     await authService.resetPassword({ token: second, new_password: 'NewL1nk!xx' }, ctx);
+  });
+
+  it('an expired or unknown link is reported as such', async () => {
+    await usersService.resendInvite(user.id, ctx);
+    const token = tokenFrom(outbox.at(-1));
+    await prisma.passwordResetToken.update({ where: { token }, data: { expires_at: new Date(Date.now() - 1000) } });
+    assert.deepEqual(await authService.checkResetToken(token), { valid: false, reason: 'expired' });
+    await assert.rejects(authService.resetPassword({ token, new_password: 'Expired1!xx' }, ctx), { name: 'ValidationError' });
+    assert.deepEqual(await authService.checkResetToken('not-a-real-token'), { valid: false, reason: 'invalid' });
   });
 
   it('a user needs either a password or an invite', async () => {

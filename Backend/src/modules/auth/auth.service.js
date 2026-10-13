@@ -380,6 +380,21 @@ function createAuthService(repository, policy = {}) {
       }
     },
 
+    /**
+     * Whether a reset / invite link can still be used — so the page can say
+     * "already used" or "expired" before the person types a new password.
+     * Reveals nothing about the account.
+     * @param {string} token
+     * @returns {Promise<{ valid: boolean, reason?: 'used'|'expired'|'invalid' }>}
+     */
+    async checkResetToken(token) {
+      const record = token ? await repository.findResetToken(token) : null;
+      if (!record) return { valid: false, reason: 'invalid' };
+      if (record.used) return { valid: false, reason: 'used' };
+      if (Date.now() > record.expires_at.getTime()) return { valid: false, reason: 'expired' };
+      return { valid: true };
+    },
+
     async resetPassword({ token, new_password }, context) {
       assertPasswordPolicy(new_password);
 
@@ -392,7 +407,10 @@ function createAuthService(repository, policy = {}) {
       }
 
       const hash = await bcrypt.hash(new_password, config.BCRYPT_ROUNDS);
-      await repository.redeemResetToken({ token, userId: record.user_id, passwordHash: hash });
+      const redeemed = await repository.redeemResetToken({ token, userId: record.user_id, passwordHash: hash });
+      if (!redeemed) {
+        throw new ValidationError('This link has already been used. Please request a new one.');
+      }
 
       await auditService.record({
         action: auditService.Action.PASSWORD_RESET,
