@@ -3,6 +3,9 @@ const { notificationService } = require('../notification/notification.service');
 const { stageLabel } = require('./enquiry.service');
 const config = require('../../config/env');
 const { formatTime } = require('../../lib/timezone');
+const { enquiryRows, NEXT_STEP } = require('./emailDetails');
+
+const MEDIUM = Object.freeze({ CALL: 'Call', MEETING: 'Meeting', TEAMS: 'Teams', SITE_VISIT: 'Site visit', EMAIL: 'Email' });
 
 /**
  * Sales reminders, run by the periodic sweep (see followup.scheduler):
@@ -59,7 +62,11 @@ async function runDueFollowupReminders(now = new Date()) {
       is_review: true,
       follow_up_at: true,
       follow_up_timed: true,
-      enquiry: { select: { id: true, ref_no: true, title: true, owner_id: true, handler_id: true } },
+      enquiry: { select: {
+        id: true, ref_no: true, title: true, owner_id: true, handler_id: true, stage: true,
+        expected_value: true, currency_code: true,
+        customer: { select: { name: true } }, owner: { select: { name: true } }, currency: { select: { symbol: true } },
+      } },
     },
     orderBy: { follow_up_at: 'asc' },
     take: BATCH,
@@ -87,6 +94,16 @@ async function runDueFollowupReminders(now = new Date()) {
       entityId: String(a.enquiry.id),
       link: `/dashboard/sales/enquiries/${a.enquiry.id}`,
       actorId: null,
+      email: {
+        eyebrow: a.is_review ? 'Sales · Review reminder' : 'Sales · Follow-up reminder',
+        intro: a.follow_up_timed
+          ? `Your ${a.is_review ? 'review meeting' : 'follow-up'} is at ${formatTime(a.follow_up_at, config.APP_TIMEZONE)} today.`
+          : `You have a ${a.is_review ? 'review' : 'follow-up'} due today.`,
+        details: enquiryRows(a.enquiry, [
+          [a.is_review ? 'Review' : 'Follow-up', a.subject],
+          ['Medium', !a.is_review && a.next_medium ? MEDIUM[a.next_medium] : null],
+        ]),
+      },
     });
     sent += 1;
   }
@@ -114,6 +131,8 @@ async function runStageAgingReminders() {
     select: {
       id: true, ref_no: true, title: true, stage: true, stage_since: true,
       aging_reminded_at: true, owner_id: true, handler_id: true,
+      expected_value: true, currency_code: true,
+      customer: { select: { name: true } }, owner: { select: { name: true } }, currency: { select: { symbol: true } },
     },
     orderBy: { stage_since: 'asc' },
     take: 1000,
@@ -142,6 +161,11 @@ async function runStageAgingReminders() {
       entityId: String(e.id),
       link: `/dashboard/sales/enquiries/${e.id}`,
       actorId: null,
+      email: {
+        eyebrow: 'Sales · Stalled',
+        intro: `This enquiry has been in ${stageLabel(e.stage)} for ${days} days, past the stage's time limit. Please move it forward.`,
+        details: enquiryRows(e, [['Days in stage', String(days)], ['Next step', NEXT_STEP[e.stage]]]),
+      },
     });
     sent += 1;
   }

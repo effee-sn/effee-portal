@@ -7,6 +7,7 @@ const { enquiryService } = require('./enquiry.service');
 const { auditService } = require('../audit/audit.service');
 const { notificationService } = require('../notification/notification.service');
 const { loadRates } = require('../master/fx');
+const { money } = require('./emailDetails');
 const { NotFoundError, ForbiddenError, BadRequestError, ConflictError, ValidationError } = require('../../core');
 
 // Kinds that hold a single *current* document. Re-uploading creates the next
@@ -177,6 +178,14 @@ function createAttachmentService(repository) {
           type: notificationService.Type.OFFER_SENT,
           title: `Offer sent: ${enquiry.ref_no}`,
           body: `"${before.file_name}" was sent to the customer`,
+          email: {
+            intro: 'An offer on your enquiry was sent to the customer.',
+            details: [
+              ['Enquiry', enquiry.ref_no],
+              ['Offer', `Rev ${before.version} — ${before.file_name}`],
+              ['Price', money(before.offer_value, enquiry.currency_code)],
+            ],
+          },
           entityType: 'Enquiry',
           entityId: String(enquiry.id),
           link: `/dashboard/sales/enquiries/${enquiry.id}`,

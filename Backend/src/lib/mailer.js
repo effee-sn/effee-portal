@@ -78,13 +78,19 @@ function fromAddress() {
  * @param {{ to: string, subject: string, html: string }} message
  * @returns {Promise<{ sent: boolean, reason?: string }>}
  */
-async function sendMail({ to, subject, html }) {
+async function sendMail({ to, subject, html, text }) {
   try {
     if (!MAIL.NOTIFICATIONS) return { sent: false, reason: 'Notifications disabled' };
     const t = getTransporter();
-    if (!t) return { sent: false, reason: 'SMTP not configured' };
+    if (!t) {
+      logger.warn({ to, subject }, 'Notification email not sent — SMTP not configured');
+      return { sent: false, reason: 'SMTP not configured' };
+    }
 
-    await t.sendMail({ from: fromAddress(), to, subject, html });
+    const info = await t.sendMail({ from: fromAddress(), to, subject, html, text });
+    // Microsoft's reply and message id — what an admin needs to find the
+    // email in Exchange message trace (e.g. if it was junked/quarantined).
+    logger.info({ to, subject, messageId: info.messageId, response: info.response }, 'Notification email sent');
     return { sent: true };
   } catch (err) {
     logger.error({ err, to, subject }, 'Failed to send notification email');
@@ -98,14 +104,14 @@ async function sendMail({ to, subject, html }) {
  * @param {{ to: string, subject: string, html: string }} message
  * @returns {Promise<{ sent: boolean, skipped?: boolean, reason?: string }>}
  */
-async function sendMailCritical({ to, subject, html }) {
+async function sendMailCritical({ to, subject, html, text }) {
   try {
     const t = getTransporter();
     if (!t) {
       logger.warn('SMTP not configured — cannot send critical email');
       return { sent: false, skipped: true, reason: 'SMTP not configured' };
     }
-    await t.sendMail({ from: fromAddress(), to, subject, html });
+    await t.sendMail({ from: fromAddress(), to, subject, html, text });
     return { sent: true };
   } catch (err) {
     logger.error({ err }, 'Failed to send critical email');
@@ -122,7 +128,7 @@ async function sendMailCritical({ to, subject, html }) {
  * @param {{ to: string, subject: string, html: string }} message
  * @returns {Promise<void>}
  */
-async function sendTestMail({ to, subject, html }) {
+async function sendTestMail({ to, subject, html, text }) {
   const t = getTransporter();
   if (!t) {
     throw new Error('SMTP is not configured. Set SMTP_HOST plus either SMTP_USER/SMTP_PASS '

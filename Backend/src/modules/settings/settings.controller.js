@@ -1,26 +1,13 @@
 const { settingsService } = require('./settings.service');
 const { sendTestMail } = require('../../lib/mailer');
+const { testEmail: testEmailTemplate } = require('../../lib/emailTemplates');
+const config = require('../../config/env');
 const { BadRequestError } = require('../../core');
 
 /**
  * Settings HTTP controller. SMTP is configured from `.env`, not here; the
  * test-email endpoint exercises that environment configuration.
  */
-
-/**
- * Escapes the five characters that carry meaning in HTML markup.
- *
- * @param {string} value
- * @returns {string}
- */
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
 
 /**
  * `GET /settings` — filtered by the caller's role in the service.
@@ -59,17 +46,10 @@ const updateSecuritySettings = async (req, res) => {
  */
 const testEmail = async (req, res) => {
   const { test_to } = req.body;
-  const settings = await settingsService.get(req.user);
 
   try {
-    await sendTestMail({
-      to: test_to,
-      subject: 'Effee Portal — Email Test',
-      // The company name is administrator-controlled and rendered into HTML, so
-      // it is escaped rather than interpolated raw.
-      html: `<p>This is a test email from <strong>${escapeHtml(settings.company_name || 'Effee Portal')}</strong>. `
-          + 'Your email configuration is working correctly.</p>',
-    });
+    // Same branded layout as every notification email (text is escaped there).
+    await sendTestMail(await testEmailTemplate({ to: test_to, portalUrl: config.ALLOWED_ORIGINS[0] }));
   } catch (err) {
     // Admin-only config test: surface the real SMTP reason (timeout, bad login,
     // relay denied, …) instead of a generic 500 the admin can't act on.

@@ -5,6 +5,9 @@ const { notificationService } = require('../notification/notification.service');
 const config = require('../../config/env');
 const { zonedTime } = require('../../lib/timezone');
 const { NotFoundError, ForbiddenError } = require('../../core');
+const { stageName } = require('./emailDetails');
+
+const MEDIUM = Object.freeze({ CALL: 'Call', MEETING: 'Meeting', TEAMS: 'Teams', SITE_VISIT: 'Site visit', EMAIL: 'Email' });
 
 /**
  * Enquiry activity business logic — the interaction trail used for INCOMING
@@ -115,6 +118,20 @@ function createActivityService(repository) {
         type: notificationService.Type.ACTIVITY_FOLLOWUP,
         title: `Activity on ${enquiry.ref_no}`,
         body: `${activity.subject}${activity.follow_up_at ? ' — follow-up scheduled' : ''}`,
+        email: {
+          intro: `${activity.is_review ? 'An internal review' : 'A customer interaction'} was logged on your enquiry.`,
+          details: [
+            ['Enquiry', `${enquiry.ref_no} — ${enquiry.title}`],
+            ['Stage', stageName(enquiry.stage)],
+            [activity.is_review ? 'Review' : MEDIUM[activity.type] || 'Activity', activity.subject],
+            ['Outcome', activity.outcome],
+            ['Next follow-up', activity.follow_up_at
+              ? new Date(activity.follow_up_at).toLocaleString('en-IN', activity.follow_up_timed
+                ? { timeZone: config.APP_TIMEZONE, dateStyle: 'medium', timeStyle: 'short' }
+                : { timeZone: config.APP_TIMEZONE, dateStyle: 'medium' })
+              : null],
+          ],
+        },
         entityType: 'Enquiry',
         entityId: String(enquiryId),
         link: `/dashboard/sales/enquiries/${enquiryId}`,

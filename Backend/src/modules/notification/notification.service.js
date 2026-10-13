@@ -27,19 +27,41 @@ function absoluteLink(link) {
  *
  * @param {ReturnType<typeof import('./notification.repository').createNotificationRepository>} repository
  */
+/** Email wording per kind of record, unless the caller supplies its own. */
+const EMAIL_DEFAULTS = Object.freeze({
+  Enquiry: {
+    eyebrow: 'Sales',
+    actionLabel: 'Open enquiry',
+    reason: "You're receiving this because you work on this enquiry in the portal.",
+  },
+  ServiceTicket: {
+    eyebrow: 'Service',
+    actionLabel: 'Open ticket',
+    reason: "You're receiving this because you're involved in this ticket in the portal.",
+  },
+});
+
 function createNotificationService(repository) {
   /**
    * Mirrors a notification to each recipient's inbox by email. Fire-and-forget
    * (the caller never waits on SMTP) and best-effort (`sendMail` never throws).
    * Skipped entirely when email is off or SMTP is not configured in `.env`.
    */
-  function emailRecipients(recipients, { title, body, link }) {
+  function emailRecipients(recipients, { title, body, link, entityType, email = {} }) {
     if (!isEmailEnabled()) return;
     (async () => {
       const users = await repository.findEmailRecipients(recipients);
       const actionUrl = absoluteLink(link);
+      const defaults = EMAIL_DEFAULTS[entityType] || {};
       await Promise.all(users.filter((u) => u.email).map(async (u) => {
-        const mail = await notificationEmail({ to: u.email, userName: u.name, title, body, actionUrl });
+        const mail = await notificationEmail({
+          to: u.email, userName: u.name, title, body, actionUrl,
+          eyebrow: email.eyebrow ?? defaults.eyebrow,
+          actionLabel: email.actionLabel ?? defaults.actionLabel,
+          intro: email.intro,
+          details: email.details,
+          reason: email.reason ?? defaults.reason,
+        });
         await sendMail(mail);
       }));
     })().catch((err) => logger.error({ err, title }, 'Failed to email notification'));
@@ -86,9 +108,12 @@ function createNotificationService(repository) {
      * @param {string|number} [params.entityId]
      * @param {string} [params.link] Where clicking it should go.
      * @param {number|null} [params.actorId] Excluded from recipients.
+     * @param {{ intro?: string, details?: Array<[string, string]>, actionLabel?: string, eyebrow?: string, reason?: string }} [params.email]
+     *   Extra content for the email only: a sentence on what to do, and the
+     *   key facts as label/value rows.
      * @returns {Promise<void>}
      */
-    async notify({ userIds, type, title, body, entityType, entityId, link, actorId }) {
+    async notify({ userIds, type, title, body, entityType, entityId, link, actorId, email }) {
       try {
         const recipients = [...new Set(userIds)].filter((id) => id && id !== actorId);
         if (recipients.length === 0) return;
@@ -108,7 +133,7 @@ function createNotificationService(repository) {
         await pushService.sendToUsers(recipients, { title, body, url: link });
 
         // …and to email (background; no-op unless EMAIL_NOTIFICATIONS + SMTP_* are set).
-        emailRecipients(recipients, { title, body, link });
+        emailRecipients(recipients, { title, body, link, entityType, email });
       } catch (err) {
         logger.error({ err, type, title }, 'Failed to write notification(s)');
       }

@@ -5,6 +5,7 @@ const { notificationService } = require('../notification/notification.service');
 const { missingForStage, GATED_STAGES } = require('./stageGate');
 const { currencyService } = require('../master/currency.service');
 const { loadRates, toInr, paise } = require('../master/fx');
+const { NEXT_STEP, enquiryRows, money, sentence, stageName } = require('./emailDetails');
 const { NotFoundError, ConflictError, ValidationError, ForbiddenError, buildSearchClause } = require('../../core');
 
 /** Human label for a stage enum, for notification text (`FOLLOW_UP` → `Follow up`). */
@@ -201,6 +202,10 @@ function createEnquiryService(repository) {
       entityId: String(enquiry.id),
       link: `/dashboard/sales/enquiries/${enquiry.id}`,
       actorId: actor?.id ?? null,
+      email: {
+        intro: sentence(note) || `It's now at ${stageName(enquiry.stage)} and with you. ${NEXT_STEP[enquiry.stage] || ''}`.trim(),
+        details: enquiryRows(enquiry, [['Next step', NEXT_STEP[enquiry.stage]]]),
+      },
     });
   }
 
@@ -208,8 +213,9 @@ function createEnquiryService(repository) {
    * Tells everyone with a stake in the deal how it closed: the field owner, the
    * internal handler, and whoever raised it — minus the person who closed it.
    */
-  async function notifyClose(enquiry, actor, { type, title, body }) {
+  async function notifyClose(enquiry, actor, { type, title, body, email }) {
     await notificationService.notify({
+      email,
       userIds: [enquiry.owner_id, await internalHandlerId(), enquiry.created_by],
       type,
       title,
@@ -228,6 +234,10 @@ function createEnquiryService(repository) {
       type: notificationService.Type.ENQUIRY_ASSIGNED,
       title: `Enquiry assigned: ${enquiry.ref_no}`,
       body: `${enquiry.title} — ${enquiry.customer?.name ?? 'customer'}`,
+      email: {
+        intro: "You're now the owner of this enquiry.",
+        details: enquiryRows(enquiry, [['Next step', NEXT_STEP[enquiry.stage]]]),
+      },
       entityType: 'Enquiry',
       entityId: String(enquiry.id),
       link: `/dashboard/sales/enquiries/${enquiry.id}`,
@@ -491,6 +501,15 @@ function createEnquiryService(repository) {
         type: notificationService.Type.ENQUIRY_WON,
         title: `Order won: ${enquiry.ref_no}`,
         body: `${enquiry.title} — ${enquiry.customer?.name ?? 'customer'}`,
+        email: {
+          eyebrow: 'Sales · Order won',
+          intro: 'The customer has confirmed the order.',
+          details: enquiryRows({ ...enquiry, expected_value: null }, [
+            ['Order value', money(enquiry.order_value, enquiry.currency_code, enquiry.currency?.symbol)],
+            ['PO number', enquiry.order_no],
+            ['PO date', enquiry.order_date ? new Date(enquiry.order_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : null],
+          ]),
+        },
       });
 
       return withMoney(enquiry);
@@ -527,6 +546,12 @@ function createEnquiryService(repository) {
         type: notificationService.Type.ENQUIRY_LOST,
         title: `Enquiry lost: ${enquiry.ref_no}`,
         body: `${enquiry.title} — ${dto.lost_reason}${dto.lost_to ? ` (went to ${dto.lost_to})` : ''}`,
+        email: {
+          eyebrow: 'Sales · Lost',
+          intro: 'This enquiry has been marked lost.',
+          details: enquiryRows({ ...enquiry, stage: before.stage }, [['Reason', dto.lost_reason], ['Went to', dto.lost_to]])
+            .map(([k, v]) => (k === 'Stage' ? ['Lost at stage', v] : [k, v])),
+        },
       });
 
       return withMoney(enquiry);
