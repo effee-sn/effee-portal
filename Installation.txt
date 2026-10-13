@@ -281,9 +281,7 @@ On the server (Node, MySQL/MariaDB, PM2 and nginx with HTTPS assumed):
      it corrupts the dev cache (fix: stop dev, delete Frontend/.next, start again).
    - nginx: serve the frontend (port 3000) at / and proxy /api and /uploads to
      the backend (port 4000). Set TRUST_PROXY_HOPS=1 in the backend .env.
-   - Back up the database regularly and copy the backups off the server.
-     Uploaded documents live in Backend/storage/ and Backend/uploads/ — back
-     those up too.
+   - Back up regularly — see section 13.
 
   Changing the portal's domain:
     1. Backend .env: ALLOWED_ORIGIN (and MS_SSO_REDIRECT_URI — change it in
@@ -294,6 +292,85 @@ On the server (Node, MySQL/MariaDB, PM2 and nginx with HTTPS assumed):
     4. Browser push: keep the same VAPID keys; clear old subscriptions once
        (SQL: DELETE FROM PushSubscription;) and users enable push again.
        Everyone signs in again on the new domain.
+
+
+13. Backups
+-----------
+  Database (use the DB user and name from DATABASE_URL):
+    mysqldump --no-tablespaces --single-transaction -u <db_user> -p <db_name>       > ~/portal-$(date +%Y%m%d).sql
+  --no-tablespaces   needed on MySQL 8 when the DB user lacks the PROCESS
+                     privilege (a normal app user does); harmless otherwise.
+  --single-transaction  consistent snapshot without locking the tables.
+
+  Check the backup isn't empty:
+    ls -lh ~/portal-*.sql                      # a size in KB/MB, not 0
+    grep -c "INSERT INTO" ~/portal-YYYYMMDD.sql   # > 0 (one line per table with data)
+
+  Restore (into an existing, empty database):
+    mysql -u <db_user> -p <db_name> < ~/portal-YYYYMMDD.sql
+
+  Also back up the uploaded files: Backend/storage/ (sales documents) and
+  Backend/uploads/ (logo etc.). Copy all backups off the server.
+
+
+14. Resetting the database (start fresh)
+----------------------------------------
+  Deletes ALL data — users, enquiries, tickets, settings — and rebuilds an
+  empty portal; every ID starts again from 1. Run on the server:
+
+  1. Stop the portal
+       pm2 stop all
+
+  2. Back up first (section 13) and check the file isn't empty.
+
+  3. Get the latest code
+       cd ~/<project-folder>
+       git pull
+
+  4. Backend/.env — make sure these are set:
+       NODE_ENV=production
+       SEED_ADMIN_EMAIL=<the new Super Admin's email>
+       SEED_ADMIN_PASSWORD=<a strong password>
+       JWT_SECRET=<a NEW value: openssl rand -base64 48>   (logs out old sessions)
+     plus the current settings from .env.example (APP_TIMEZONE, FOLLOWUP_*,
+     MS_SSO_*, SMTP_*, VAPID_*).
+
+  5. Wipe and rebuild the database
+       cd Backend
+       npm install
+       npx prisma migrate reset --force --skip-seed
+       npm run seed
+     migrate reset drops every table and re-applies all migrations (which
+     also restore the built-in INR currency, stage probabilities and
+     applications) and generates the Prisma client. It ends with
+     "Database reset successful". The seed creates the roles, modules,
+     permissions, departments, company settings and the Super Admin; it ends
+     with "Seeding complete."
+     If migrate reset reports an access error, the DB user may not drop and
+     re-create the database — run it as the MySQL root user.
+
+  6. Remove the old uploaded files
+       rm -rf storage/sales-docs/* uploads/*
+
+  7. Rebuild the frontend and start
+       cd ../Frontend
+       npm install
+       npm run build
+       pm2 restart all
+
+  8. Log in with SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD, then REMOVE
+     SEED_ADMIN_PASSWORD from Backend/.env. Users sign in again and re-enable
+     browser push from the bell.
+
+  9. Set up, in this order:
+       Administrator → Departments
+       Administrator → Roles        (permissions per role)
+       Administrator → Users        (Microsoft 365 emails, for SSO later)
+       Administrator → Flow Builder (Services flow; Sales tab: internal sales person)
+       Administrator → Settings     (company name, logo)
+       Master Data → Currencies     (USD, EUR … with rates; INR is built in)
+       Sales → Configuration        (probabilities, applications)
+       Master Data → Customers      (customers and contacts)
 
 
 Ports (defaults)
@@ -316,6 +393,19 @@ Tests (developers)
 
 Troubleshooting
 ---------------
+mysqldump: "Access denied; you need (at least one of) the PROCESS privilege(s)"
+    MySQL 8 refuses the tablespace part of the dump for a normal DB user.
+    Add --no-tablespaces (section 13). The dump of the data itself is fine.
+
+"npm warn allow-scripts … packages have install scripts not yet covered"
+    npm blocked the install scripts of @prisma/client, @prisma/engines,
+    prisma and bcrypt. Usually harmless (npm run setup / migrate reset run
+    prisma generate). If bcrypt or Prisma then fails to load (e.g. "Cannot
+    find module … bcrypt_lib.node"), allow and rebuild that package:
+      npm approve-scripts bcrypt
+      npm rebuild bcrypt
+    (likewise for prisma / @prisma/client, followed by npx prisma generate).
+
 "@prisma/client did not initialize yet" / Prisma client errors
     `npm install` didn't run `prisma generate` (blocked install scripts).
     Run: npx prisma generate      (or `npm run setup`).
