@@ -564,8 +564,8 @@ export default function EnquiryDetailPage() {
       {/* Process — where it is now and what's next */}
       <EnquiryProcess enquiry={enquiry} canManage={canManage} busy={busy} onPick={changeStage} blocked={readiness?.blocked} />
 
-      {/* Two columns: the record (details, documents) on the left; the
-          conversation (reviews, activity log) on the right. Stacks on small
+      {/* Two columns (60 / 40): the record (details, documents) on the left;
+          the conversation (reviews, activity log) on the right. Stacks on small
           screens. A new Generated enquiry has no reviews or activity yet, so
           the left column takes the full width. */}
       {(() => {
@@ -575,7 +575,7 @@ export default function EnquiryDetailPage() {
         const showActivity = enquiry.stage !== 'NEW' || enquiry.enquiry_type === 'INCOMING';
         const hasRight = showReviews || showActivity;
         return (
-          <div className={hasRight ? 'grid grid-cols-1 lg:grid-cols-2 gap-4 items-start' : ''}>
+          <div className={hasRight ? 'grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-4 items-start' : ''}>
             <div className="space-y-4 min-w-0">
               <Section title="Customer & Details" right={
                 <button onClick={() => nav(`/dashboard/master-data/customers/${enquiry.customer_id}`)}
