@@ -457,7 +457,7 @@ export default function EnquiryDetailPage() {
   const wonBlocked = readiness?.blocked?.WON || [];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-4 pb-10">
       {/* Header card */}
       <div className="bg-white rounded-lg border border-gray-200 px-5 py-4">
         <div className="flex items-start gap-3">

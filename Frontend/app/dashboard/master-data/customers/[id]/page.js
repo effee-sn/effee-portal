@@ -177,7 +177,7 @@ export default function CustomerDetailPage() {
   const contacts = customer.contacts || [];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-4 pb-10">
       {/* Header */}
       <div className="flex items-center gap-3">
         <button onClick={() => nav('/dashboard/master-data/customers')}
