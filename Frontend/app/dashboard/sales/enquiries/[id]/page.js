@@ -478,13 +478,31 @@ export default function EnquiryDetailPage() {
               {enquiry.current_temperature && <TempChip value={enquiry.current_temperature} />}
             </div>
             <h1 className="text-xl font-semibold text-gray-800 mt-0.5 break-words">{enquiry.title}</h1>
-            {enquiry.application && (
-              <p className="mt-0.5">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium text-[var(--ams-primary)] bg-[var(--ams-primary-mid)]">
-                  <span className="text-gray-500 font-normal">Application:</span> {enquiry.application.name}
-                </span>
-              </p>
-            )}
+            {(() => {
+              const prob = salesConfig?.probability?.[enquiry.stage];
+              const showWeighted = prob !== undefined && Number(enquiry.expected_value) > 0 && !['WON', 'LOST'].includes(enquiry.stage);
+              if (prob === undefined && !enquiry.application) return null;
+              return (
+                <div className="mt-0.5 flex items-center gap-2 flex-wrap">
+                  {prob !== undefined && (
+                    <span title="Win probability at the current stage (Sales → Configuration)"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium text-gray-800 bg-gray-100">
+                      <span className="text-gray-500 font-normal">Probability:</span> {prob}%
+                      {showWeighted && (
+                        <span className="text-gray-500 font-normal">
+                          · weighted {formatINR(Number(enquiry.expected_value_inr ?? enquiry.expected_value) * prob / 100)}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                  {enquiry.application && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium text-[var(--ams-primary)] bg-[var(--ams-primary-mid)]">
+                      <span className="text-gray-500 font-normal">Application:</span> {enquiry.application.name}
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
             <div className="text-xs text-gray-500 mt-1 flex items-center gap-x-4 gap-y-1 flex-wrap">
               <button onClick={() => nav(`/dashboard/master-data/customers/${enquiry.customer_id}`)}
                 className="hover:underline text-blue-600 cursor-pointer">{enquiry.customer?.name}</button>
@@ -591,17 +609,6 @@ export default function EnquiryDetailPage() {
                   <Field label="Designation">{enquiry.contact?.designation}</Field>
                   <Field label="Contact Info">{[enquiry.contact?.email, enquiry.contact?.phone].filter(Boolean).join(' · ') || null}</Field>
                   <Field label="Type">{TYPE_LABEL[enquiry.enquiry_type] || enquiry.enquiry_type}</Field>
-                  <Field label="Application">{enquiry.application?.name}</Field>
-                  <Field label="Probability">
-                    {salesConfig?.probability?.[enquiry.stage] !== undefined ? (
-                      <span title="Win probability at the current stage (Sales → Configuration)">
-                        {salesConfig.probability[enquiry.stage]}%
-                        {Number(enquiry.expected_value) > 0 && !['WON', 'LOST'].includes(enquiry.stage) && (
-                          <span className="text-gray-500"> · weighted {formatINR(Number(enquiry.expected_value_inr ?? enquiry.expected_value) * salesConfig.probability[enquiry.stage] / 100)}</span>
-                        )}
-                      </span>
-                    ) : null}
-                  </Field>
                   <Field label="Owner">{enquiry.owner?.name}</Field>
                   <Field label="Temperature">{enquiry.current_temperature ? <TempChip value={enquiry.current_temperature} /> : null}</Field>
                   <Field label="Currency">{enquiry.currency_code}{enquiry.currency?.name ? ` · ${enquiry.currency.name}` : ''}</Field>
