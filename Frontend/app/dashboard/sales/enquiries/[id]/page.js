@@ -564,71 +564,74 @@ export default function EnquiryDetailPage() {
       {/* Process — where it is now and what's next */}
       <EnquiryProcess enquiry={enquiry} canManage={canManage} busy={busy} onPick={changeStage} blocked={readiness?.blocked} />
 
-      {/* Customer + details — a single full-width card */}
-      <Section title="Customer & Details" right={
-        <button onClick={() => nav(`/dashboard/master-data/customers/${enquiry.customer_id}`)}
-          className="text-xs text-blue-600 hover:underline cursor-pointer">Open customer</button>
-      }>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-3">
-          <Field label="Customer">{enquiry.customer?.name}</Field>
-          <Field label="GSTIN">{enquiry.customer?.gstin}</Field>
-          <Field label="State">{enquiry.customer?.state}{enquiry.customer?.state_code ? ` (${enquiry.customer.state_code})` : ''}</Field>
-          <Field label="Contact">{enquiry.contact?.name}</Field>
-          <Field label="Designation">{enquiry.contact?.designation}</Field>
-          <Field label="Contact Info">{[enquiry.contact?.email, enquiry.contact?.phone].filter(Boolean).join(' · ') || null}</Field>
-          <Field label="Type">{TYPE_LABEL[enquiry.enquiry_type] || enquiry.enquiry_type}</Field>
-          <Field label="Application">{enquiry.application?.name}</Field>
-          <Field label="Probability">
-            {salesConfig?.probability?.[enquiry.stage] !== undefined ? (
-              <span title="Win probability at the current stage (Sales → Configuration)">
-                {salesConfig.probability[enquiry.stage]}%
-                {Number(enquiry.expected_value) > 0 && !['WON', 'LOST'].includes(enquiry.stage) && (
-                  <span className="text-gray-500"> · weighted {formatINR(Number(enquiry.expected_value_inr ?? enquiry.expected_value) * salesConfig.probability[enquiry.stage] / 100)}</span>
+      {/* Two columns: the record (details, documents) on the left; the
+          conversation (reviews, activity log) on the right. Stacks on small
+          screens. A new Generated enquiry has no reviews or activity yet, so
+          the left column takes the full width. */}
+      {(() => {
+        const showReviews = STAGE_RANK[enquiry.stage] >= STAGE_RANK.REVIEW;
+        // At New: Generated uploads the format only; Incoming also logs its
+        // gathering activities. Past New: documents + the activity timeline.
+        const showActivity = enquiry.stage !== 'NEW' || enquiry.enquiry_type === 'INCOMING';
+        const hasRight = showReviews || showActivity;
+        return (
+          <div className={hasRight ? 'grid grid-cols-1 lg:grid-cols-2 gap-4 items-start' : ''}>
+            <div className="space-y-4 min-w-0">
+              <Section title="Customer & Details" right={
+                <button onClick={() => nav(`/dashboard/master-data/customers/${enquiry.customer_id}`)}
+                  className="text-xs text-blue-600 hover:underline cursor-pointer">Open customer</button>
+              }>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
+                  <Field label="Customer">{enquiry.customer?.name}</Field>
+                  <Field label="GSTIN">{enquiry.customer?.gstin}</Field>
+                  <Field label="State">{enquiry.customer?.state}{enquiry.customer?.state_code ? ` (${enquiry.customer.state_code})` : ''}</Field>
+                  <Field label="Contact">{enquiry.contact?.name}</Field>
+                  <Field label="Designation">{enquiry.contact?.designation}</Field>
+                  <Field label="Contact Info">{[enquiry.contact?.email, enquiry.contact?.phone].filter(Boolean).join(' · ') || null}</Field>
+                  <Field label="Type">{TYPE_LABEL[enquiry.enquiry_type] || enquiry.enquiry_type}</Field>
+                  <Field label="Application">{enquiry.application?.name}</Field>
+                  <Field label="Probability">
+                    {salesConfig?.probability?.[enquiry.stage] !== undefined ? (
+                      <span title="Win probability at the current stage (Sales → Configuration)">
+                        {salesConfig.probability[enquiry.stage]}%
+                        {Number(enquiry.expected_value) > 0 && !['WON', 'LOST'].includes(enquiry.stage) && (
+                          <span className="text-gray-500"> · weighted {formatINR(Number(enquiry.expected_value_inr ?? enquiry.expected_value) * salesConfig.probability[enquiry.stage] / 100)}</span>
+                        )}
+                      </span>
+                    ) : null}
+                  </Field>
+                  <Field label="Owner">{enquiry.owner?.name}</Field>
+                  <Field label="Temperature">{enquiry.current_temperature ? <TempChip value={enquiry.current_temperature} /> : null}</Field>
+                  <Field label="Currency">{enquiry.currency_code}{enquiry.currency?.name ? ` · ${enquiry.currency.name}` : ''}</Field>
+                  <Field label="Expected Value">
+                    {enquiry.expected_value != null
+                      ? <MoneyText value={enquiry.expected_value} inr={enquiry.expected_value_inr} code={enquiry.currency_code} symbol={enquiry.currency?.symbol} />
+                      : null}
+                  </Field>
+                  <Field label="Expected Close">{fmtDate(enquiry.expected_close)}</Field>
+                  <Field label="Created">{fmtDate(enquiry.created_at)}</Field>
+                  <Field label="Created by">{enquiry.created_by ? (users.find((u) => String(u.id) === String(enquiry.created_by))?.name || `#${enquiry.created_by}`) : '—'}</Field>
+                  {enquiry.description && (
+                    <div className="col-span-2 sm:col-span-3"><Field label="Description">{enquiry.description}</Field></div>
+                  )}
+                </div>
+              </Section>
+              <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={visibleDocKinds(enquiry.stage)} onChanged={load}
+                currencyCode={enquiry.currency_code} currencySymbol={enquiry.currency?.symbol} />
+            </div>
+            {hasRight && (
+              <div className="space-y-4 min-w-0">
+                {showReviews && <EnquiryReviews enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} />}
+                {showActivity && (
+                  <div id="activity">
+                    <EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} stage={enquiry.stage} onChanged={load} />
+                  </div>
                 )}
-              </span>
-            ) : null}
-          </Field>
-          <Field label="Owner">{enquiry.owner?.name}</Field>
-          <Field label="Temperature">{enquiry.current_temperature ? <TempChip value={enquiry.current_temperature} /> : null}</Field>
-          <Field label="Currency">{enquiry.currency_code}{enquiry.currency?.name ? ` · ${enquiry.currency.name}` : ''}</Field>
-          <Field label="Expected Value">
-            {enquiry.expected_value != null
-              ? <MoneyText value={enquiry.expected_value} inr={enquiry.expected_value_inr} code={enquiry.currency_code} symbol={enquiry.currency?.symbol} />
-              : null}
-          </Field>
-          <Field label="Expected Close">{fmtDate(enquiry.expected_close)}</Field>
-          <Field label="Created">{fmtDate(enquiry.created_at)}</Field>
-          <Field label="Created by">{enquiry.created_by ? (users.find((u) => String(u.id) === String(enquiry.created_by))?.name || `#${enquiry.created_by}`) : '—'}</Field>
-          {enquiry.description && (
-            <div className="col-span-2 sm:col-span-3 lg:col-span-4"><Field label="Description">{enquiry.description}</Field></div>
-          )}
-        </div>
-      </Section>
-
-      {STAGE_RANK[enquiry.stage] >= STAGE_RANK.REVIEW && (
-        <EnquiryReviews enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} />
-      )}
-
-      {/* At New: Generated uploads the format only; Incoming also logs its
-          gathering activities. Past New: full documents + the timeline. */}
-      {enquiry.stage === 'NEW' ? (
-        enquiry.enquiry_type === 'INCOMING' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-            <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={visibleDocKinds(enquiry.stage)} onChanged={load}
-            currencyCode={enquiry.currency_code} currencySymbol={enquiry.currency?.symbol} />
-            <div id="activity"><EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} stage={enquiry.stage} onChanged={load} /></div>
+              </div>
+            )}
           </div>
-        ) : (
-          <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={visibleDocKinds(enquiry.stage)} onChanged={load}
-            currencyCode={enquiry.currency_code} currencySymbol={enquiry.currency?.symbol} />
-        )
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-          <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={visibleDocKinds(enquiry.stage)} onChanged={load}
-            currencyCode={enquiry.currency_code} currencySymbol={enquiry.currency?.symbol} />
-          <div id="activity"><EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} stage={enquiry.stage} onChanged={load} /></div>
-        </div>
-      )}
+        );
+      })()}
 
 
       {showHistory && <StageHistoryDrawer events={enquiry.stageEvents} users={users} onClose={() => setShowHistory(false)} />}
