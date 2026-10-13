@@ -457,9 +457,10 @@ export default function EnquiryDetailPage() {
   const wonBlocked = readiness?.blocked?.WON || [];
 
   return (
-    <div className="space-y-4 p-4 pb-10">
-      {/* Header card */}
-      <div className="bg-white rounded-lg border border-gray-200 px-5 py-4">
+    <div className="pb-10">
+      {/* Header — a full-width bar (no card border or rounding), divided from
+          the content below by a single line. */}
+      <div className="bg-white border-b border-gray-200 px-5 py-4">
         <div className="flex items-start gap-3">
           <button onClick={() => nav('/dashboard/sales/enquiries')}
             className="p-1.5 -ml-1.5 rounded hover:bg-gray-100 text-gray-500 cursor-pointer shrink-0" title="Back">
@@ -535,6 +536,7 @@ export default function EnquiryDetailPage() {
         </div>
       </div>
 
+      <div className="space-y-4 p-4">
       {/* Won / Lost banner */}
       {enquiry.stage === 'WON' && (
         <div className="rounded-lg border border-green-200 bg-green-50 px-5 py-3 space-y-3">
@@ -652,6 +654,7 @@ export default function EnquiryDetailPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
