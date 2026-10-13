@@ -55,7 +55,9 @@ const createUserBody = z.object({
   name:    schemas.name,
   email:   schemas.email,
   phone:   schemas.phone,
-  password,
+  // Optional: without one, the user sets their own through the invite email.
+  password: z.preprocess((v) => (v === '' || v === null ? undefined : v), password.optional()),
+  send_invite: schemas.flexibleBoolean.optional(),
   role_id: z.coerce.number().int().positive('role_id must be a positive integer'),
   status:  schemas.userStatus.optional(),
   department_id: createDepartmentId,

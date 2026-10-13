@@ -3,6 +3,8 @@ const bcrypt = require('bcrypt');
 const config = require('../../config/env');
 const { usersRepository } = require('./users.repository');
 const { auditService } = require('../audit/audit.service');
+const { authService } = require('../auth/auth.service');
+const crypto = require('crypto');
 const { NotFoundError, ConflictError, ValidationError, ForbiddenError, buildSearchClause } = require('../../core');
 
 /**
@@ -138,7 +140,15 @@ function createUsersService(repository) {
       await assertDepartmentExists(dto.department_id);
       await assertUnique({ email: dto.email, phone: dto.phone });
 
-      const password = await bcrypt.hash(dto.password, config.BCRYPT_ROUNDS);
+      // With no password the account is reachable only through the invite
+      // link: store a random hash nobody knows.
+      const sendInvite = dto.send_invite !== false;
+      if (!dto.password && !sendInvite) {
+        throw new ValidationError('Validation failed', [
+          { field: 'password', message: 'Set a password, or send an invite email so the user can set their own' },
+        ]);
+      }
+      const password = await bcrypt.hash(dto.password || crypto.randomBytes(32).toString('hex'), config.BCRYPT_ROUNDS);
 
       const user = await repository.create({
         name: dto.name,
@@ -163,7 +173,21 @@ function createUsersService(repository) {
         changes: { name: user.name, email: user.email, role_id: dto.role_id, status: user.status },
       });
 
-      return user;
+      // Welcome email with a "set your password" link (never the password).
+      const invite = sendInvite ? await authService.sendInvite(user, actor) : { sent: false, reason: 'Not requested' };
+      return { ...user, invite };
+    },
+
+    /**
+     * Re-sends the welcome / "set your password" email (e.g. it expired or went
+     * astray). Any earlier link stops working.
+     * @param {number} id
+     */
+    async resendInvite(id, actor) {
+      const user = await repository.findById(id);
+      if (!user) throw new NotFoundError('User');
+      if (user.status !== 'ACTIVE') throw new ConflictError('Activate the user before sending an invite');
+      return authService.sendInvite(user, actor);
     },
 
     /**

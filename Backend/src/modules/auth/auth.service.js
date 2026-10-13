@@ -8,7 +8,7 @@ const { auditService } = require('../audit/audit.service');
 const { createSsoService } = require('./sso.service');
 const { validatePassword } = require('../../lib/passwordPolicy');
 const { sendMailCritical, isSmtpConfigured } = require('../../lib/mailer');
-const { forgotPassword: forgotPasswordTemplate } = require('../../lib/emailTemplates');
+const { forgotPassword: forgotPasswordTemplate, invite: inviteTemplate } = require('../../lib/emailTemplates');
 const {
   UnauthenticatedError, ForbiddenError, NotFoundError,
   ConflictError, ValidationError, ErrorCode, logger,
@@ -45,6 +45,9 @@ function createAuthService(repository, policy = {}) {
 
   /** How long a reset link remains redeemable. */
   const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+
+  /** How long a new user's "set your password" link remains redeemable. */
+  const INVITE_TTL_HOURS = 48;
 
   /**
    * Returned by `requestPasswordReset` in every outcome.
@@ -331,6 +334,52 @@ function createAuthService(repository, policy = {}) {
      * @returns {Promise<void>}
      * @throws {ValidationError}
      */
+    /**
+     * Emails a new (or re-invited) user a one-time "set your password" link —
+     * the same token mechanism as password reset, valid for 48 hours. Any
+     * earlier unused link for the user stops working. Never throws.
+     *
+     * @param {{ id: number, name: string, email: string, role?: { name?: string } }} user
+     * @param {object} [actor] the administrator, for the audit trail
+     * @returns {Promise<{ sent: boolean, reason?: string }>}
+     */
+    async sendInvite(user, actor) {
+      try {
+        if (!(await isSmtpConfigured())) {
+          return { sent: false, reason: 'Email (SMTP) is not configured on the server' };
+        }
+        const token = crypto.randomBytes(32).toString('hex');
+        await repository.issueResetToken({
+          userId: user.id, token, expiresAt: new Date(Date.now() + INVITE_TTL_HOURS * 60 * 60 * 1000),
+        });
+        const origin = config.ALLOWED_ORIGINS[0];
+        const mail = await inviteTemplate({
+          to: user.email,
+          userName: user.name,
+          email: user.email,
+          role: user.role?.name,
+          setUrl: `${origin}/reset-password?token=${token}&invite=1`,
+          loginUrl: `${origin}/login`,
+          expiresHours: INVITE_TTL_HOURS,
+        });
+        const result = await sendMailCritical(mail);
+        const sent = Boolean(result?.sent);
+        await auditService.record({
+          action: 'INVITE_SENT',
+          entity: 'User',
+          entityId: user.id,
+          actor,
+          changes: { to: user.email, sent, ...(sent ? {} : { reason: result?.reason }) },
+        });
+        if (sent) logger.info({ to: user.email }, 'Invite email sent');
+        else logger.warn({ to: user.email, reason: result?.reason }, 'Invite email not sent');
+        return sent ? { sent: true } : { sent: false, reason: result?.reason || 'Email could not be sent' };
+      } catch (err) {
+        logger.error({ err, userId: user?.id }, 'Failed to send invite');
+        return { sent: false, reason: err.message };
+      }
+    },
+
     async resetPassword({ token, new_password }, context) {
       assertPasswordPolicy(new_password);
 

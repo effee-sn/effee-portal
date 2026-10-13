@@ -86,4 +86,10 @@ const deleteUser = async (req, res) => {
   res.json({ message: 'User deleted successfully' });
 };
 
-module.exports = { getUsers, getUserById, createUser, updateUser, deleteUser };
+/** `POST /users/:id/invite` — re-send the "set your password" email. */
+const resendInvite = async (req, res) => {
+  const result = await usersService.resendInvite(req.params.id, requestContext(req));
+  res.json(result);
+};
+
+module.exports = { getUsers, getUserById, createUser, updateUser, deleteUser, resendInvite };

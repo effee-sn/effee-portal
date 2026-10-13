@@ -23,7 +23,10 @@ function UserModal({ user, onClose, onSaved }) {
     name: user?.name || '', email: user?.email || '', phone: user?.phone || '',
     password: '', role_id: user?.role?.id || '', status: user?.status || 'ACTIVE',
     department_id: user?.department?.id || '', designation: user?.designation || '',
+    send_invite: true,
   });
+  const [inviteMsg, setInviteMsg] = useState({ type: '', text: '' });
+  const [inviting, setInviting]   = useState(false);
   const [roles, setRoles]             = useState([]);
   const [departments, setDepartments] = useState([]);
   const [error, setError]             = useState('');
@@ -36,11 +39,23 @@ function UserModal({ user, onClose, onSaved }) {
 
   const handleChange = (e) => { setForm({ ...form, [e.target.name]: e.target.value }); setError(''); };
 
+  const resendInvite = async () => {
+    setInviting(true); setInviteMsg({ type: '', text: '' });
+    try {
+      const r = await apiPost(`/users/${user.id}/invite`, {});
+      setInviteMsg(r.sent
+        ? { type: 'ok', text: `Invite sent to ${user.email}. The new link replaces any earlier one.` }
+        : { type: 'error', text: `Invite not sent: ${r.reason || 'email could not be sent'}` });
+    } catch (err) { setInviteMsg({ type: 'error', text: err.message }); }
+    finally { setInviting(false); }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault(); setLoading(true); setError('');
     try {
       const payload = { ...form };
-      if (isEdit && !payload.password) delete payload.password;
+      if (!payload.password) delete payload.password;
+      if (isEdit) delete payload.send_invite;
       const saved = isEdit ? await apiPut(`/users/${user.id}`, payload) : await apiPost('/users', payload);
       onSaved(saved, isEdit); onClose();
     } catch (err) { setError(err.message); } finally { setLoading(false); }
@@ -69,11 +84,25 @@ function UserModal({ user, onClose, onSaved }) {
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Email<span className="text-red-500"> *</span></label>
             <input name="email" type="email" value={form.email} onChange={handleChange} required placeholder="you@example.com" className="ams-input" />
           </div>
+          {!isEdit && (
+            <label className="flex items-start gap-2.5 rounded-md border border-gray-200 bg-gray-50 px-3 py-2.5 cursor-pointer">
+              <input type="checkbox" className="mt-0.5" checked={form.send_invite}
+                onChange={(e) => setForm({ ...form, send_invite: e.target.checked })} />
+              <span className="text-sm text-gray-700">
+                <span className="font-medium">Email an invite</span>
+                <span className="block text-xs text-gray-500 mt-0.5">They get a welcome email with a link to set their own password (valid 48 hours). No password is ever emailed.</span>
+              </span>
+            </label>
+          )}
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-              Password{!isEdit && <span className="text-red-500"> *</span>} {isEdit && <span className="text-gray-400 font-normal normal-case">(leave blank to keep)</span>}
+              Password
+              {!isEdit && !form.send_invite && <span className="text-red-500"> *</span>}
+              {isEdit && <span className="text-gray-400 font-normal normal-case"> (leave blank to keep)</span>}
+              {!isEdit && form.send_invite && <span className="text-gray-400 font-normal normal-case"> (optional — they set their own)</span>}
             </label>
-            <input name="password" type="password" value={form.password} onChange={handleChange} required={!isEdit} placeholder="••••••••" className="ams-input" />
+            <input name="password" type="password" value={form.password} onChange={handleChange}
+              required={!isEdit && !form.send_invite} placeholder="••••••••" autoComplete="new-password" className="ams-input" />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -102,6 +131,21 @@ function UserModal({ user, onClose, onSaved }) {
                 <option value="ACTIVE">Active</option>
                 <option value="INACTIVE">Inactive</option>
               </select>
+            </div>
+          )}
+          {isEdit && (
+            <div className="rounded-md border border-gray-200 px-3 py-2.5 space-y-1.5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-gray-600">Lost the welcome email, or the link expired?</span>
+                <button type="button" onClick={resendInvite} disabled={inviting || user.status !== 'ACTIVE'}
+                  title={user.status !== 'ACTIVE' ? 'Activate the user first' : undefined}
+                  className="text-xs font-medium text-[var(--ams-primary)] hover:underline cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0">
+                  {inviting ? 'Sending…' : 'Resend invite'}
+                </button>
+              </div>
+              {inviteMsg.text && (
+                <p className={`text-xs ${inviteMsg.type === 'error' ? 'text-red-600' : 'text-green-700'}`}>{inviteMsg.text}</p>
+              )}
             </div>
           )}
           <div className="flex gap-3 pt-2 pb-2">
@@ -316,9 +360,18 @@ function UsersPageInner() {
 
   const handleSearch = (e) => { e.preventDefault(); setPage(1); fetchUsers(1, search); };
 
+  const [notice, setNotice] = useState(null); // { type, text } after creating a user
+
   const handleSaved = (saved, isEdit) => {
     if (isEdit) setUsers((prev) => prev.map((u) => u.id === saved.id ? saved : u));
-    else { setUsers((prev) => [saved, ...prev]); setTotal((t) => t + 1); }
+    else {
+      const { invite, ...created } = saved;
+      setUsers((prev) => [created, ...prev]); setTotal((t) => t + 1);
+      if (invite?.sent) setNotice({ type: 'ok', text: `${created.name} was created and an invite email was sent to ${created.email}.` });
+      else if (invite && invite.reason !== 'Not requested') {
+        setNotice({ type: 'warn', text: `${created.name} was created, but the invite email wasn't sent (${invite.reason}). Open the user and use "Resend invite", or set a password for them.` });
+      } else setNotice({ type: 'ok', text: `${created.name} was created.` });
+    }
   };
 
   const handleDeleted = (id) => { setUsers((prev) => prev.filter((u) => u.id !== id)); setTotal((t) => t - 1); };
@@ -346,6 +399,13 @@ function UsersPageInner() {
 
   return (
     <div>
+      {notice && (
+        <div className={`mb-3 flex items-start justify-between gap-3 rounded-md border px-3 py-2.5 text-sm ${notice.type === 'warn'
+          ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-green-50 border-green-200 text-green-800'}`}>
+          <span>{notice.text}</span>
+          <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss" className="shrink-0 text-lg leading-none opacity-60 hover:opacity-100 cursor-pointer">&times;</button>
+        </div>
+      )}
       <div className="bg-white rounded border border-gray-200 overflow-hidden">
 
         {/* Control Panel */}

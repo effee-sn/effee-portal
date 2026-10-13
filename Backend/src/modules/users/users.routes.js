@@ -4,7 +4,7 @@ const authenticate = require('../../middleware/authenticate');
 const authorize    = require('../../middleware/authorize');
 const { asyncHandler, validate } = require('../../core');
 const { listUsersQuery, userIdParam, createUserBody, updateUserBody } = require('./users.validation');
-const { getUsers, getUserById, createUser, updateUser, deleteUser } = require('./users.controller');
+const { getUsers, getUserById, createUser, updateUser, deleteUser, resendInvite } = require('./users.controller');
 
 const router = Router();
 
@@ -45,6 +45,13 @@ router.post(
   authorize('USER_CREATE'),
   validate({ body: createUserBody }),
   asyncHandler(createUser)
+);
+
+router.post(
+  '/:id/invite',
+  authorize('USER_EDIT'),
+  validate({ params: userIdParam }),
+  asyncHandler(resendInvite)
 );
 
 router.put(

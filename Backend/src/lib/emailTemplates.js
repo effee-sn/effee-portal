@@ -212,6 +212,36 @@ async function forgotPassword(params) {
   return buildForgotPasswordEmail({ ...params, company: await getCompanyName() });
 }
 
+// ── Welcome / invite (new user) ──────────────────────────────────────────────
+/**
+ * Sent when an administrator creates a user. Never contains a password: the
+ * person sets their own through a one-time link.
+ */
+function buildInviteEmail({ company, to, userName, email, role, setUrl, loginUrl, expiresHours }) {
+  return {
+    to,
+    subject: `Welcome to ${company} — set your password`,
+    ...render({
+      company,
+      preheader: 'Your account is ready. Set your password to sign in.',
+      eyebrow: 'Welcome',
+      heading: `Welcome to ${company}`,
+      paragraphs: [
+        `Hi ${userName || 'there'},`,
+        'An account has been created for you. Set your password with the button below, then sign in.',
+      ],
+      details: [['Sign-in email', email], ['Role', role], ['Sign-in page', loginUrl]],
+      action: { label: 'Set your password', url: setUrl },
+      note: `This link works once and expires in ${expiresHours} hours. If it has expired, use “Forgot password” on the sign-in page or ask your administrator to resend the invite.`,
+      reason: `You're receiving this because an administrator created your ${company} account.`,
+    }),
+  };
+}
+
+async function invite(params) {
+  return buildInviteEmail({ ...params, company: await getCompanyName() });
+}
+
 // ── Settings → "Send test email" ─────────────────────────────────────────────
 function buildTestEmail({ company, to, portalUrl }) {
   return {
@@ -238,9 +268,11 @@ module.exports = {
   escapeHtml,
   notification,
   forgotPassword,
+  invite,
   testEmail,
   // Pure builders (no database) — for tests and previews.
   buildNotificationEmail,
   buildForgotPasswordEmail,
+  buildInviteEmail,
   buildTestEmail,
 };

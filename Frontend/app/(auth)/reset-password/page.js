@@ -10,6 +10,8 @@ function ResetPasswordForm() {
   const searchParams = useSearchParams();
   const nav       = useNav();
   const token        = searchParams.get('token');
+  // A new user's welcome link (vs a forgotten-password link) — same flow, own wording.
+  const isInvite     = searchParams.get('invite') === '1';
 
   const [passwords, setPasswords] = useState({ new_password: '', confirm_password: '' });
   const [loading,   setLoading]   = useState(false);
@@ -67,7 +69,7 @@ function ResetPasswordForm() {
           </svg>
         </div>
         <div>
-          <p className="text-sm font-semibold text-gray-700">Password reset successfully!</p>
+          <p className="text-sm font-semibold text-gray-700">{isInvite ? 'Your password is set — welcome!' : 'Password reset successfully!'}</p>
           <p className="text-xs text-gray-400 mt-1">Redirecting you to login…</p>
         </div>
       </div>
@@ -98,7 +100,7 @@ function ResetPasswordForm() {
         </div>
       ))}
       <button type="submit" disabled={loading} className="btn-primary w-full justify-center py-2.5 mt-1">
-        {loading ? 'Resetting…' : 'Reset Password'}
+        {loading ? 'Saving…' : isInvite ? 'Set Password' : 'Reset Password'}
       </button>
     </form>
   );
@@ -116,7 +118,7 @@ export default function ResetPasswordPage() {
           <div className="px-8 pt-8 pb-6 text-center border-b border-gray-100">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl mb-4 text-white text-xl font-black"
               style={{ backgroundColor: 'var(--ams-primary)' }}>
-              A
+              E
             </div>
             <h1 className="text-xl font-bold text-gray-800">Set New Password</h1>
             <p className="text-xs text-gray-400 mt-0.5">Choose a strong password for your account</p>
