@@ -17,8 +17,8 @@ const snippet = (text, max = 80) => {
 /**
  * Multi-department task business logic.
  *
- * A ticket can involve several departments. The PM (a SERVICE_VIEW / oversight
- * holder) adds a task per department at triage, then DISPATCHES them: each task
+ * A ticket can involve several departments. The PM (a SERVICE_EDIT holder)
+ * adds a task per department at triage, then DISPATCHES them: each task
  * goes to that department's lead, in parallel. A lead may hand their task to a
  * resolver, who submits their work back for the lead to validate — only the
  * lead finalises (RESOLVED) or declines it back to the PM. When every task is
@@ -35,9 +35,13 @@ function createDeptTaskService(repository, tickets) {
     return ticket;
   }
 
-  /** Only the PM / oversight (SERVICE_VIEW) manages the task list. */
+  /**
+   * Only the PM manages the task list (add / edit / remove / dispatch /
+   * redirect). That changes the ticket, so it needs SERVICE_EDIT — view-only
+   * users can watch every ticket but not re-route one.
+   */
   function assertManage(user) {
-    if (!hasPermission(user, 'SERVICE_VIEW')) {
+    if (!hasPermission(user, 'SERVICE_EDIT')) {
       throw new ForbiddenError('Only the project manager can manage the departments on a ticket');
     }
   }
@@ -393,7 +397,7 @@ function createDeptTaskService(repository, tickets) {
       await repository.update(taskId, { status: 'DECLINED', decline_reason: reason, awaiting_validation: false });
       await syncTicket(ticketId);
       // No single holder owns a declined task — notify whoever may redirect it.
-      const managers = await notificationService.recipientsWithPermission('SERVICE_VIEW');
+      const managers = await notificationService.recipientsWithPermission('SERVICE_EDIT');
       await notificationService.notify({
         userIds: managers,
         type: notificationService.Type.DEPT_TASK_DECLINED,

@@ -151,7 +151,8 @@ export default function DepartmentTasks({ ticket, me, can, users, departments, o
   const [modal, setModal] = useState(null);
   const [openFlow, setOpenFlow] = useState(null); // task id whose flow is expanded
 
-  const canManage = Boolean(me?.is_system || can('SERVICE_VIEW'));
+  // Adding / dispatching / redirecting departments changes the ticket: SERVICE_EDIT.
+  const canManage = Boolean(me?.is_system || can('SERVICE_EDIT'));
   const atTriage  = ['OPEN', 'REOPENED'].includes(ticket.status);
   // A single task is "pending" until it's dispatched to a lead. Checked per task
   // (not "every task") so a NEW task added after a reopen can still be dispatched

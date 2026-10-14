@@ -17,6 +17,7 @@
  * @property {string} href
  * @property {string|null} perm Permission code, or null for always-visible.
  * @property {boolean} [system] Restrict to system (super-admin) users, regardless of `perm`.
+ * @property {string} [flag] Visible when this flag on /auth/me is true (system users always), in place of `perm`.
  * @property {boolean} [exact] Match the path exactly (used for the dashboard root).
  */
 
@@ -48,9 +49,10 @@ export const AREAS = [
     items: [
       { label: 'Dashboard',   href: '/dashboard/service',          perm: 'SERVICE_VIEW', exact: true },
       { label: 'Services',    href: '/dashboard/service/tickets',   perm: 'SERVICE_VIEW' },
-      // No permission — visible to everyone; the inbox is empty unless the flow
-      // has assigned you something.
-      { label: 'My Tickets',  href: '/dashboard/service/inbox',     perm: null },
+      // Needs no permission: shown to anyone with a service permission or with
+      // service work assigned to them (`service_access`, worked out by the API),
+      // so the flow's leads and resolvers see it and nobody else does.
+      { label: 'My Tickets',  href: '/dashboard/service/inbox',     perm: null, flag: 'service_access' },
     ],
   },
   {

@@ -61,6 +61,7 @@ export default function DashboardLayout({ children }) {
     // System-only items (e.g. the audit log) are for super-admins regardless of
     // any permission code.
     if (item.system) return !!me?.is_system;
+    if (item.flag) return !!(me?.is_system || me?.[item.flag]);
     if (!item.perm) return true;
     if (me?.is_system) return true;
     return can(item.perm);

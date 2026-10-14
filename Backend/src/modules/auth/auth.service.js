@@ -4,6 +4,7 @@ const crypto = require('crypto');
 
 const config = require('../../config/env');
 const { authRepository } = require('./auth.repository');
+const { serviceRepository } = require('../service/service.repository');
 const { auditService } = require('../audit/audit.service');
 const { createSsoService } = require('./sso.service');
 const { validatePassword } = require('../../lib/passwordPolicy');
@@ -165,6 +166,10 @@ function createAuthService(repository, policy = {}) {
     /**
      * The caller's identity and flattened permission codes.
      *
+     * `service_access` says whether to show the Service app: any service
+     * permission, or service work assigned to them (a ticket in "My Tickets",
+     * a department task) — someone the flow involves needs no permission.
+     *
      * @param {number} userId
      * @returns {Promise<object>}
      * @throws {NotFoundError}
@@ -173,10 +178,16 @@ function createAuthService(repository, policy = {}) {
       const user = await repository.findWithPermissions(userId);
       if (!user) throw new NotFoundError('User');
 
+      const permissions = user.role.rolePermissions.map((rp) => rp.permission.code);
+      const service_access = user.role.is_system
+        || permissions.some((code) => code.startsWith('SERVICE_'))
+        || await serviceRepository.hasServiceWork({ id: user.id, department_id: user.department_id, role_id: user.role.id });
+
       return {
         ...user,
         is_system: user.role.is_system,
-        permissions: user.role.rolePermissions.map((rp) => rp.permission.code),
+        permissions,
+        service_access,
       };
     },
 

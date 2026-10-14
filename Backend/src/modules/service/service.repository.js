@@ -1,6 +1,24 @@
 const prisma = require('../../lib/prisma');
 
 /**
+ * Tickets that are "mine": assigned to the user directly, via their department
+ * or their role — or that they've been a participant on at any stage.
+ * @param {{ id: number, department_id?: number|null, role_id?: number|null }} user
+ * @returns {Array<Record<string, unknown>>}
+ */
+function inboxScope(user) {
+  const mine = [
+    { assigned_user_id: user.id },
+    // Tickets I've been involved in at any stage — so the PM keeps seeing a
+    // ticket after routing it onward, not only while it's currently theirs.
+    { participants: { some: { user_id: user.id } } },
+  ];
+  if (user.department_id) mine.push({ assigned_department_id: user.department_id });
+  if (user.role_id) mine.push({ assigned_role_id: user.role_id });
+  return mine;
+}
+
+/**
  * Service (ticket) data-access layer.
  *
  * The only file in the module that touches Prisma. Soft-delete scoping is
@@ -180,23 +198,31 @@ function createServiceRepository(db) {
      * @returns {Promise<{ items: object[], total: number }>}
      */
     async findInbox(user, { where = {}, orderBy, skip, take }) {
-      /** @type {Array<Record<string, unknown>>} */
-      const mine = [
-        { assigned_user_id: user.id },
-        // Tickets I've been involved in at any stage — so the PM keeps seeing a
-        // ticket after routing it onward, not only while it's currently theirs.
-        { participants: { some: { user_id: user.id } } },
-      ];
-      if (user.department_id) mine.push({ assigned_department_id: user.department_id });
-      if (user.role_id) mine.push({ assigned_role_id: user.role_id });
-
-      const scoped = active({ ...where, OR: mine });
+      const scoped = active({ ...where, OR: inboxScope(user) });
 
       const [items, total] = await Promise.all([
         db.serviceTicket.findMany({ where: scoped, select: ticketSelect, orderBy, skip, take }),
         db.serviceTicket.count({ where: scoped }),
       ]);
       return { items, total };
+    },
+
+    /**
+     * Whether the user has any service work: something in their "My Tickets"
+     * inbox, or an open department task with them. Decides whether the
+     * Service app is shown to someone with no service permission.
+     *
+     * @param {{ id: number, department_id?: number|null, role_id?: number|null }} user
+     * @returns {Promise<boolean>}
+     */
+    async hasServiceWork(user) {
+      const [ticket, task] = await Promise.all([
+        db.serviceTicket.findFirst({ where: active({ OR: inboxScope(user) }), select: { id: true } }),
+        db.ticketDepartmentTask.findFirst({
+          where: { assigned_user_id: user.id, status: 'OPEN', deleted_at: null }, select: { id: true },
+        }),
+      ]);
+      return Boolean(ticket || task);
     },
 
     /**
