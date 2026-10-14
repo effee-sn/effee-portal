@@ -2,7 +2,7 @@ const { salesConfigService } = require('./config.service');
 const { ApiResponse } = require('../../core');
 const { requestContext } = require('../../core/http/requestContext');
 
-/** Sales configuration HTTP controller (applications + stage probabilities). */
+/** Sales configuration HTTP controller (applications, stage probabilities, reminder timings). */
 
 /** `GET /sales/applications` */
 const listApplications = async (req, res) => {
@@ -35,7 +35,17 @@ const saveProbabilities = async (req, res) => {
   ApiResponse.ok(res, await salesConfigService.saveProbabilities(req.body, requestContext(req)));
 };
 
+/** `GET /sales/reminder-schedules` */
+const listReminderSchedules = async (req, res) => {
+  ApiResponse.ok(res, await salesConfigService.listReminderSchedules());
+};
+
+/** `PUT /sales/reminder-schedules` */
+const saveReminderSchedules = async (req, res) => {
+  ApiResponse.ok(res, await salesConfigService.saveReminderSchedules(req.body, requestContext(req)));
+};
+
 module.exports = {
   listApplications, createApplication, updateApplication, deleteApplication,
-  listProbabilities, saveProbabilities,
+  listProbabilities, saveProbabilities, listReminderSchedules, saveReminderSchedules,
 };

@@ -33,4 +33,22 @@ const probabilitiesBody = z.object({
   { message: 'Each stage may appear only once' }
 );
 
-module.exports = { applicationIdParam, createApplicationBody, updateApplicationBody, probabilitiesBody };
+// Minutes before the follow-up: 1 minute up to 7 days; up to 5 per kind.
+const reminderSchedulesBody = z.object({
+  items: z.array(z.object({
+    kind:    z.enum(['SITE_VISIT', 'MEETING', 'TEAMS', 'CALL', 'EMAIL', 'REVIEW']),
+    offsets: z.array(
+      z.coerce.number().int('Whole minutes only').min(1, 'At least 1 minute before').max(10080, 'At most 7 days before')
+    ).min(1, 'Keep at least one reminder').max(5, 'At most 5 reminders'),
+  })).min(1),
+}).refine(
+  (d) => new Set(d.items.map((i) => i.kind)).size === d.items.length,
+  { message: 'Each kind may appear only once' }
+).refine(
+  (d) => d.items.every((i) => new Set(i.offsets).size === i.offsets.length),
+  { message: 'The same reminder time is listed twice' }
+);
+
+module.exports = {
+  applicationIdParam, createApplicationBody, updateApplicationBody, probabilitiesBody, reminderSchedulesBody,
+};

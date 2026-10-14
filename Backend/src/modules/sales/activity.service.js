@@ -45,9 +45,10 @@ function createActivityService(repository) {
   /**
    * Maps a validated DTO to writable columns (serialising participant ids).
    *
-   * Follow-up timing: an exact date-time is reminded LEAD minutes before; a
-   * day ('YYYY-MM-DD') is stored at the morning reminder time in the business
-   * timezone. Any new follow-up date re-arms its reminder.
+   * Follow-up timing: an exact date-time is reminded at the kind's configured
+   * times before it (Sales → Configuration); a day ('YYYY-MM-DD') is stored at
+   * the morning reminder time in the business timezone. Any new follow-up date
+   * re-arms all its reminders.
    */
   function pickWritable(dto, data = {}) {
     if (dto.follow_up_at !== undefined) {
@@ -59,6 +60,11 @@ function createActivityService(repository) {
         data.follow_up_timed = true;
       }
       data.reminded_at = null;
+      data.reminder_offset_sent = null;
+      data.reminders_armed_at = new Date();
+    } else if (dto.next_medium !== undefined || dto.is_review !== undefined) {
+      // Another kind means other reminder times; ones already past don't fire late.
+      data.reminders_armed_at = new Date();
     }
     for (const f of ['type', 'activity_at', 'duration_min', 'subject', 'minutes', 'outcome',
       'customer_participants', 'next_action', 'next_medium', 'temperature',

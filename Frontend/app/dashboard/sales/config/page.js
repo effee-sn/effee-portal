@@ -11,9 +11,10 @@ import { SkeletonLine, TableSkeleton } from '@/components/Skeleton';
 import { invalidateSalesConfig } from '@/lib/useSalesConfig';
 
 /**
- * Sales → Configuration. Two settings that shape the sales module:
+ * Sales → Configuration. Settings that shape the sales module:
  *   - Stage probability — win % per stage, used for the weighted pipeline.
  *   - Applications — the list an enquiry's application is picked from.
+ *   - Reminders — when follow-ups are reminded, per medium (and for reviews).
  *
  * Gated by SALES_CONFIG_VIEW; changes need SALES_CONFIG_CREATE / EDIT / DELETE.
  */
@@ -128,6 +129,151 @@ function ProbabilityCard({ canEdit }) {
               </li>
             );
           })}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+// ── Reminders ────────────────────────────────────────────────────────────────
+const KIND_LABEL = {
+  SITE_VISIT: 'Site visit', MEETING: 'Meeting', TEAMS: 'Teams', CALL: 'Call', EMAIL: 'Email', REVIEW: 'Internal review',
+};
+const UNIT_MIN = { min: 1, h: 60, d: 1440 };
+
+/** 1440 → "1 day", 180 → "3 h", 90 → "90 min". */
+function formatOffset(min) {
+  if (min % 1440 === 0) return `${min / 1440} day${min === 1440 ? '' : 's'}`;
+  if (min % 60 === 0) return `${min / 60} h`;
+  return `${min} min`;
+}
+
+const sameList = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+const sortDesc = (list) => [...list].sort((a, b) => b - a);
+
+function ReminderRow({ row, offsets, canEdit, onChange }) {
+  const [amount, setAmount] = useState('');
+  const [unit, setUnit]     = useState('h');
+  const [err, setErr]       = useState('');
+
+  const add = () => {
+    const n = Number(amount);
+    if (!Number.isInteger(n) || n < 1) return setErr('Enter a whole number');
+    const min = n * UNIT_MIN[unit];
+    if (min > 10080) return setErr('At most 7 days before');
+    if (offsets.includes(min)) return setErr('Already in the list');
+    if (offsets.length >= 5) return setErr('At most 5 reminders');
+    onChange(sortDesc([...offsets, min]));
+    setAmount(''); setErr('');
+  };
+
+  return (
+    <li className="px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="w-32 shrink-0 text-sm text-gray-700">{KIND_LABEL[row.kind] || row.kind}</span>
+        <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
+          {offsets.map((o) => (
+            <span key={o} className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 tabular-nums">
+              {formatOffset(o)} before
+              {canEdit && offsets.length > 1 && (
+                <button type="button" onClick={() => onChange(offsets.filter((x) => x !== o))}
+                  aria-label={`Remove ${formatOffset(o)} reminder`}
+                  className="ml-0.5 text-gray-400 hover:text-red-600 cursor-pointer leading-none">&times;</button>
+              )}
+            </span>
+          ))}
+        </div>
+        {canEdit && offsets.length < 5 && (
+          <div className="flex items-center gap-1">
+            <input type="number" min={1} step={1} inputMode="numeric" value={amount} placeholder="e.g. 3"
+              aria-label={`New ${KIND_LABEL[row.kind]} reminder`}
+              onChange={(e) => { setAmount(e.target.value); setErr(''); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+              className="w-16 text-sm text-right tabular-nums border border-gray-300 rounded px-2 py-1" />
+            <select value={unit} onChange={(e) => setUnit(e.target.value)} aria-label="Unit"
+              className="text-sm border border-gray-300 rounded px-1.5 py-1 bg-white">
+              <option value="min">min</option>
+              <option value="h">hours</option>
+              <option value="d">days</option>
+            </select>
+            <button type="button" onClick={add}
+              className="text-xs font-medium text-[var(--ams-primary)] hover:underline cursor-pointer px-1">Add</button>
+          </div>
+        )}
+      </div>
+      {err && <p className="mt-1 text-xs text-red-600 sm:pl-34">{err}</p>}
+    </li>
+  );
+}
+
+function RemindersCard({ canEdit }) {
+  const [rows, setRows]     = useState(null);
+  const [draft, setDraft]   = useState({});
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg]       = useState({ type: '', text: '' });
+
+  const load = (data) => {
+    setRows(data);
+    setDraft(Object.fromEntries(data.map((r) => [r.kind, r.offsets])));
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiGet('/sales/reminder-schedules');
+        if (!cancelled) load(res.data);
+      } catch (err) { if (!cancelled) setMsg({ type: 'error', text: err.message }); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const changed = rows?.filter((r) => !sameList(r.offsets, draft[r.kind] || [])) || [];
+
+  const save = async () => {
+    setSaving(true); setMsg({ type: '', text: '' });
+    try {
+      const res = await apiPut('/sales/reminder-schedules', {
+        items: changed.map((r) => ({ kind: r.kind, offsets: draft[r.kind] })),
+      });
+      load(res.data);
+      setMsg({ type: 'ok', text: 'Reminder timings saved. They apply to every open follow-up from the next check.' });
+    } catch (err) { setMsg({ type: 'error', text: err.message }); }
+    finally { setSaving(false); }
+  };
+
+  const reset = () => { load(rows); setMsg({ type: '', text: '' }); };
+
+  return (
+    <Card title="Reminders"
+      action={canEdit && rows && (
+        <div className="flex items-center gap-2">
+          {changed.length > 0 && <button type="button" onClick={reset} className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer">Reset</button>}
+          <button type="button" onClick={save} disabled={!changed.length || saving}
+            className="px-3 py-1.5 text-xs font-medium text-white rounded-sm cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ backgroundColor: 'var(--ams-primary)' }}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      )}>
+      <p className="px-4 pt-3 text-xs text-gray-500">
+        When the person holding the enquiry is reminded of a follow-up — in the portal, by push and by email — by the
+        medium it&apos;s planned for. A reminder whose time had already passed when the follow-up was scheduled is skipped;
+        the last one always goes. Follow-ups with only a date are reminded at 9:00 AM that day, plus 9:00 AM on any
+        whole day set before it.
+      </p>
+      {msg.text && (
+        <p className={`mx-4 mt-3 px-3 py-2 rounded text-sm border ${msg.type === 'error'
+          ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700'}`}>{msg.text}</p>
+      )}
+      {!rows ? (
+        <div className="p-4 space-y-3">{Array.from({ length: 6 }).map((_, i) => <SkeletonLine key={i} className="h-7 w-full" />)}</div>
+      ) : (
+        <ul className="divide-y divide-gray-100 mt-2">
+          {rows.map((r) => (
+            <ReminderRow key={r.kind} row={r} offsets={draft[r.kind] || []} canEdit={canEdit}
+              onChange={(list) => { setDraft((d) => ({ ...d, [r.kind]: list })); setMsg({ type: '', text: '' }); }} />
+          ))}
         </ul>
       )}
     </Card>
@@ -368,11 +514,14 @@ export default function SalesConfigPage() {
     <div className="space-y-4 p-4 pb-10">
       <header>
         <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Sales configuration</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Stage probabilities and the applications list used across Sales.</p>
+        <p className="text-sm text-gray-500 mt-0.5">Stage probabilities, the applications list and follow-up reminders used across Sales.</p>
       </header>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
         <ProbabilityCard canEdit={has('SALES_CONFIG_EDIT')} />
-        <ApplicationsCard canCreate={has('SALES_CONFIG_CREATE')} canEdit={has('SALES_CONFIG_EDIT')} canDelete={has('SALES_CONFIG_DELETE')} />
+        <div className="space-y-4">
+          <ApplicationsCard canCreate={has('SALES_CONFIG_CREATE')} canEdit={has('SALES_CONFIG_EDIT')} canDelete={has('SALES_CONFIG_DELETE')} />
+          <RemindersCard canEdit={has('SALES_CONFIG_EDIT')} />
+        </div>
       </div>
     </div>
   );

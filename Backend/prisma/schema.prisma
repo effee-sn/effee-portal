@@ -1029,6 +1029,18 @@ model SalesStageProbability {
   updated_by Int?
 }
 
+/// When follow-ups are reminded, per kind (Sales → Configuration): `kind` is a
+/// follow-up medium (CALL, MEETING, TEAMS, SITE_VISIT, EMAIL) or REVIEW;
+/// `offsets` is minutes before, comma-separated ("1440,180,15"). A kind with
+/// no row uses the built-in default.
+model SalesReminderSchedule {
+  kind    String @id @db.VarChar(20)
+  offsets String @db.VarChar(100)
+
+  updated_at DateTime @updatedAt
+  updated_by Int?
+}
+
 /// Sales workflow configuration (single row). Holds the selected Internal Sales
 /// handler — the person the enquiry hands off to for the preparation,
 /// negotiation and close phases. Chosen and saved in the Sales Workflow screen.
@@ -1123,8 +1135,15 @@ model EnquiryActivity {
   // follow_up_at is the next-review date and follow_up_ended means "no future
   // review".
   is_review       Boolean       @default(false)
-  // Set when a due reminder has been sent, so it fires only once.
+  // Set when the final reminder (the one closest to the follow-up) has been
+  // sent — after that the follow-up never reminds again.
   reminded_at     DateTime?
+  // Earlier reminders (e.g. a site visit's 24 h and 3 h): the smallest
+  // "minutes before" already sent, so each one goes once.
+  reminder_offset_sent Int?
+  // When the reminders were (re)armed — the follow-up was scheduled or moved.
+  // An earlier reminder whose time had already passed by then is skipped.
+  reminders_armed_at   DateTime?
 
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt

@@ -512,6 +512,66 @@ describe('Sales rules: reminders', () => {
     assert.equal(await notified(fx.field.id, 'FOLLOWUP_DUE', id), 2, 'reminded again for the new time');
   });
 
+  it('a site visit is reminded a day, 3 hours and 15 minutes before — each once', async () => {
+    const id = (await toOfferReleased()).id;
+    await sendOffer(id, fx.internal); // Field holds
+    const at = new Date(Date.now() + 3 * 864e5); // booked three days ahead
+    await log(id, fx.field, { follow_up_at: at, next_medium: 'SITE_VISIT' });
+    const titles = async () => (await prisma.notification.findMany({
+      where: { user_id: fx.field.id, type: 'FOLLOWUP_DUE', entity_id: String(id) }, select: { title: true }, orderBy: { id: 'asc' },
+    })).map((n) => n.title);
+    const sweepAt = (msBefore) => followup.runDueFollowupReminders(new Date(at.getTime() - msBefore));
+
+    await sweepAt(25 * 36e5);
+    assert.equal((await titles()).length, 0, 'nothing 25 hours before');
+    await sweepAt(24 * 36e5);
+    await sweepAt(23 * 36e5);
+    assert.equal((await titles()).length, 1, 'the day-before reminder, once');
+    assert.match((await titles())[0], /^Site visit tomorrow at \d{1,2}:\d{2}\s?(am|pm): /i);
+    await sweepAt(3 * 36e5);
+    await sweepAt(60 * 6e4);
+    assert.equal((await titles()).length, 2, '3 hours before, once');
+    await sweepAt(15 * 6e4);
+    await followup.runDueFollowupReminders(at);
+    const all = await titles();
+    assert.equal(all.length, 3, '15 minutes before, then never again');
+    assert.match(all[2], /^Site visit at /);
+  });
+
+  it('a site visit booked 5 hours ahead skips the day-before reminder', async () => {
+    const id = (await toOfferReleased()).id;
+    await sendOffer(id, fx.internal);
+    const at = new Date(Date.now() + 5 * 36e5);
+    await log(id, fx.field, { follow_up_at: at, next_medium: 'SITE_VISIT' });
+
+    await followup.runDueFollowupReminders(new Date(at.getTime() - 4 * 36e5));
+    assert.equal(await notified(fx.field.id, 'FOLLOWUP_DUE', id), 0, 'no late "tomorrow" reminder');
+    await followup.runDueFollowupReminders(new Date(at.getTime() - 3 * 36e5));
+    assert.equal(await notified(fx.field.id, 'FOLLOWUP_DUE', id), 1, 'the 3 hour one goes');
+  });
+
+  it('reminder timings are configurable per kind and fall back to the defaults', async () => {
+    const before = await prisma.salesReminderSchedule.findMany();
+    try {
+      const defaults = await salesConfigService.listReminderSchedules();
+      if (!before.length) {
+        assert.deepEqual(defaults.find((r) => r.kind === 'SITE_VISIT').offsets, [1440, 180, 15]);
+        assert.deepEqual(defaults.find((r) => r.kind === 'CALL').offsets, [15]);
+      }
+      const saved = await salesConfigService.saveReminderSchedules(
+        { items: [{ kind: 'MEETING', offsets: [15, 60] }] }, actor(fx.field),
+      );
+      const meeting = saved.find((r) => r.kind === 'MEETING');
+      assert.deepEqual(meeting.offsets, [60, 15], 'stored largest first');
+      assert.equal(meeting.is_default, false);
+    } finally {
+      await prisma.salesReminderSchedule.deleteMany({});
+      for (const r of before) {
+        await prisma.salesReminderSchedule.create({ data: { kind: r.kind, offsets: r.offsets, updated_by: r.updated_by } });
+      }
+    }
+  });
+
   it('a stalled stage reminds the holder once per stage, and re-arms after a stage change', async () => {
     const id = (await newEnquiry('GENERATED')).id;
     await upload(id, 'FORMAT_PDF', fx.field);

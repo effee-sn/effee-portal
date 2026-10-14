@@ -46,7 +46,7 @@ router.put(
   asyncHandler(updateWorkflow)
 );
 
-// ── Sales configuration (applications + stage probabilities) ─────────────────
+// ── Sales configuration (applications, stage probabilities, reminders) ───────
 // Reading is open to every sales user (the enquiry form's dropdown, the
 // probability shown on an enquiry); changing needs SALES_CONFIG_* rights.
 router.get('/applications', authorize('SALES_VIEW'), asyncHandler(configController.listApplications));
@@ -75,6 +75,14 @@ router.put(
   authorize('SALES_CONFIG_EDIT'),
   validate({ body: configValidation.probabilitiesBody }),
   asyncHandler(configController.saveProbabilities)
+);
+
+router.get('/reminder-schedules', authorize('SALES_VIEW'), asyncHandler(configController.listReminderSchedules));
+router.put(
+  '/reminder-schedules',
+  authorize('SALES_CONFIG_EDIT'),
+  validate({ body: configValidation.reminderSchedulesBody }),
+  asyncHandler(configController.saveReminderSchedules)
 );
 
 // ── Sales dashboard (pipeline analytics) ──────────────────────────────────────

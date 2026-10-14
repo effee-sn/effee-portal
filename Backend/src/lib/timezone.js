@@ -35,4 +35,9 @@ function formatTime(date, tz) {
   return date.toLocaleTimeString('en-IN', { timeZone: tz, hour: 'numeric', minute: '2-digit' });
 }
 
-module.exports = { zonedTime, formatTime, offsetMs };
+/** The calendar day of an instant in `tz`, as 'YYYY-MM-DD'. */
+function localDay(date, tz) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+}
+
+module.exports = { zonedTime, formatTime, offsetMs, localDay };

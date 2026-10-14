@@ -1,8 +1,8 @@
 const prisma = require('../../lib/prisma');
 
 /**
- * Sales configuration data-access layer: the applications list and the
- * per-stage win probabilities.
+ * Sales configuration data-access layer: the applications list, the
+ * per-stage win probabilities and the follow-up reminder timings.
  *
  * @param {import('@prisma/client').PrismaClient} db
  */
@@ -65,6 +65,23 @@ function createSalesConfigRepository(db) {
         where: { stage },
         update: { probability, updated_by: actorId },
         create: { stage, probability, updated_by: actorId },
+      })));
+    },
+
+    listReminderSchedules() {
+      return db.salesReminderSchedule.findMany({ select: { kind: true, offsets: true, updated_at: true } });
+    },
+
+    /**
+     * Writes all given reminder timings in one transaction.
+     * @param {Array<{ kind: string, offsets: number[] }>} items
+     * @param {number|null} actorId
+     */
+    saveReminderSchedules(items, actorId) {
+      return db.$transaction(items.map(({ kind, offsets }) => db.salesReminderSchedule.upsert({
+        where: { kind },
+        update: { offsets: offsets.join(','), updated_by: actorId },
+        create: { kind, offsets: offsets.join(','), updated_by: actorId },
       })));
     },
   };

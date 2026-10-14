@@ -1,6 +1,7 @@
 const { salesConfigRepository } = require('./config.repository');
 const { auditService } = require('../audit/audit.service');
 const { NotFoundError, ConflictError } = require('../../core');
+const config = require('../../config/env');
 
 /**
  * Sales configuration business logic (Sales → Configuration).
@@ -11,6 +12,9 @@ const { NotFoundError, ConflictError } = require('../../core');
  *     from new enquiries while existing ones keep it.
  *   - **Stage probabilities** — win % per stage, used for the weighted
  *     pipeline. WON is fixed at 100 and LOST at 0.
+ *   - **Reminder timings** — when a follow-up is reminded, per medium (and
+ *     for reviews): minutes before, e.g. a site visit 1 day, 3 hours and
+ *     15 minutes before. Read by the reminder sweep (followup.service).
  *
  * @param {ReturnType<typeof import('./config.repository').createSalesConfigRepository>} repository
  */
@@ -28,6 +32,14 @@ function createSalesConfigService(repository) {
     OFFER_RELEASED: 50, FOLLOW_UP: 60, NEGOTIATION: 75, NEGOTIATION_FOLLOW_UP: 80, WON: 100, LOST: 0,
   });
 
+  // Reminder kinds, in the order shown. A kind with no saved row gets its
+  // default: a site visit 1 day, 3 hours and 15 minutes before; everything
+  // else once, FOLLOWUP_REMINDER_LEAD_MINUTES before (15 by default).
+  const REMINDER_KINDS = Object.freeze(['SITE_VISIT', 'MEETING', 'TEAMS', 'CALL', 'EMAIL', 'REVIEW']);
+  const reminderDefault = (kind) => (kind === 'SITE_VISIT'
+    ? [1440, 180, 15] : [config.FOLLOWUP_REMINDER.LEAD_MINUTES]);
+  const parseOffsets = (csv) => String(csv || '').split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0);
+
   const shape = (a) => {
     const { _count, ...rest } = a;
     return { ...rest, enquiry_count: _count.enquiries };
@@ -40,6 +52,7 @@ function createSalesConfigService(repository) {
 
   return {
     STAGES,
+    REMINDER_KINDS,
 
     async listApplications() {
       return (await repository.listApplications()).map(shape);
@@ -124,6 +137,36 @@ function createSalesConfigService(repository) {
         changes: Object.fromEntries(items.map((i) => [i.stage, i.probability])),
       });
       return this.listProbabilities();
+    },
+
+    /** Reminder timings per kind (minutes before, largest first). */
+    async listReminderSchedules() {
+      const rows = Object.fromEntries((await repository.listReminderSchedules()).map((r) => [r.kind, r]));
+      return REMINDER_KINDS.map((kind) => {
+        const saved = rows[kind] ? parseOffsets(rows[kind].offsets) : null;
+        return {
+          kind,
+          offsets: (saved?.length ? saved : reminderDefault(kind)).sort((a, b) => b - a),
+          is_default: !saved?.length,
+          updated_at: rows[kind]?.updated_at ?? null,
+        };
+      });
+    },
+
+    /** `{ KIND: [minutes, …] }` — for the reminder sweep. */
+    async reminderOffsetMap() {
+      return Object.fromEntries((await this.listReminderSchedules()).map((r) => [r.kind, r.offsets]));
+    },
+
+    /** @param {{ items: Array<{ kind: string, offsets: number[] }> }} dto */
+    async saveReminderSchedules(dto, actor) {
+      const items = dto.items.map((i) => ({ kind: i.kind, offsets: [...new Set(i.offsets)].sort((a, b) => b - a) }));
+      await repository.saveReminderSchedules(items, actor?.id ?? null);
+      await auditService.record({
+        action: auditService.Action.SETTINGS_UPDATED, entity: 'SalesReminderSchedule', entityId: null, actor,
+        changes: Object.fromEntries(items.map((i) => [i.kind, i.offsets.join(',')])),
+      });
+      return this.listReminderSchedules();
     },
   };
 }
