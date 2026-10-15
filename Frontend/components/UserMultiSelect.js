@@ -57,7 +57,7 @@ export default function UserMultiSelect({ users = [], value = [], onChange, plac
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-md bg-white rounded-lg shadow-xl flex flex-col max-h-[80vh]">
             <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
               <h3 className="text-sm font-semibold text-gray-800">Select participants {draft.length ? `(${draft.length})` : ''}</h3>

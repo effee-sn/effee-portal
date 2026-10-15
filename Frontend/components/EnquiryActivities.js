@@ -29,6 +29,11 @@ const fmtDateTime = (iso) => new Date(iso).toLocaleString(undefined, { day: '2-d
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
 const isOverdue = (iso, ended) => iso && !ended && new Date(iso) < new Date(new Date().toDateString());
 
+/** 1440 → "1 day", 180 → "3 h", 15 → "15 min". */
+const fmtOffset = (m) => (m % 1440 === 0 ? `${m / 1440} day${m === 1440 ? '' : 's'}` : m % 60 === 0 ? `${m / 60} h` : `${m} min`);
+/** ["1 day", "3 h", "15 min"] → "1 day, 3 h and 15 min". */
+const joinList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}`);
+
 function TempChip({ value }) {
   const s = TEMPERATURE_STYLE[value];
   if (!s) return null;
@@ -64,6 +69,24 @@ function ActivityModal({ enquiryId, activity, users, stage, onClose, onSaved }) 
   });
   const [error, setError]   = useState('');
   const [saving, setSaving] = useState(false);
+  // Reminder timings per medium, for the hint under the follow-up date.
+  const [schedules, setSchedules] = useState({});
+
+  useEffect(() => {
+    let cancelled = false;
+    apiGet('/sales/reminder-schedules', { silent: true })
+      .then((res) => { if (!cancelled) setSchedules(Object.fromEntries((res.data || []).map((r) => [r.kind, r.offsets]))); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  // What the hint says: when this follow-up will be reminded.
+  const offsets = schedules[form.next_medium || 'CALL'] || [15];
+  const dayOffsets = offsets.filter((m) => m >= 1440).map((m) => Math.floor(m / 1440));
+  const reminderHint = form.follow_up_at && form.follow_up_time
+    ? `Reminder${offsets.length > 1 ? 's' : ''} ${joinList(offsets.map(fmtOffset))} before.`
+    : `Time optional — without it, reminder at 9:00 AM that day${dayOffsets.length
+      ? ` and ${joinList(dayOffsets.map((d) => (d === 1 ? 'the day before' : `${d} days before`)))}` : ''}.`;
 
   const change = (e) => {
     const { name, type, checked, value, options, multiple } = e.target;
@@ -101,7 +124,7 @@ function ActivityModal({ enquiryId, activity, users, stage, onClose, onSaved }) 
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-2xl bg-white rounded-lg shadow-xl flex flex-col max-h-[90vh]">
+      <div className="w-full max-w-4xl bg-white rounded-lg shadow-xl flex flex-col max-h-[92vh]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h2 className="text-base font-semibold text-gray-800">{isEdit ? 'Edit Activity' : 'Log Activity'}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
@@ -128,7 +151,7 @@ function ActivityModal({ enquiryId, activity, users, stage, onClose, onSaved }) 
           </div>
           <div>
             <label className={label}>Minutes / Notes (MOM)</label>
-            <textarea name="minutes" value={form.minutes} onChange={change} rows={3} className="ams-input resize-none" />
+            <textarea name="minutes" value={form.minutes} onChange={change} rows={4} className="ams-input resize-y" />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -156,17 +179,15 @@ function ActivityModal({ enquiryId, activity, users, stage, onClose, onSaved }) 
           {/* Follow-up */}
           <div className="rounded-lg border border-gray-200 p-4 space-y-4">
             <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Follow-up</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)_minmax(0,1fr)] gap-4">
               <div>
                 <label className={label}>Next follow-up</label>
                 <div className="flex gap-2">
-                  <input name="follow_up_at" type="date" value={form.follow_up_at} onChange={change} aria-label="Follow-up date" className="ams-input min-w-0" />
+                  <input name="follow_up_at" type="date" value={form.follow_up_at} onChange={change} aria-label="Follow-up date" className="ams-input flex-1 min-w-[9.5rem]" />
                   <input name="follow_up_time" type="time" value={form.follow_up_time} onChange={change} disabled={!form.follow_up_at}
-                    aria-label="Follow-up time (optional)" className="ams-input w-28 shrink-0 disabled:bg-gray-50" />
+                    aria-label="Follow-up time (optional)" className="ams-input w-32 shrink-0 disabled:bg-gray-50" />
                 </div>
-                <p className="text-[11px] text-gray-400 mt-1">
-                  {form.follow_up_at && form.follow_up_time ? 'Reminder 15 min before.' : 'Time optional — without it, reminder at 9:00 AM that day.'}
-                </p>
+                <p className="text-[11px] text-gray-400 mt-1">{reminderHint}</p>
               </div>
               <div>
                 <label className={label}>Next medium</label>
