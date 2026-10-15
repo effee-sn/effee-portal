@@ -156,15 +156,65 @@ function createAuditService(repository) {
 
       // `changes` is stored as text; parse it back so callers receive
       // structured data rather than a string they must parse themselves.
+      const parsed = items.map((entry) => ({ ...entry, changes: entry.changes ? safeParse(entry.changes) : null }));
+
+      // Names instead of bare ids: who did it, what it was done to, and any
+      // person referenced in the change details — one lookup per type per page.
+      const want = { User: [] };
+      for (const e of parsed) {
+        if (e.actor_id) want.User.push(e.actor_id);
+        const id = Number(e.entity_id);
+        if (e.entity_id && Number.isInteger(id)) (want[e.entity] ||= []).push(id);
+        collectUserIds(e.changes, want.User);
+      }
+      const labels = await repository.labelsFor(want);
+      const userName = (id) => labels.User?.get(Number(id)) ?? null;
+
       return {
-        items: items.map((entry) => ({
-          ...entry,
-          changes: entry.changes ? safeParse(entry.changes) : null,
-        })),
+        items: parsed.map((e) => {
+          const people = {};
+          const ids = [];
+          collectUserIds(e.changes, ids);
+          for (const id of ids) { const n = userName(id); if (n) people[id] = n; }
+          return {
+            ...e,
+            actor_label: e.actor_id ? userName(e.actor_id) : null,
+            entity_label: e.entity_id ? labels[e.entity]?.get(Number(e.entity_id)) ?? null : null,
+            user_labels: people,
+          };
+        }),
         total,
       };
     },
   };
+}
+
+/**
+ * Change-detail keys whose numeric values are user ids (owner_id, handler_id,
+ * assigned_user_id, head_user_id, created_by, …).
+ * @param {string} key
+ */
+const isUserKey = (key) => /(^|_)(user_id|owner_id|handler_id|created_by|updated_by|actor_id)$/.test(key)
+  || /_user_id$/.test(key);
+
+/**
+ * Collects user ids found under user-id keys anywhere in a change payload,
+ * including { from, to } diffs and arrays.
+ * @param {unknown} node @param {number[]} into @param {boolean} [userKey]
+ */
+function collectUserIds(node, into, userKey = false) {
+  if (node === null || node === undefined) return;
+  if (typeof node === 'number' || (typeof node === 'string' && /^\d+$/.test(node))) {
+    if (userKey) into.push(Number(node));
+    return;
+  }
+  if (Array.isArray(node)) { node.forEach((v) => collectUserIds(v, into, userKey)); return; }
+  if (typeof node === 'object') {
+    for (const [k, v] of Object.entries(node)) {
+      // A { from, to } diff inherits its parent key's meaning.
+      collectUserIds(v, into, (k === 'from' || k === 'to') ? userKey : isUserKey(k));
+    }
+  }
 }
 
 /**
@@ -193,4 +243,4 @@ function normalise(v) {
 
 const auditService = createAuditService(auditRepository);
 
-module.exports = { auditService, createAuditService };
+module.exports = { auditService, createAuditService, collectUserIds };
