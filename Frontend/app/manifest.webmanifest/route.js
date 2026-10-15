@@ -1,34 +1,27 @@
-import { API_URL, UPLOADS_URL } from '@/lib/config';
+import { fetchBranding } from '@/lib/branding';
 
 /**
  * Installable web-app manifest, generated at request time so it reflects the
  * currently uploaded company logo. Read by the browser when the user installs
  * the portal ("Add to Home Screen" / "Install app"), which is why its icons —
  * not the favicon — decide the installed app icon.
+ *
+ * The icons point at /app-icon.svg: the logo on a white square, because app
+ * icons must be square and a company logo usually isn't. The `v` parameter is
+ * the logo file, so uploading a new logo gives the icon a new URL.
  */
 export const dynamic = 'force-dynamic';
 
-const TYPE_BY_EXT = { jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', png: 'image/png' };
-
 export async function GET() {
-  let name = 'Effee Portal';
-  let iconUrl = null;
+  const branding = await fetchBranding();
+  const name = branding.name || 'Effee Portal';
 
-  try {
-    const res = await fetch(`${API_URL}/settings/branding`, { cache: 'no-store' });
-    if (res.ok) {
-      const b = await res.json();
-      if (b?.company_name) name = b.company_name;
-      if (b?.company_logo) iconUrl = `${UPLOADS_URL}${b.company_logo}`;
-    }
-  } catch { /* fall back to defaults below */ }
-
-  const type = iconUrl ? (TYPE_BY_EXT[iconUrl.split('.').pop().toLowerCase()] || 'image/png') : null;
-  const icons = iconUrl
+  const v = branding.logo ? encodeURIComponent(branding.logo.split('/').pop()) : null;
+  const icons = v
     ? [
-      { src: iconUrl, sizes: '192x192', type, purpose: 'any' },
-      { src: iconUrl, sizes: '512x512', type, purpose: 'any' },
-      { src: iconUrl, sizes: '512x512', type, purpose: 'maskable' },
+      { src: `/app-icon.svg?v=${v}`, sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+      { src: `/app-icon.svg?v=${v}`, sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
+      { src: `/app-icon.svg?maskable=1&v=${v}`, sizes: '512x512', type: 'image/svg+xml', purpose: 'maskable' },
     ]
     : []; // no logo uploaded yet — no icon rather than the framework default
 

@@ -24,6 +24,9 @@ export const metadata = {
   // Installable web-app manifest, generated dynamically so its icon reflects the
   // uploaded company logo (see app/manifest.webmanifest/route.js).
   manifest: "/manifest.webmanifest",
+  // In the initial HTML (not only added by script), so "Create shortcut" /
+  // install over plain http still finds the logo. Square, see app/app-icon.svg.
+  icons: { icon: [{ url: "/app-icon.svg", type: "image/svg+xml" }] },
 };
 
 export default function RootLayout({ children }) {

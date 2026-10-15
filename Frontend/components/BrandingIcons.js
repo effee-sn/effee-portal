@@ -17,8 +17,11 @@ export default function BrandingIcons() {
     apiGet('/settings/branding', { silent: true })
       .then((b) => {
         if (!b?.company_logo) return;
-        const href = `${UPLOADS_URL}${b.company_logo}`;
-        for (const [id, rel] of [['company-favicon', 'icon'], ['company-apple-icon', 'apple-touch-icon']]) {
+        // Tab icon: the square version (app/app-icon.svg), versioned by logo file
+        // so a new logo replaces a cached one. iOS needs a bitmap: the logo itself.
+        const square = `/app-icon.svg?v=${encodeURIComponent(b.company_logo.split('/').pop())}`;
+        const raw = `${UPLOADS_URL}${b.company_logo}`;
+        for (const [id, rel, href] of [['company-favicon', 'icon', square], ['company-apple-icon', 'apple-touch-icon', raw]]) {
           let link = document.getElementById(id);
           if (!link) {
             link = document.createElement('link');
