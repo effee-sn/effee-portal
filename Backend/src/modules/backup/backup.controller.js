@@ -6,7 +6,7 @@ const { ApiResponse, BadRequestError } = require('../../core');
 const { requestContext } = require('../../core/http/requestContext');
 
 /**
- * Database backup & restore HTTP controller. Every route is super-admin gated
+ * Backup & restore HTTP controller (database + uploaded files). Every route is super-admin gated
  * (see routes). Backup/restore are recorded to the audit trail (best-effort).
  */
 
@@ -18,7 +18,7 @@ const create = async (req, res) => {
   const backup = await backupService.create();
   await auditService.record({
     action: 'DB_BACKUP', entity: 'Database', actor: requestContext(req),
-    changes: { file: backup.filename, size: backup.size },
+    changes: { file: backup.filename, size: backup.size, type: backup.type },
   });
   ApiResponse.created(res, backup);
 };
@@ -32,25 +32,25 @@ const download = async (req, res) => {
 /** `POST /backups/restore` — restore a stored backup (destructive). */
 const restore = async (req, res) => {
   const full = backupService.resolvePath(req.body.filename);
-  await backupService.restore(full);
+  const result = await backupService.restore(full);
   // Recorded after the restore so the entry lands in the restored database.
   await auditService.record({
     action: 'DB_RESTORE', entity: 'Database', actor: requestContext(req),
-    changes: { file: req.body.filename },
+    changes: { file: req.body.filename, ...result },
   });
-  ApiResponse.message(res, 'Database restored from backup');
+  ApiResponse.message(res, result.type === 'full' ? 'Database and files restored from backup' : 'Database restored from backup');
 };
 
-/** `POST /backups/restore-upload` — restore from an uploaded .sql (destructive). */
+/** `POST /backups/restore-upload` — restore from an uploaded .tar.gz or .sql (destructive). */
 const restoreUpload = async (req, res) => {
   if (!req.file) throw new BadRequestError('No backup file uploaded');
   try {
-    await backupService.restore(req.file.path);
+    const result = await backupService.restore(req.file.path);
     await auditService.record({
       action: 'DB_RESTORE', entity: 'Database', actor: requestContext(req),
-      changes: { file: req.file.originalname, uploaded: true },
+      changes: { file: req.file.originalname, uploaded: true, ...result },
     });
-    ApiResponse.message(res, 'Database restored from uploaded backup');
+    ApiResponse.message(res, result.type === 'full' ? 'Database and files restored from uploaded backup' : 'Database restored from uploaded backup');
   } finally {
     fs.rmSync(req.file.path, { force: true });
   }

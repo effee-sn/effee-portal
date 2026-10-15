@@ -11,23 +11,24 @@ const ctrl = require('./backup.controller');
 const router = Router();
 
 /**
- * Database backup & restore routes.
+ * Backup & restore routes (database + uploaded files).
  *
  * Platform-level operation restricted to super-admins (`requireSystemRole`).
  * Restore is destructive — the client requires an explicit type-to-confirm.
  */
 
-// Uploaded .sql restore files land here briefly, then are deleted after restore.
+// Uploaded restore files (.tar.gz full / .sql database-only) land here briefly,
+// then are deleted after restore.
 const tmpDir = path.join(__dirname, '../../../backups/tmp');
 if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
 
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => cb(null, tmpDir),
-    filename: (req, file, cb) => cb(null, `restore-${Date.now()}.sql`),
+    filename: (req, file, cb) => cb(null, `restore-${Date.now()}${/\.tar\.gz$/i.test(file.originalname) ? '.tar.gz' : '.sql'}`),
   }),
-  limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB ceiling for a dump
-  fileFilter: (req, file, cb) => cb(null, /\.sql$/i.test(file.originalname)),
+  limits: { fileSize: 2 * 1024 * 1024 * 1024 }, // 2 GB ceiling: a full backup carries the documents
+  fileFilter: (req, file, cb) => cb(null, /\.(sql|tar\.gz)$/i.test(file.originalname)),
 });
 
 router.use(authenticate, requireSystemRole);

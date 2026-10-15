@@ -20,7 +20,7 @@ const formatDateTime = (iso) => {
 };
 
 // ── Destructive restore confirm (type-to-confirm) ─────────────────────────────
-function RestoreModal({ label, onClose, onConfirm }) {
+function RestoreModal({ label, full, onClose, onConfirm }) {
   const [text, setText]   = useState('');
   const [busy, setBusy]   = useState(false);
   const [error, setError] = useState('');
@@ -35,12 +35,18 @@ function RestoreModal({ label, onClose, onConfirm }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
       <div className="w-full max-w-md bg-white rounded-lg shadow-xl p-6">
-        <h2 className="text-base font-semibold text-red-700 mb-2">Restore database</h2>
+        <h2 className="text-base font-semibold text-red-700 mb-2">{full ? 'Restore database and files' : 'Restore database'}</h2>
         <p className="text-sm text-gray-600 mb-3">
-          This will <span className="font-semibold text-red-600">overwrite the entire live database</span> with
+          This will <span className="font-semibold text-red-600">overwrite the entire live database</span>
+          {full && <> <span className="font-semibold text-red-600">and replace all uploaded documents and files</span></>} with
           <span className="font-medium text-gray-800"> {label}</span>. All current data is replaced and this
           cannot be undone. Do this during a maintenance window.
         </p>
+        {!full && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-2 mb-3">
+            This is a database-only backup: documents and uploaded files are left as they are.
+          </p>
+        )}
         <p className="text-xs text-gray-500 mb-1">Type <span className="font-mono font-semibold">RESTORE</span> to confirm:</p>
         <input value={text} onChange={(e) => setText(e.target.value)} placeholder="RESTORE"
           className="ams-input w-full mb-3" autoFocus />
@@ -114,16 +120,18 @@ export default function BackupPage() {
     catch (e) { setError(e.message); }
   };
 
+  const isFull = (name) => /\.tar\.gz$/i.test(name);
+
   const restore = async (filename) => {
     await apiPost('/backups/restore', { filename });
-    flash('Database restored.');
+    flash(isFull(filename) ? 'Database and files restored.' : 'Database restored.');
   };
 
   const restoreUpload = async (file) => {
     const fd = new FormData();
     fd.append('backup', file);
     await apiPostForm('/backups/restore-upload', fd);
-    flash('Database restored from uploaded file.');
+    flash(isFull(file.name) ? 'Database and files restored from uploaded file.' : 'Database restored from uploaded file.');
   };
 
   const onPickFile = (e) => {
@@ -148,10 +156,10 @@ export default function BackupPage() {
     <div className="space-y-4">
       <div className="bg-white rounded border border-gray-200 overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200 flex-wrap">
-          <span className="text-sm font-medium text-gray-700">Database Backups</span>
+          <span className="text-sm font-medium text-gray-700">Backups</span>
           <div className="flex-1" />
           <button onClick={() => fileRef.current?.click()} className="btn-secondary text-sm py-1.5 cursor-pointer">Restore from file…</button>
-          <input ref={fileRef} type="file" accept=".sql" onChange={onPickFile} className="hidden" />
+          <input ref={fileRef} type="file" accept=".gz,.tar.gz,.sql" onChange={onPickFile} className="hidden" />
           <button onClick={create} disabled={busy === 'create'}
             className="cursor-pointer px-3 py-1.5 text-sm font-medium text-white rounded-sm disabled:opacity-50"
             style={{ backgroundColor: 'var(--ams-primary)' }}>
@@ -170,6 +178,7 @@ export default function BackupPage() {
               <thead>
                 <tr className="border-b border-gray-200 text-left text-gray-500">
                   <th className="px-2 py-2 font-normal">Backup</th>
+                  <th className="px-2 py-2 font-normal">Contains</th>
                   <th className="px-2 py-2 font-normal">Size</th>
                   <th className="px-2 py-2 font-normal">Created</th>
                   <th className="px-2 py-2 w-40" />
@@ -179,6 +188,13 @@ export default function BackupPage() {
                 {backups.map((b) => (
                   <tr key={b.filename} className="border-b border-gray-100">
                     <td className="px-2 py-2 font-medium text-gray-800 font-mono text-xs">{b.filename}</td>
+                    <td className="px-2 py-2">
+                      {b.type === 'full' ? (
+                        <span className="inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium bg-green-50 text-green-700">Database + files</span>
+                      ) : (
+                        <span className="inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-600">Database only</span>
+                      )}
+                    </td>
                     <td className="px-2 py-2 text-gray-600">{formatBytes(b.size)}</td>
                     <td className="px-2 py-2 text-gray-500 whitespace-nowrap">{formatDateTime(b.created_at)}</td>
                     <td className="px-2 py-2 text-right whitespace-nowrap">
@@ -195,16 +211,18 @@ export default function BackupPage() {
       </div>
 
       <p className="text-[11px] text-gray-400 px-1">
-        A backup is a full snapshot (schema + data). Restoring overwrites the entire live database — restore a
-        backup that matches the currently deployed version, and prefer a maintenance window.
+        A backup is a full snapshot: the database (schema + data) plus every uploaded document and file, in one
+        .tar.gz. Passwords and secrets (.env) are never included. Restoring overwrites the live database and files —
+        restore a backup that matches the currently deployed version, and prefer a maintenance window. Download
+        backups and keep a copy off the server.
       </p>
 
       {modal?.type === 'restore' && (
-        <RestoreModal label={modal.filename} onClose={() => setModal(null)}
+        <RestoreModal label={modal.filename} full={isFull(modal.filename)} onClose={() => setModal(null)}
           onConfirm={() => restore(modal.filename)} />
       )}
       {modal?.type === 'restore-upload' && (
-        <RestoreModal label={`uploaded file "${modal.file.name}"`} onClose={() => setModal(null)}
+        <RestoreModal label={`uploaded file "${modal.file.name}"`} full={isFull(modal.file.name)} onClose={() => setModal(null)}
           onConfirm={() => restoreUpload(modal.file)} />
       )}
     </div>

@@ -6,11 +6,21 @@ const config = require('../../config/env');
 const { BadRequestError, NotFoundError } = require('../../core');
 
 /**
- * Database backup & restore.
+ * Platform backup & restore.
  *
- * A backup is a full `mysqldump` of the application database (schema + data,
- * self-contained with DROP/CREATE) written to `backups/`. A restore replays a
- * dump back into the **same** database via the `mysql` client — no separate DB.
+ * A backup is one `backup-YYYYMMDD-HHMMSS.tar.gz` in `backups/` holding
+ * everything needed to bring the portal back:
+ *   - `database.sql` — a full `mysqldump` (schema + data, DROP/CREATE);
+ *   - `storage/`     — the sales documents (formats, concept, costing, offers…);
+ *   - `uploads/`     — the company logo and other public uploads;
+ *   - `backup-info.json` — when it was made and what it contains.
+ * `.env` is never included: it holds the passwords and secrets.
+ *
+ * A restore replays the dump into the **same** database via the `mysql`
+ * client, then puts the files back (the current folders are replaced). Older
+ * database-only `.sql` backups can still be restored — files are left as they
+ * are. Packing uses the system `tar` (Linux, and Windows 10+), so no extra
+ * packages are needed.
  *
  * ── Safety ───────────────────────────────────────────────────────────────────
  *   - Credentials come from DATABASE_URL and are passed to the child process via
@@ -25,8 +35,39 @@ const { BadRequestError, NotFoundError } = require('../../core');
 
 /** Directory where backup files live. */
 const BACKUP_DIR = path.join(__dirname, '../../../backups');
-/** Only files matching this are treated as backups. */
-const FILE_RE = /^backup-[0-9]{8}-[0-9]{6}\.sql$/;
+/** Scratch space for packing / unpacking. */
+const TMP_DIR = path.join(BACKUP_DIR, 'tmp');
+/** The backend folder — the file folders below live in it. */
+const APP_DIR = path.join(__dirname, '../../..');
+/** Folders of uploaded files that a full backup carries. */
+const FILE_DIRS = Object.freeze(['storage', 'uploads']);
+/** Only files matching this are treated as backups: full (.tar.gz) or database-only (.sql). */
+const FILE_RE = /^backup-[0-9]{8}-[0-9]{6}\.(sql|tar\.gz)$/;
+
+/**
+ * The tar binary. On Windows, the built-in bsdtar (System32): a GNU tar from
+ * Git on the PATH would read "C:\…" as a remote host.
+ */
+const TAR = process.platform === 'win32'
+  ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe')
+  : 'tar';
+
+/** 'full' for a .tar.gz, 'database' for a plain .sql. */
+const typeOf = (filename) => (filename.endsWith('.tar.gz') ? 'full' : 'database');
+
+/**
+ * Runs a command (no shell), resolving on exit code 0.
+ * @param {string} cmd @param {string[]} args @param {object} [opts] @returns {Promise<void>}
+ */
+function run(cmd, args, opts = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, opts);
+    let stderr = '';
+    child.stderr?.on('data', (d) => { stderr += d.toString(); });
+    child.on('error', (err) => reject(new Error(`${cmd}: ${err.message}`)));
+    child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`${cmd} exit ${code}: ${stderr.trim().slice(0, 500)}`))));
+  });
+}
 
 function ensureDir() {
   if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
@@ -81,20 +122,50 @@ module.exports = {
       .filter((f) => FILE_RE.test(f))
       .map((f) => {
         const s = fs.statSync(path.join(BACKUP_DIR, f));
-        return { filename: f, size: s.size, created_at: s.mtime.toISOString() };
+        return { filename: f, size: s.size, created_at: s.mtime.toISOString(), type: typeOf(f) };
       })
       .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   },
 
   /**
-   * Runs mysqldump into a new file.
-   * @returns {Promise<{ filename: string, size: number, created_at: string }>}
+   * A full backup: the database dump plus the uploaded-file folders, packed
+   * into one .tar.gz.
+   * @returns {Promise<{ filename: string, size: number, created_at: string, type: string }>}
    */
-  create() {
+  async create() {
     ensureDir();
-    const db = dbConfig();
-    const filename = `backup-${stamp()}.sql`;
+    const id = stamp();
+    const stage = path.join(TMP_DIR, `stage-${id}`);
+    fs.mkdirSync(stage, { recursive: true });
+    const filename = `backup-${id}.tar.gz`;
     const full = path.join(BACKUP_DIR, filename);
+    try {
+      await this.dumpDatabase(path.join(stage, 'database.sql'));
+      const folders = FILE_DIRS.filter((d) => fs.existsSync(path.join(APP_DIR, d)));
+      fs.writeFileSync(path.join(stage, 'backup-info.json'), JSON.stringify({
+        created_at: new Date().toISOString(),
+        contains: ['database.sql', ...folders.map((d) => `${d}/`)],
+      }, null, 2));
+      // Two -C hops: the dump + info from the staging folder, the file folders
+      // from the backend folder — all at the archive's top level.
+      await run(TAR, ['-czf', full, '-C', stage, 'database.sql', 'backup-info.json', '-C', APP_DIR, ...folders]);
+    } catch (err) {
+      fs.rmSync(full, { force: true });
+      throw err instanceof BadRequestError ? err : new BadRequestError(`Backup failed: ${err.message}`);
+    } finally {
+      fs.rmSync(stage, { recursive: true, force: true });
+    }
+    const s = fs.statSync(full);
+    return { filename, size: s.size, created_at: s.mtime.toISOString(), type: 'full' };
+  },
+
+  /**
+   * Runs mysqldump into a file.
+   * @param {string} full absolute output path
+   * @returns {Promise<void>}
+   */
+  dumpDatabase(full) {
+    const db = dbConfig();
 
     return new Promise((resolve, reject) => {
       const args = [
@@ -114,8 +185,7 @@ module.exports = {
       child.on('close', (code) => {
         out.close(() => {
           if (code === 0) {
-            const s = fs.statSync(full);
-            resolve({ filename, size: s.size, created_at: s.mtime.toISOString() });
+            resolve();
           } else {
             fs.rmSync(full, { force: true });
             reject(new BadRequestError(`Backup failed (mysqldump exit ${code}): ${stderr.trim().slice(0, 500)}`));
@@ -126,11 +196,50 @@ module.exports = {
   },
 
   /**
-   * Restores a dump file into the live database (destructive). Accepts an
-   * absolute path already validated by the caller.
+   * Restores a backup (destructive): a full .tar.gz puts back the database and
+   * the uploaded files; a plain .sql only the database. Accepts an absolute
+   * path already validated by the caller.
+   * @param {string} absPath @returns {Promise<{ type: string, folders: string[] }>}
+   */
+  async restore(absPath) {
+    if (!/\.tar\.gz$/i.test(absPath)) {
+      await this.restoreDatabase(absPath);
+      return { type: 'database', folders: [] };
+    }
+
+    const work = path.join(TMP_DIR, `unpack-${stamp()}-${process.pid}`);
+    fs.mkdirSync(work, { recursive: true });
+    try {
+      try { await run(TAR, ['-xzf', absPath, '-C', work]); }
+      catch (err) { throw new BadRequestError(`Not a valid backup file: ${err.message}`); }
+
+      const sql = path.join(work, 'database.sql');
+      if (!fs.existsSync(sql)) throw new BadRequestError('This backup has no database.sql — not a portal backup');
+      await this.restoreDatabase(sql);
+
+      // Files: replace each folder the backup carries. A symlink in place of a
+      // folder is refused — it could point anywhere on the server.
+      const restored = [];
+      for (const dir of FILE_DIRS) {
+        const from = path.join(work, dir);
+        if (!fs.existsSync(from)) continue;
+        if (fs.lstatSync(from).isSymbolicLink()) throw new BadRequestError(`Refusing to restore "${dir}": it is a link`);
+        const to = path.join(APP_DIR, dir);
+        fs.rmSync(to, { recursive: true, force: true });
+        fs.cpSync(from, to, { recursive: true, verbatimSymlinks: true });
+        restored.push(dir);
+      }
+      return { type: 'full', folders: restored };
+    } finally {
+      fs.rmSync(work, { recursive: true, force: true });
+    }
+  },
+
+  /**
+   * Replays a .sql dump into the live database.
    * @param {string} absPath @returns {Promise<void>}
    */
-  restore(absPath) {
+  restoreDatabase(absPath) {
     const db = dbConfig();
     return new Promise((resolve, reject) => {
       const args = ['--protocol=TCP', '-h', db.host, '-P', db.port, '-u', db.user, db.database];

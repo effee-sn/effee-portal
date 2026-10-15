@@ -296,6 +296,14 @@ On the server (Node, MySQL/MariaDB, PM2 and nginx with HTTPS assumed):
 
 13. Backups
 -----------
+  Easiest: in the portal, Administrator -> Backup -> "Create backup" (Super
+  Admin). It makes one backup-YYYYMMDD-HHMMSS.tar.gz in Backend/backups/ with
+  the database AND all uploaded files (Backend/storage/ + Backend/uploads/);
+  .env is never included. "Download" it and keep the copy off the server.
+  Restore from the same page puts back the database and the files. Needs
+  mysqldump / mysql (MYSQL_BIN_DIR if not on PATH) and tar on the server.
+
+  By hand, from the command line —
   Database (use the DB user and name from DATABASE_URL):
     mysqldump --no-tablespaces --single-transaction -u <db_user> -p <db_name>       > ~/portal-$(date +%Y%m%d).sql
   --no-tablespaces   needed on MySQL 8 when the DB user lacks the PROCESS
