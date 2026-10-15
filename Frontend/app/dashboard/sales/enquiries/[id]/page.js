@@ -586,16 +586,14 @@ export default function EnquiryDetailPage() {
 
       {/* Two columns (60 / 40): the record (details, documents) on the left;
           the conversation (reviews, activity log) on the right. Stacks on small
-          screens. A new Generated enquiry has no reviews or activity yet, so
-          the left column takes the full width. */}
+          screens. */}
       {(() => {
         const showReviews = STAGE_RANK[enquiry.stage] >= STAGE_RANK.REVIEW;
-        // At New: Generated uploads the format only; Incoming also logs its
-        // gathering activities. Past New: documents + the activity timeline.
-        const showActivity = enquiry.stage !== 'NEW' || enquiry.enquiry_type === 'INCOMING';
-        const hasRight = showReviews || showActivity;
+        // The activity log is there from New for both types: field sales follow
+        // up on a Generated enquiry before its format is ready, too. (Only an
+        // Incoming enquiry moves to Contacted on its first activity.)
         return (
-          <div className={hasRight ? 'grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-4 items-start' : ''}>
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-4 items-start">
             <div className="space-y-4 min-w-0">
               <Section title="Customer & Details" right={
                 <button onClick={() => nav(`/dashboard/master-data/customers/${enquiry.customer_id}`)}
@@ -628,16 +626,12 @@ export default function EnquiryDetailPage() {
               <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={visibleDocKinds(enquiry.stage)} onChanged={load}
                 currencyCode={enquiry.currency_code} currencySymbol={enquiry.currency?.symbol} />
             </div>
-            {hasRight && (
-              <div className="space-y-4 min-w-0">
-                {showReviews && <EnquiryReviews enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} />}
-                {showActivity && (
-                  <div id="activity">
-                    <EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} stage={enquiry.stage} onChanged={load} />
-                  </div>
-                )}
+            <div className="space-y-4 min-w-0">
+              {showReviews && <EnquiryReviews enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} />}
+              <div id="activity">
+                <EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} stage={enquiry.stage} onChanged={load} />
               </div>
-            )}
+            </div>
           </div>
         );
       })()}

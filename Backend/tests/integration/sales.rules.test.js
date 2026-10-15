@@ -275,6 +275,14 @@ describe('Sales rules: Incoming enquiries', () => {
     assert.equal(s.handler_id, fx.field.id);
   });
 
+  it('a Generated enquiry at New can log a follow-up too — and stays at New', async () => {
+    const id = (await newEnquiry('GENERATED')).id;
+    await log(id, fx.field, { type: 'SITE_VISIT', follow_up_at: new Date(Date.now() + 864e5), next_medium: 'SITE_VISIT' });
+    const s = await state(id);
+    assert.equal(s.stage, 'NEW', 'only Incoming moves to Contacted');
+    assert.equal(s.handler_id, fx.field.id);
+  });
+
   it('Contacted → Review needs the enquiry format, then hands to Internal', async () => {
     const id = (await newEnquiry('INCOMING')).id;
     await log(id, fx.field);
