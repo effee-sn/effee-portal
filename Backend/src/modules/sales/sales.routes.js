@@ -124,9 +124,10 @@ router.get(
   asyncHandler(getEnquiryReadiness)
 );
 
+// Edit, or the creator moving their New/Contacted enquiry on (checked in the service).
 router.put(
   '/enquiries/:id',
-  authorize('SALES_EDIT'),
+  authorize('SALES_EDIT', 'SALES_CREATE'),
   validate({ params: enquiryIdParam, body: updateEnquiryBody }),
   asyncHandler(updateEnquiry)
 );
@@ -174,16 +175,17 @@ router.get(
   asyncHandler(listActivities)
 );
 
+// Edit, or the creator while their enquiry is at New/Contacted (checked in the service).
 router.post(
   '/enquiries/:enquiryId/activities',
-  authorize('SALES_EDIT'),
+  authorize('SALES_EDIT', 'SALES_CREATE'),
   validate({ params: activityValidation.enquiryIdParam, body: activityValidation.createActivityBody }),
   asyncHandler(createActivity)
 );
 
 router.put(
   '/activities/:id',
-  authorize('SALES_EDIT'),
+  authorize('SALES_EDIT', 'SALES_CREATE'),
   validate({ params: activityValidation.activityIdParam, body: activityValidation.updateActivityBody }),
   asyncHandler(updateActivity)
 );
@@ -204,9 +206,10 @@ router.get(
 );
 
 // multer must run before body validation so req.body.kind is populated.
+// Upload / replace: Edit, or the creator while their enquiry is at New/Contacted.
 router.post(
   '/enquiries/:enquiryId/attachments',
-  authorize('SALES_EDIT'),
+  authorize('SALES_EDIT', 'SALES_CREATE'),
   handleUploadErrors(docUpload.single('file')),
   validate({ params: attachmentValidation.enquiryIdParam, body: attachmentValidation.uploadBody }),
   asyncHandler(uploadAttachment)

@@ -7,6 +7,7 @@ const { currencyService } = require('../master/currency.service');
 const { loadRates, toInr, paise } = require('../master/fx');
 const { NEXT_STEP, enquiryRows, money, sentence, stageName } = require('./emailDetails');
 const { NotFoundError, ConflictError, ValidationError, ForbiddenError, buildSearchClause } = require('../../core');
+const { hasEdit, assertFullEdit, assertCreatorWork } = require('./access');
 
 /** Human label for a stage enum, for notification text (`FOLLOW_UP` → `Follow up`). */
 function stageLabel(stage) {
@@ -59,17 +60,26 @@ function createEnquiryService(repository) {
   });
 
   /**
-   * The stage work (review → offer → close) is done by the assigned owner.
-   * Only they, or a system user, may edit/advance an enquiry.
+   * The stage work (review → offer → close) is done by the current handler
+   * with Sales → Edit (or a system user) — see ./access.
    * @throws {ForbiddenError}
    */
   function assertCanManage(enquiry, actor) {
-    if (actor?.is_system) return;
-    // Only the current handler (the workflow baton) may act. Falls back to the
-    // field initiator when no handler is set (e.g. legacy rows).
-    const gateId = enquiry.handler_id ?? enquiry.owner_id;
-    if (actor?.id && actor.id === gateId) return;
-    throw new ForbiddenError('Only the current handler can update this enquiry');
+    assertFullEdit(enquiry, actor, 'update this enquiry');
+  }
+
+  /**
+   * An update: full editors may change anything. The creator without Edit may
+   * only move their own New/Contacted enquiry on — to Contacted or Review —
+   * and change nothing else.
+   * @throws {ForbiddenError}
+   */
+  function assertCanUpdate(enquiry, dto, actor) {
+    if (actor?.is_system || hasEdit(actor)) { assertCanManage(enquiry, actor); return; }
+    const fields = Object.keys(dto).filter((k) => dto[k] !== undefined);
+    const stageOnly = fields.length === 1 && fields[0] === 'stage' && ['CONTACTED', 'REVIEW'].includes(dto.stage);
+    if (!stageOnly) throw new ForbiddenError('You need Sales edit access to change this enquiry');
+    assertCreatorWork(enquiry, actor, 'move this enquiry on');
   }
 
   /**
@@ -336,7 +346,7 @@ function createEnquiryService(repository) {
     async update(id, dto, actor) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Enquiry');
-      assertCanManage(before, actor);
+      assertCanUpdate(before, dto, actor);
       // The type picks the flow (Generated skips Contacted), so it's fixed once
       // the enquiry leaves NEW — switching mid-flow could strand it on a stage
       // its new flow doesn't have.

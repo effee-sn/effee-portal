@@ -84,7 +84,9 @@ const ALL_KINDS = ['FORMAT_PDF', 'FORMAT_EXCEL', 'CONCEPT', 'COSTING', 'OFFER'];
  * current version restores the one before it.
  */
 export default function EnquiryAttachments({
-  enquiryId, canEdit, kinds = ALL_KINDS, bare = false, onChanged, currencyCode = 'INR', currencySymbol,
+  // canEdit: upload / replace. canManage: delete, offer price, mark sent (Sales
+  // edit) — defaults to canEdit.
+  enquiryId, canEdit, canManage = canEdit, kinds = ALL_KINDS, bare = false, onChanged, currencyCode = 'INR', currencySymbol,
 }) {
   const [items, setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
@@ -281,8 +283,10 @@ export default function EnquiryAttachments({
                               <button onClick={() => pick(kind)} disabled={busy || Boolean(pending)}
                                 title="Upload a new version — this one is kept in history"
                                 className="text-xs text-gray-500 hover:text-gray-800 cursor-pointer">Replace</button>
-                              <button onClick={() => remove(a)} disabled={busy}
-                                className="text-xs text-red-500 hover:text-red-700 cursor-pointer">Delete</button>
+                              {canManage && (
+                                <button onClick={() => remove(a)} disabled={busy}
+                                  className="text-xs text-red-500 hover:text-red-700 cursor-pointer">Delete</button>
+                              )}
                             </div>
                           )}
                         </div>
@@ -342,7 +346,7 @@ export default function EnquiryAttachments({
                             {a.offer_value != null
                               ? <span className="font-semibold text-gray-900 tabular-nums">{money(a.offer_value)}</span>
                               : <span className="text-xs text-amber-700">No price recorded</span>}
-                            {canEdit && (!a.sent_at || a.offer_value == null) && (
+                            {canManage && (!a.sent_at || a.offer_value == null) && (
                               <button type="button" onClick={() => setPriceEdit({ id: a.id, value: a.offer_value != null ? String(a.offer_value) : '' })}
                                 className="ml-2 text-xs text-gray-500 hover:text-gray-800 hover:underline cursor-pointer">
                                 {a.offer_value != null ? 'Edit price' : 'Add price'}
@@ -353,7 +357,7 @@ export default function EnquiryAttachments({
                         <Meta a={a} />
                         {a.sent_at && <span className="text-[11px] text-green-600">Sent to customer · {fmtDate(a.sent_at)}</span>}
                       </div>
-                      {canEdit && (
+                      {canManage && (
                         <div className="flex items-center gap-2 shrink-0 pt-0.5">
                           <button onClick={() => toggleSent(a)} disabled={busy || (!a.sent_at && a.offer_value == null)}
                             title={!a.sent_at && a.offer_value == null ? 'Add the offer price first' : undefined}

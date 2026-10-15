@@ -4,7 +4,8 @@ const { auditService } = require('../audit/audit.service');
 const { notificationService } = require('../notification/notification.service');
 const config = require('../../config/env');
 const { zonedTime } = require('../../lib/timezone');
-const { NotFoundError, ForbiddenError } = require('../../core');
+const { NotFoundError } = require('../../core');
+const { assertFullEdit, assertCreatorWork } = require('./access');
 const { stageName } = require('./emailDetails');
 
 const MEDIUM = Object.freeze({ CALL: 'Call', MEETING: 'Meeting', TEAMS: 'Teams', SITE_VISIT: 'Site visit', EMAIL: 'Email' });
@@ -25,12 +26,14 @@ function createActivityService(repository) {
     return enquiry;
   }
 
-  /** @throws {ForbiddenError} */
-  function assertCanManage(enquiry, actor) {
-    if (actor?.is_system) return;
-    const gateId = enquiry.handler_id ?? enquiry.owner_id;
-    if (actor?.id && actor.id === gateId) return;
-    throw new ForbiddenError('Only the current handler can log activity on this enquiry');
+  /**
+   * Logging / editing an activity: creator-level work (the creator may, while
+   * the enquiry is at New/Contacted). A review is Internal's job: full edit.
+   * @throws {ForbiddenError}
+   */
+  function assertCanLog(enquiry, actor, isReview) {
+    if (isReview) assertFullEdit(enquiry, actor, 'log reviews on this enquiry');
+    else assertCreatorWork(enquiry, actor, 'log activity on this enquiry');
   }
 
   /** Parses the stored JSON participant ids back into an array for the API. */
@@ -99,7 +102,7 @@ function createActivityService(repository) {
      */
     async create(enquiryId, dto, actor) {
       const enquiry = await loadEnquiry(enquiryId);
-      assertCanManage(enquiry, actor);
+      assertCanLog(enquiry, actor, Boolean(dto.is_review));
 
       const data = pickWritable(dto, {
         enquiry_id: enquiryId,
@@ -174,7 +177,7 @@ function createActivityService(repository) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Activity');
       const enquiry = await loadEnquiry(before.enquiry_id);
-      assertCanManage(enquiry, actor);
+      assertCanLog(enquiry, actor, Boolean(before.is_review || dto.is_review));
 
       const data = pickWritable(dto, { updated_by: actor?.id ?? null });
       const activity = await repository.update(id, data);
@@ -208,7 +211,7 @@ function createActivityService(repository) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Activity');
       const enquiry = await loadEnquiry(before.enquiry_id);
-      assertCanManage(enquiry, actor);
+      assertFullEdit(enquiry, actor, 'delete activities');
 
       await repository.softDelete(id, actor?.id ?? null);
       await rollUpTemperature(before.enquiry_id);

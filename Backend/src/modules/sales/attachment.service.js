@@ -8,7 +8,8 @@ const { auditService } = require('../audit/audit.service');
 const { notificationService } = require('../notification/notification.service');
 const { loadRates } = require('../master/fx');
 const { money } = require('./emailDetails');
-const { NotFoundError, ForbiddenError, BadRequestError, ConflictError, ValidationError } = require('../../core');
+const { NotFoundError, BadRequestError, ConflictError, ValidationError } = require('../../core');
+const { assertFullEdit, assertCreatorWork } = require('./access');
 
 // Kinds that hold a single *current* document. Re-uploading creates the next
 // version and keeps the old one as superseded history. OFFER is the exception —
@@ -29,12 +30,6 @@ function createAttachmentService(repository) {
     return enquiry;
   }
 
-  function assertCanManage(enquiry, actor) {
-    if (actor?.is_system) return;
-    const gateId = enquiry.handler_id ?? enquiry.owner_id;
-    if (actor?.id && actor.id === gateId) return;
-    throw new ForbiddenError('Only the current handler can manage documents on this enquiry');
-  }
 
   /** Best-effort removal of an orphaned upload when the request is rejected. */
   function discard(file) {
@@ -60,7 +55,8 @@ function createAttachmentService(repository) {
       let enquiry;
       try {
         enquiry = await loadEnquiry(enquiryId);
-        assertCanManage(enquiry, actor);
+        // Upload / replace: the creator may too, while the enquiry is at New/Contacted.
+        assertCreatorWork(enquiry, actor, 'upload documents on this enquiry');
       } catch (err) {
         discard(file); // don't leave the multer-saved file behind
         throw err;
@@ -137,7 +133,7 @@ function createAttachmentService(repository) {
       if (before.kind !== 'OFFER') throw new ConflictError('Only offer documents can be marked as sent');
       if (before.superseded_at) throw new ConflictError('An older version cannot be marked as sent');
       const enquiry = await loadEnquiry(before.enquiry_id);
-      assertCanManage(enquiry, actor);
+      assertFullEdit(enquiry, actor, 'mark offers as sent');
       if (sent && before.offer_value === null) {
         throw new ConflictError('Add the offer price before marking this offer as sent');
       }
@@ -209,7 +205,7 @@ function createAttachmentService(repository) {
       if (!before) throw new NotFoundError('Attachment');
       if (before.kind !== 'OFFER') throw new ConflictError('Only offers have a price');
       const enquiry = await loadEnquiry(before.enquiry_id);
-      assertCanManage(enquiry, actor);
+      assertFullEdit(enquiry, actor, 'change an offer price');
       if (before.sent_at && before.offer_value !== null) {
         throw new ConflictError('The price of a sent offer is fixed — upload a revised offer instead');
       }
@@ -238,7 +234,7 @@ function createAttachmentService(repository) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Attachment');
       const enquiry = await loadEnquiry(before.enquiry_id);
-      assertCanManage(enquiry, actor);
+      assertFullEdit(enquiry, actor, 'delete documents');
       // History is the record of what was shared and when — previous versions
       // stay. Only the current document (or an offer revision) can be deleted.
       if (before.superseded_at) {

@@ -450,10 +450,17 @@ export default function EnquiryDetailPage() {
   }
 
   const isClosed = enquiry.stage === 'WON' || enquiry.stage === 'LOST';
-  // Stage work belongs to the current handler (the workflow baton), falling
-  // back to the field initiator — matches the API gate.
+  // Matches the API (Backend/src/modules/sales/access.js):
+  //   - Sales edit + holding the enquiry (the workflow baton) → everything;
+  //   - the creator without edit, while it's at New/Contacted → upload/replace
+  //     documents, log activity, send it on to Review — never delete.
   const handlerId = enquiry.handler_id ?? enquiry.owner_id;
-  const canManage = me?.is_system || (me?.id != null && me.id === handlerId);
+  const isHolder = me?.id != null && me.id === handlerId;
+  const hasEditPerm = me?.is_system || can('SALES_EDIT');
+  const canManage = me?.is_system || (hasEditPerm && isHolder);
+  const isCreator = me?.id != null && (me.id === enquiry.created_by || me.id === enquiry.owner_id);
+  const canCreatorWork = canManage
+    || (!hasEditPerm && can('SALES_CREATE') && isCreator && ['NEW', 'CONTACTED'].includes(enquiry.stage));
   const wonBlocked = readiness?.blocked?.WON || [];
 
   return (
@@ -511,7 +518,7 @@ export default function EnquiryDetailPage() {
                 <span className="inline-flex items-center gap-1">
                   With:
                   <span className="font-medium text-gray-700">{enquiry.handler?.name || enquiry.owner?.name || '—'}</span>
-                  {canManage && <span className="text-[10px] font-semibold text-green-700 bg-green-50 rounded px-1 py-0.5">you</span>}
+                  {isHolder && <span className="text-[10px] font-semibold text-green-700 bg-green-50 rounded px-1 py-0.5">you</span>}
                 </span>
               )}
               {enquiry.expected_value != null && (
@@ -582,7 +589,7 @@ export default function EnquiryDetailPage() {
       )}
 
       {/* Process — where it is now and what's next */}
-      <EnquiryProcess enquiry={enquiry} canManage={canManage} busy={busy} onPick={changeStage} blocked={readiness?.blocked} />
+      <EnquiryProcess enquiry={enquiry} canManage={canCreatorWork} busy={busy} onPick={changeStage} blocked={readiness?.blocked} />
 
       {/* Two columns (60 / 40): the record (details, documents) on the left;
           the conversation (reviews, activity log) on the right. Stacks on small
@@ -623,13 +630,13 @@ export default function EnquiryDetailPage() {
                   )}
                 </div>
               </Section>
-              <EnquiryAttachments enquiryId={enquiry.id} canEdit={canManage} kinds={visibleDocKinds(enquiry.stage)} onChanged={load}
+              <EnquiryAttachments enquiryId={enquiry.id} canEdit={canCreatorWork} canManage={canManage} kinds={visibleDocKinds(enquiry.stage)} onChanged={load}
                 currencyCode={enquiry.currency_code} currencySymbol={enquiry.currency?.symbol} />
             </div>
             <div className="space-y-4 min-w-0">
               {showReviews && <EnquiryReviews enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} />}
               <div id="activity">
-                <EnquiryActivities enquiryId={enquiry.id} canEdit={canManage} users={users} stage={enquiry.stage} onChanged={load} />
+                <EnquiryActivities enquiryId={enquiry.id} canEdit={canCreatorWork} canDelete={canManage} users={users} stage={enquiry.stage} onChanged={load} />
               </div>
             </div>
           </div>

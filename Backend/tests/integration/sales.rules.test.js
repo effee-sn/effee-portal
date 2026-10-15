@@ -51,7 +51,11 @@ const fx = {}; // fixtures: users, customer, previous workflow config
 const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-const actor = (user) => ({ id: user.id, email: user.email });
+// Test users act with full sales rights unless a test narrows them.
+const FULL = ['SALES_VIEW', 'SALES_CREATE', 'SALES_EDIT'];
+const actor = (user, permissions = FULL) => ({ id: user.id, email: user.email, permissions });
+/** The creator without Edit: may work only while their enquiry is at New / Contacted. */
+const creatorOnly = (user) => actor(user, ['SALES_VIEW', 'SALES_CREATE']);
 
 async function newEnquiry(type = 'GENERATED', by = fx.field, extra = {}) {
   const e = await enquiryService.create({
@@ -263,6 +267,51 @@ describe('Sales rules: progression and gates', () => {
 
   it('the manual flow ends at Offer Released — Follow-up is reached only by sending the offer', async () => {
     await assert.rejects(move(id, 'FOLLOW_UP', fx.internal), { name: 'ConflictError' });
+  });
+});
+
+describe('Sales rules: the creator without Sales edit', () => {
+  const uploadAs = (enquiryId, kind, by) => attachmentService.record(enquiryId, {
+    originalname: `${kind.toLowerCase()}.pdf`, filename: `test-${suffix}-${Math.random().toString(36).slice(2)}`,
+    mimetype: 'application/pdf', size: 1,
+  }, { kind }, by);
+
+  it('at New: uploads and replaces documents, logs activity — but cannot delete or edit details', async () => {
+    const id = (await newEnquiry('GENERATED')).id;
+    const me = creatorOnly(fx.field);
+    const first = await uploadAs(id, 'FORMAT_PDF', me);
+    const second = await uploadAs(id, 'FORMAT_PDF', me);
+    assert.equal(second.version, first.version + 1, 'a replacement is a new version');
+    await activityService.create(id, { type: 'SITE_VISIT', activity_at: new Date(), subject: 'site visit' }, me);
+    await assert.rejects(attachmentService.remove(second.id, me), { name: 'ForbiddenError' }, 'no deleting');
+    await assert.rejects(enquiryService.update(id, { title: 'renamed' }, me), { name: 'ForbiddenError' }, 'no editing details');
+  });
+
+  it('sends it to Review, after which it is read-only for them until given Edit', async () => {
+    const id = (await newEnquiry('GENERATED')).id;
+    const me = creatorOnly(fx.field);
+    await uploadAs(id, 'FORMAT_PDF', me);
+    await enquiryService.update(id, { stage: 'REVIEW' }, me);
+    assert.equal((await state(id)).stage, 'REVIEW');
+
+    await assert.rejects(uploadAs(id, 'FORMAT_EXCEL', me), { name: 'ForbiddenError' }, 'no upload after New');
+    await assert.rejects(
+      activityService.create(id, { type: 'CALL', activity_at: new Date(), subject: 'call' }, me),
+      { name: 'ForbiddenError' }, 'no activity after New',
+    );
+  });
+
+  it('an Incoming enquiry: their first activity moves it to Contacted, and they can still work it there', async () => {
+    const id = (await newEnquiry('INCOMING')).id;
+    const me = creatorOnly(fx.field);
+    await activityService.create(id, { type: 'CALL', activity_at: new Date(), subject: 'first call' }, me);
+    assert.equal((await state(id)).stage, 'CONTACTED');
+    await uploadAs(id, 'FORMAT_PDF', me);
+  });
+
+  it('someone else without Edit can do nothing on it', async () => {
+    const id = (await newEnquiry('GENERATED')).id;
+    await assert.rejects(uploadAs(id, 'FORMAT_PDF', creatorOnly(fx.internal)), { name: 'ForbiddenError' });
   });
 });
 
