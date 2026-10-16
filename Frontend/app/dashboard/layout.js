@@ -9,6 +9,7 @@ import { UPLOADS_URL } from '@/lib/config';
 import { areaKeyForPath, visibleAreasFor } from '@/lib/navigation';
 import NotificationBell from '@/components/NotificationBell';
 import useNav from '@/lib/useNav';
+import { APP_VERSION } from '@/lib/version';
 
 /** Multi-colour apps grid, the Odoo-style "switch app" affordance. */
 function WaffleIcon() {
@@ -212,6 +213,7 @@ export default function DashboardLayout({ children }) {
                   <p className="text-xs text-gray-400 truncate">{me?.email}</p>
                 </div>
                 <button onClick={handleLogout} className="w-full px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition text-left cursor-pointer">Logout</button>
+                <p className="px-4 py-2 border-t border-gray-100 text-[11px] text-gray-400">Effee Portal v{APP_VERSION}</p>
               </div>
             )}
           </div>

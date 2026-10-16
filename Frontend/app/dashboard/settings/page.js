@@ -6,6 +6,7 @@ import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPut, apiPost } from '@/lib/api';
 import { UPLOADS_URL } from '@/lib/config';
 import SsoSettings from '@/components/SsoSettings';
+import { APP_VERSION } from '@/lib/version';
 
 // ── Shared UI ─────────────────────────────────────────────────────────────────
 function Section({ title, description, children }) {
@@ -521,7 +522,9 @@ export default function SettingsPage() {
     <div className="p-4 pb-8">
       {/* Page header */}
       <div className="mb-4">
-        <h1 className="text-lg font-semibold text-gray-800">Settings</h1>
+        <h1 className="text-lg font-semibold text-gray-800">
+          Settings <span className="ml-1 align-middle text-xs font-normal text-gray-400">Effee Portal v{APP_VERSION}</span>
+        </h1>
         <p className="text-xs text-gray-400 mt-0.5">
           {isSystemAdmin
             ? 'Manage your profile, company details and security configuration'
