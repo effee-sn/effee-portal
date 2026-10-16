@@ -70,7 +70,7 @@ function createAuthRepository(db) {
       return db.user.findUnique({
         where: { id },
         select: {
-          id: true, name: true, email: true, department_id: true,
+          id: true, name: true, email: true, department_id: true, theme: true,
           role: {
             select: {
               id: true, name: true, slug: true, is_system: true,
@@ -138,6 +138,11 @@ function createAuthRepository(db) {
      * @param {Record<string, unknown>} data
      * @returns {Promise<object>}
      */
+    /** @param {number} id @param {'LIGHT'|'DARK'|'SYSTEM'} theme */
+    setTheme(id, theme) {
+      return db.user.update({ where: { id }, data: { theme }, select: { theme: true } });
+    },
+
     updateProfile(id, data) {
       return db.user.update({
         where: { id },

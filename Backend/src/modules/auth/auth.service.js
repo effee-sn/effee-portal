@@ -192,6 +192,15 @@ function createAuthService(repository, policy = {}) {
     },
 
     /**
+     * Saves the caller's own display preferences (just the theme for now).
+     * Anyone may set their own; nothing here is audited — it changes no data.
+     * @param {number} userId @param {{ theme: 'LIGHT'|'DARK'|'SYSTEM' }} dto
+     */
+    async setPreferences(userId, dto) {
+      return repository.setTheme(userId, dto.theme);
+    },
+
+    /**
      * The caller's profile with permissions grouped by module for display.
      *
      * @param {number} userId

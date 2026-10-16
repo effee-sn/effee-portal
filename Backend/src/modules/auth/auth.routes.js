@@ -9,11 +9,11 @@ const {
   resetPasswordRateLimiter,
 } = require('../../middleware/rateLimiter');
 const {
-  loginBody, updateProfileBody, changePasswordBody,
+  loginBody, updateProfileBody, changePasswordBody, preferencesBody,
   forgotPasswordBody, resetPasswordBody,
 } = require('./auth.validation');
 const {
-  login, getMe, getProfile, updateProfile,
+  login, getMe, getProfile, updateProfile, setPreferences,
   changePassword, forgotPassword, resetPassword,
   resetLinkStatus,
 } = require('./auth.controller');
@@ -73,6 +73,13 @@ router.put(
   authenticate,
   validate({ body: updateProfileBody }),
   asyncHandler(updateProfile)
+);
+
+router.put(
+  '/preferences',
+  authenticate,
+  validate({ body: preferencesBody }),
+  asyncHandler(setPreferences)
 );
 
 router.put(

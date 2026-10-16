@@ -10,6 +10,7 @@ import { areaKeyForPath, visibleAreasFor } from '@/lib/navigation';
 import NotificationBell from '@/components/NotificationBell';
 import useNav from '@/lib/useNav';
 import { APP_VERSION } from '@/lib/version';
+import { applyTheme, storedTheme } from '@/lib/theme';
 
 /** Multi-colour apps grid, the Odoo-style "switch app" affordance. */
 function WaffleIcon() {
@@ -54,6 +55,13 @@ export default function DashboardLayout({ children }) {
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
+
+  // The user's saved theme wins over this browser's copy (it follows them
+  // between computers); SYSTEM keeps following the device.
+  useEffect(() => {
+    if (!me) return;
+    applyTheme(me.theme || storedTheme());
+  }, [me]);
 
   // Close the app drawer and mobile menu whenever the route changes.
   useEffect(() => { setAppsOpen(false); setAppsShown(false); setNavOpen(false); }, [pathname]);

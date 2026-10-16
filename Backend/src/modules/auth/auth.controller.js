@@ -50,6 +50,11 @@ const getProfile = async (req, res) => {
  *
  * @type {import('express').RequestHandler}
  */
+/** `PUT /auth/preferences` — the caller's own theme. */
+const setPreferences = async (req, res) => {
+  res.json(await authService.setPreferences(req.user.id, req.body));
+};
+
 const updateProfile = async (req, res) => {
   res.json(await authService.updateProfile(req.user.id, req.body, req.user));
 };
@@ -94,6 +99,7 @@ module.exports = {
   getMe,
   getProfile,
   updateProfile,
+  setPreferences,
   changePassword,
   forgotPassword,
   resetPassword,

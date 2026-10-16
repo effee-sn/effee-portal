@@ -2,6 +2,7 @@ import NextTopLoader from "nextjs-toploader";
 import { Lato, JetBrains_Mono } from "next/font/google";
 import LoaderBridge from "@/components/LoaderBridge";
 import BrandingIcons from "@/components/BrandingIcons";
+import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
 const lato = Lato({
@@ -31,7 +32,11 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={`h-full antialiased ${lato.variable} ${jbMono.variable}`}>
+    <html lang="en" className={`h-full antialiased ${lato.variable} ${jbMono.variable}`} suppressHydrationWarning>
+      <head>
+        {/* Sets data-theme before React loads, so a dark theme never flashes white. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <NextTopLoader color="#875A7B" height={3} showSpinner={false} />
         <LoaderBridge />

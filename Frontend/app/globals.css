@@ -8,6 +8,62 @@
   --ams-bg: #F4F5F7;
   --background: #ffffff;
   --foreground: #1f2937;
+  /* Shared component colours (buttons, inputs) — redefined for dark below. */
+  --ams-surface: #ffffff;
+  --ams-surface-hover: #F9FAFB;
+  --ams-input-border: #D1D5DB;
+  --ams-input-text: #111827;
+  --ams-btn-text: #374151;
+}
+
+/* ── Dark theme ──────────────────────────────────────────────
+   <html data-theme="dark"> (set by lib/theme.js). Rather than restyling every
+   page, the palette itself is swapped: greys invert, light badge tints become
+   dark tints with light text, and white panels (bg-white) become dark panels.
+   White *text* stays white, so buttons keep working. Screen only — printing
+   stays light. */
+@media screen {
+  html[data-theme="dark"] {
+    color-scheme: dark;
+    --ams-primary: #A06E92;
+    --ams-primary-hover: #B482A6;
+    --ams-primary-light: #2A2029;
+    --ams-primary-mid: #33262F;
+    --ams-bg: #0F1117;
+    --background: #161922;
+    --foreground: #E0E3E9;
+    --ams-surface: #161922;
+    --ams-surface-hover: #1E222C;
+    --ams-input-border: #3A4052;
+    --ams-input-text: #E8EAEF;
+    --ams-btn-text: #D3D7DF;
+
+    --color-gray-50:  #1B1F28;
+    --color-gray-100: #232733;
+    --color-gray-200: #2E3341;
+    --color-gray-300: #3D4354;
+    --color-gray-400: #8A92A5;
+    --color-gray-500: #9AA2B3;
+    --color-gray-600: #B3B9C6;
+    --color-gray-700: #C9CED8;
+    --color-gray-800: #E0E3E9;
+    --color-gray-900: #F1F3F6;
+
+    --color-red-50:  #33191C;  --color-red-100: #421F23;  --color-red-200: #63292F;
+    --color-red-600: #F87171;  --color-red-700: #FCA5A5;  --color-red-800: #FECACA;
+    --color-green-50:  #12291B; --color-green-100: #163420; --color-green-200: #1F4A2E;
+    --color-green-600: #4ADE80; --color-green-700: #86EFAC; --color-green-800: #BBF7D0;
+    --color-amber-50:  #2E2510; --color-amber-100: #3A2E10; --color-amber-200: #574416;
+    --color-amber-600: #FBBF24; --color-amber-700: #FCD34D; --color-amber-800: #FDE68A;
+    --color-blue-50:  #14213B;  --color-blue-200: #1E3A6B;
+    --color-blue-600: #60A5FA;  --color-blue-700: #93C5FD;
+    --color-indigo-50: #1C1B45; --color-indigo-100: #25235C;
+    --color-indigo-600: #A5B4FC;
+  }
+  html[data-theme="dark"] .bg-white { background-color: var(--ams-surface); }
+  html[data-theme="dark"] .hover\:bg-white:hover { background-color: var(--ams-surface-hover); }
+  html[data-theme="dark"] .shadow-xl,
+  html[data-theme="dark"] .shadow-lg { --tw-shadow-color: rgb(0 0 0 / 0.6); }
 }
 
 @theme inline {
@@ -49,11 +105,11 @@ body {
 .btn-primary:hover:not(:disabled) { background-color: var(--ams-primary-hover); border-color: var(--ams-primary-hover); }
 
 .btn-secondary {
-  background-color: #ffffff;
-  color: #374151;
-  border: 1px solid #D1D5DB;
+  background-color: var(--ams-surface);
+  color: var(--ams-btn-text);
+  border: 1px solid var(--ams-input-border);
 }
-.btn-secondary:hover:not(:disabled) { background-color: #F9FAFB; }
+.btn-secondary:hover:not(:disabled) { background-color: var(--ams-surface-hover); }
 
 .btn-danger {
   background-color: #DC2626;
@@ -69,11 +125,11 @@ body {
   .ams-input {
     width: 100%;
     padding: 0.375rem 0.625rem;
-    border: 1px solid #D1D5DB;
+    border: 1px solid var(--ams-input-border);
     border-radius: 0.375rem;
     font-size: 0.875rem;
-    color: #111827;
-    background: #fff;
+    color: var(--ams-input-text);
+    background: var(--ams-surface);
     outline: none;
     transition: border-color 0.15s, box-shadow 0.15s;
     font-family: inherit;

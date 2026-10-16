@@ -7,6 +7,7 @@ import { apiGet, apiPut, apiPost } from '@/lib/api';
 import { UPLOADS_URL } from '@/lib/config';
 import SsoSettings from '@/components/SsoSettings';
 import { APP_VERSION } from '@/lib/version';
+import { applyTheme, storedTheme } from '@/lib/theme';
 
 // ── Shared UI ─────────────────────────────────────────────────────────────────
 function Section({ title, description, children }) {
@@ -80,6 +81,48 @@ function TabNav({ tabs, active, onChange }) {
 }
 
 // ── Profile Tab ───────────────────────────────────────────────────────────────
+const THEME_OPTIONS = [
+  { value: 'LIGHT',  label: 'Light',  hint: 'Always light' },
+  { value: 'DARK',   label: 'Dark',   hint: 'Always dark' },
+  { value: 'SYSTEM', label: 'System', hint: 'Follow this device' },
+];
+
+/** Light / Dark / System — applies at once, saved to the user's account. */
+function AppearanceSection({ me }) {
+  const [theme, setTheme] = useState(() => me?.theme || storedTheme());
+  const [msg, setMsg] = useState({ type: '', text: '' });
+
+  const pick = async (value) => {
+    const before = theme;
+    setTheme(value); applyTheme(value); setMsg({ type: '', text: '' });
+    try { await apiPut('/auth/preferences', { theme: value }); }
+    catch (err) { setTheme(before); applyTheme(before); setMsg({ type: 'error', text: err.message }); }
+  };
+
+  return (
+    <Section title="Appearance" description="Choose how the portal looks for you. Saved to your account.">
+      <Alert type={msg.type} message={msg.text} />
+      <div role="radiogroup" aria-label="Theme" className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {THEME_OPTIONS.map((o) => {
+          const on = theme === o.value;
+          return (
+            <button key={o.value} type="button" role="radio" aria-checked={on} onClick={() => pick(o.value)}
+              className={`text-left rounded-lg border px-4 py-3 cursor-pointer transition ${on
+                ? 'border-[var(--ams-primary)] ring-2 ring-[var(--ams-primary)]/20'
+                : 'border-gray-200 hover:border-gray-300'}`}>
+              <span className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                <span className={`w-3.5 h-3.5 rounded-full border-2 ${on ? 'border-[var(--ams-primary)] bg-[var(--ams-primary)]' : 'border-gray-300'}`} />
+                {o.label}
+              </span>
+              <span className="block text-xs text-gray-500 mt-1 ml-5.5">{o.hint}</span>
+            </button>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
 function ProfileTab({ me }) {
   const [profile,    setProfile]    = useState({ name: '', email: '', phone: '' });
   const [profMsg,    setProfMsg]    = useState({ type: '', text: '' });
@@ -214,6 +257,8 @@ function ProfileTab({ me }) {
           </div>
         </Section>
       )}
+
+      <AppearanceSection me={me} />
 
       {/* Change Password */}
       <Section title="Change Password" description="Keep your account secure with a strong password">

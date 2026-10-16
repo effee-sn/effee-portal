@@ -65,6 +65,9 @@ model User {
   department_id Int?
   designation   String?
 
+  // Screen theme the user picked: LIGHT, DARK or SYSTEM (follow the device).
+  theme String @default("SYSTEM") @db.VarChar(10)
+
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
   deleted_at DateTime?

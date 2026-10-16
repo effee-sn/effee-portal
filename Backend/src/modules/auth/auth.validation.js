@@ -51,8 +51,14 @@ const resetPasswordBody = z.object({
   new_password: z.string().min(1, 'New password is required').max(200),
 });
 
+/** `PUT /auth/preferences` — the caller's own display preferences. */
+const preferencesBody = z.object({
+  theme: z.enum(['LIGHT', 'DARK', 'SYSTEM'], { message: 'Theme must be Light, Dark or System' }),
+});
+
 module.exports = {
   loginBody,
+  preferencesBody,
   updateProfileBody,
   changePasswordBody,
   forgotPasswordBody,

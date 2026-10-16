@@ -24,6 +24,7 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ### Added
 
+- **Light, Dark and System themes.** Each user picks one in **Settings → Profile → Appearance**; it is saved to their account and follows them to any computer. *System* follows the device's light/dark setting. Printing always stays light.
 - New permission **Sales → Reassign** (`SALES_REASSIGN`): needed to reassign an enquiry or change its owner. Grant it per role in **Administrator → Roles**; Sales → Edit no longer includes it.
 
 ### Fixed
