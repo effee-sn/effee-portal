@@ -53,8 +53,10 @@ const resetPasswordBody = z.object({
 
 /** `PUT /auth/preferences` — the caller's own display preferences. */
 const preferencesBody = z.object({
-  theme: z.enum(['LIGHT', 'DARK', 'SYSTEM'], { message: 'Theme must be Light, Dark or System' }),
-});
+  theme: z.enum(['LIGHT', 'DARK', 'SYSTEM'], { message: 'Theme must be Light, Dark or System' }).optional(),
+  // "What's new" for this release has been seen.
+  seen_version: z.string().trim().regex(/^\d+\.\d+\.\d+$/, 'A version like 1.2.0').optional(),
+}).refine((d) => d.theme !== undefined || d.seen_version !== undefined, { message: 'Nothing to save' });
 
 module.exports = {
   loginBody,

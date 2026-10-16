@@ -315,6 +315,7 @@ async function seedSuperAdmin(roleBySlug) {
       role_id:     superAdminRole.id,
       is_verified: true,
       status:      'ACTIVE',
+      last_seen_version: require('../package.json').version,
     },
   });
 

@@ -67,6 +67,9 @@ model User {
 
   // Screen theme the user picked: LIGHT, DARK or SYSTEM (follow the device).
   theme String @default("SYSTEM") @db.VarChar(10)
+  // The newest release whose "What's new" the user has seen. New accounts
+  // start at the version they were created on, so they aren't shown news.
+  last_seen_version String? @db.VarChar(20)
 
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt

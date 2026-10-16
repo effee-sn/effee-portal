@@ -1,4 +1,5 @@
 const prisma = require('../../lib/prisma');
+const { APP_VERSION } = require('../../lib/appVersion');
 
 /**
  * Users data-access layer.
@@ -136,7 +137,8 @@ function createUsersRepository(db) {
      * @returns {Promise<object>}
      */
     create(data) {
-      return db.user.create({ data, select: userSelect });
+      // A new account has nothing "new" to be told about.
+      return db.user.create({ data: { last_seen_version: APP_VERSION, ...data }, select: userSelect });
     },
 
     /**

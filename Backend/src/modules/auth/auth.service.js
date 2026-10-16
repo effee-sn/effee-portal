@@ -192,12 +192,17 @@ function createAuthService(repository, policy = {}) {
     },
 
     /**
-     * Saves the caller's own display preferences (just the theme for now).
-     * Anyone may set their own; nothing here is audited — it changes no data.
-     * @param {number} userId @param {{ theme: 'LIGHT'|'DARK'|'SYSTEM' }} dto
+     * Saves the caller's own display preferences: the theme, and which
+     * release's "What's new" they have seen. Anyone may set their own; not
+     * audited — it changes no business data.
+     * @param {number} userId
+     * @param {{ theme?: 'LIGHT'|'DARK'|'SYSTEM', seen_version?: string }} dto
      */
     async setPreferences(userId, dto) {
-      return repository.setTheme(userId, dto.theme);
+      const data = {};
+      if (dto.theme !== undefined) data.theme = dto.theme;
+      if (dto.seen_version !== undefined) data.last_seen_version = dto.seen_version;
+      return repository.setPreferences(userId, data);
     },
 
     /**

@@ -1,4 +1,5 @@
 const prisma = require('../../lib/prisma');
+const { APP_VERSION } = require('../../lib/appVersion');
 
 /**
  * Auth data-access layer.
@@ -31,7 +32,7 @@ function createAuthRepository(db) {
      */
     createSsoUser(data) {
       return db.user.create({
-        data: { ...data, is_verified: true },
+        data: { ...data, is_verified: true, last_seen_version: APP_VERSION },
         include: { role: { select: { name: true, slug: true, is_system: true } } },
       });
     },
@@ -70,7 +71,7 @@ function createAuthRepository(db) {
       return db.user.findUnique({
         where: { id },
         select: {
-          id: true, name: true, email: true, department_id: true, theme: true,
+          id: true, name: true, email: true, department_id: true, theme: true, last_seen_version: true,
           role: {
             select: {
               id: true, name: true, slug: true, is_system: true,
@@ -138,9 +139,9 @@ function createAuthRepository(db) {
      * @param {Record<string, unknown>} data
      * @returns {Promise<object>}
      */
-    /** @param {number} id @param {'LIGHT'|'DARK'|'SYSTEM'} theme */
-    setTheme(id, theme) {
-      return db.user.update({ where: { id }, data: { theme }, select: { theme: true } });
+    /** @param {number} id @param {{ theme?: string, last_seen_version?: string }} data */
+    setPreferences(id, data) {
+      return db.user.update({ where: { id }, data, select: { theme: true, last_seen_version: true } });
     },
 
     updateProfile(id, data) {

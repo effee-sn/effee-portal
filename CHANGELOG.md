@@ -25,6 +25,7 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 ### Added
 
 - **Light, Dark and System themes.** Each user picks one from the **theme button in the top bar** (next to the bell) or in **Settings → Profile → Appearance**; it is saved to their account and follows them to any computer. *System* follows the device's light/dark setting. Printing always stays light.
+- **What's new popup.** After each release, every user sees a short list of what changed, once (only the items relevant to their permissions). New accounts are not shown it. It can be opened again any time from **user menu → What's new**. The user-facing notes live in `Frontend/lib/whatsNew.js`.
 - New permission **Sales → Reassign** (`SALES_REASSIGN`): needed to reassign an enquiry or change its owner. Grant it per role in **Administrator → Roles**; Sales → Edit no longer includes it.
 
 ### Fixed

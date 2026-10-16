@@ -4,11 +4,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import usePermissions from '@/lib/usePermissions';
-import { apiGet } from '@/lib/api';
+import { apiGet, apiPut } from '@/lib/api';
 import { UPLOADS_URL } from '@/lib/config';
 import { areaKeyForPath, visibleAreasFor } from '@/lib/navigation';
 import NotificationBell from '@/components/NotificationBell';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
+import WhatsNewModal from '@/components/WhatsNewModal';
+import { compareVersions, releasesFor } from '@/lib/whatsNew';
 import useNav from '@/lib/useNav';
 import { APP_VERSION } from '@/lib/version';
 import { applyTheme, storedTheme } from '@/lib/theme';
@@ -63,6 +65,19 @@ export default function DashboardLayout({ children }) {
     if (!me) return;
     applyTheme(me.theme || storedTheme());
   }, [me]);
+
+  // What's new: once per user after each release (new accounts start at the
+  // version they were created on). Opened again from the user menu.
+  const [whatsNew, setWhatsNew] = useState(null); // { releases, history }
+  const markSeen = () => apiPut('/auth/preferences', { seen_version: APP_VERSION }).catch(() => {});
+  useEffect(() => {
+    if (!me || compareVersions(me.last_seen_version, APP_VERSION) >= 0) return;
+    const releases = releasesFor(can, { after: me.last_seen_version, upTo: APP_VERSION });
+    if (releases.length) setWhatsNew({ releases, history: false });
+    else markSeen(); // nothing for this user in it: just note it as seen
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me]);
+  const closeWhatsNew = () => { if (whatsNew && !whatsNew.history) markSeen(); setWhatsNew(null); };
 
   // Close the app drawer and mobile menu whenever the route changes.
   useEffect(() => { setAppsOpen(false); setAppsShown(false); setNavOpen(false); }, [pathname]);
@@ -222,6 +237,8 @@ export default function DashboardLayout({ children }) {
                   <p className="text-sm font-semibold text-gray-800 truncate">{me?.name}</p>
                   <p className="text-xs text-gray-400 truncate">{me?.email}</p>
                 </div>
+                <button onClick={() => { setUserMenuOpen(false); setWhatsNew({ releases: releasesFor(can, { upTo: APP_VERSION }), history: true }); }}
+                  className="w-full px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition text-left cursor-pointer">What’s new</button>
                 <button onClick={handleLogout} className="w-full px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition text-left cursor-pointer">Logout</button>
                 <p className="px-4 py-2 border-t border-gray-100 text-[11px] text-gray-400">Effee Portal v{APP_VERSION}</p>
               </div>
@@ -295,6 +312,8 @@ export default function DashboardLayout({ children }) {
       )}
 
       <main className="flex-1 overflow-y-auto bg-white print:overflow-visible">{children}</main>
+
+      {whatsNew && <WhatsNewModal releases={whatsNew.releases} history={whatsNew.history} onClose={closeWhatsNew} />}
     </div>
   );
 }
