@@ -451,20 +451,19 @@ export default function EnquiryDetailPage() {
   }
 
   const isClosed = enquiry.stage === 'WON' || enquiry.stage === 'LOST';
-  // Matches the API (Backend/src/modules/sales/access.js):
-  //   - Sales edit + holding the enquiry (the workflow baton) → everything;
-  //   - the creator without edit, while it's at New/Contacted → upload/replace
-  //     documents, log activity, send it on to Review — never delete.
   const handlerId = enquiry.handler_id ?? enquiry.owner_id;
   const isHolder = me?.id != null && me.id === handlerId;
   const hasEditPerm = me?.is_system || can('SALES_EDIT');
-  const canManage = me?.is_system || (hasEditPerm && isHolder);
   const isCreator = me?.id != null && (me.id === enquiry.created_by || me.id === enquiry.owner_id);
-  const canCreatorWork = canManage
-    || (!hasEditPerm && can('SALES_CREATE') && isCreator && ['NEW', 'CONTACTED'].includes(enquiry.stage));
-  // Each person changes only their own data: the details are the raiser's; a
-  // document, activity or review belongs to whoever added it (admins: anything).
+  // Matches the API (Backend/src/modules/sales/access.js):
+  //   - the flow gives access: whoever holds it does the stage's work;
+  //   - Sales → Edit adds deleting (own items) and editing details (raiser);
+  //   - Won: the raiser; Lost: whoever holds it; Reopen: Sales → Reassign.
+  const canFlow = me?.is_system || isHolder;
+  const canManage = me?.is_system || (hasEditPerm && isHolder);
   const canEditDetails = me?.is_system || (canManage && isCreator);
+  const canWin = me?.is_system || (isHolder && isCreator);
+  const canReopen = me?.is_system || can('SALES_REASSIGN');
   const owns = (item) => Boolean(me?.is_system || (me?.id != null && item?.created_by === me.id));
   const wonBlocked = readiness?.blocked?.WON || [];
 
@@ -531,23 +530,23 @@ export default function EnquiryDetailPage() {
               )}
             </div>
           </div>
-          {(canManage || canDelete || canReassign) && (
+          {(canFlow || canReopen || canDelete || canReassign) && (
             <div className="flex items-center gap-2 shrink-0">
-              {canManage && (
+              {(canFlow || canReopen) && (
                 <>
                   {canEditDetails && (
                     <button onClick={() => setModal('edit')} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Edit</button>
                   )}
                   {!isClosed ? (
-                    <>
-                      <button onClick={() => setModal('win')} disabled={wonBlocked.length > 0}
+                    canFlow && <>
+                      {canWin && <button onClick={() => setModal('win')} disabled={wonBlocked.length > 0}
                         title={wonBlocked.length ? `Needs ${wonBlocked.join(' & ')} first` : 'Mark won'}
                         className="px-3 py-1.5 text-sm font-medium text-white rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{ backgroundColor: '#15803D' }}>Won</button>
+                        style={{ backgroundColor: '#15803D' }}>Won</button>}
                       <button onClick={() => setModal('lose')} className="btn-danger px-3 py-1.5 text-sm cursor-pointer">Lost</button>
                     </>
                   ) : (
-                    <button onClick={reopen} disabled={busy} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Reopen</button>
+                    canReopen && <button onClick={reopen} disabled={busy} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Reopen</button>
                   )}
                 </>
               )}
@@ -596,7 +595,7 @@ export default function EnquiryDetailPage() {
       )}
 
       {/* Process — where it is now and what's next */}
-      <EnquiryProcess enquiry={enquiry} canManage={canCreatorWork} busy={busy} onPick={changeStage} blocked={readiness?.blocked} />
+      <EnquiryProcess enquiry={enquiry} canManage={canFlow} busy={busy} onPick={changeStage} blocked={readiness?.blocked} />
 
       {/* Two columns (60 / 40): the record (details, documents) on the left;
           the conversation (reviews, activity log) on the right. Stacks on small
@@ -637,13 +636,13 @@ export default function EnquiryDetailPage() {
                   )}
                 </div>
               </Section>
-              <EnquiryAttachments enquiryId={enquiry.id} canEdit={canCreatorWork} canManage={canManage} owns={owns} kinds={visibleDocKinds(enquiry.stage)} onChanged={load}
+              <EnquiryAttachments enquiryId={enquiry.id} canEdit={canFlow} canManage={canFlow} canDelete={canManage} owns={owns} kinds={visibleDocKinds(enquiry.stage)} onChanged={load}
                 currencyCode={enquiry.currency_code} currencySymbol={enquiry.currency?.symbol} />
             </div>
             <div className="space-y-4 min-w-0">
-              {showReviews && <EnquiryReviews enquiryId={enquiry.id} canEdit={canManage} owns={owns} users={users} onChanged={load} />}
+              {showReviews && <EnquiryReviews enquiryId={enquiry.id} canEdit={canFlow} canDelete={canManage} owns={owns} users={users} onChanged={load} />}
               <div id="activity">
-                <EnquiryActivities enquiryId={enquiry.id} canEdit={canCreatorWork} canDelete={canManage} owns={owns} users={users} stage={enquiry.stage} onChanged={load} />
+                <EnquiryActivities enquiryId={enquiry.id} canEdit={canFlow} canDelete={canManage} owns={owns} users={users} stage={enquiry.stage} onChanged={load} />
               </div>
             </div>
           </div>

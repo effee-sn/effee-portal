@@ -317,6 +317,39 @@ describe('Sales rules: the creator without Sales edit', () => {
   });
 });
 
+describe('Sales rules: the flow gives access (no Sales edit needed)', () => {
+  const viewOnly = (user) => actor(user, ['SALES_VIEW']);
+
+  it('Internal Sales with only View works its stages, sends the offer, and can mark it Lost — but not delete', async () => {
+    const e = await newEnquiry('GENERATED');
+    await upload(e.id, 'FORMAT_PDF', fx.field);
+    await move(e.id, 'REVIEW', fx.field); // → Internal holds it
+    const me = viewOnly(fx.internal);
+    await activityService.create(e.id, { type: 'MEETING', activity_at: new Date(), subject: 'review', is_review: true, follow_up_ended: true }, me);
+    await enquiryService.update(e.id, { stage: 'CONCEPT' }, me);
+    const docAs = (kind, extra = {}) => attachmentService.record(e.id, {
+      originalname: `${kind.toLowerCase()}.pdf`, filename: `test-${suffix}-${Math.random().toString(36).slice(2)}`,
+      mimetype: 'application/pdf', size: 1,
+    }, { kind, ...extra }, me);
+    const concept = await docAs('CONCEPT');
+    await assert.rejects(attachmentService.remove(concept.id, me), { name: 'ForbiddenError' }, 'deleting needs Sales edit');
+    await assert.rejects(enquiryService.update(e.id, { title: 'x' }, me), { name: 'ForbiddenError' }, 'details are not theirs');
+    await assert.rejects(enquiryService.win(e.id, { order_value: 1 }, me), { name: 'ForbiddenError' }, 'only the raiser marks Won');
+    await enquiryService.lose(e.id, { lost_reason: 'Not feasible' }, me);
+    assert.equal((await state(e.id)).stage, 'LOST');
+  });
+
+  it('Field with only View: works its follow-up and marks Won; cannot act while Internal holds it', async () => {
+    const id = (await toOfferReleased()).id;
+    await assert.rejects(log(id, fx.field), { name: 'ForbiddenError' }, 'Internal holds it at Offer Released');
+    await sendOffer(id, fx.internal); // → Follow-up, with Field
+    const me = viewOnly(fx.field);
+    await activityService.create(id, { type: 'CALL', activity_at: new Date(), subject: 'follow-up call' }, me);
+    await enquiryService.win(id, { order_value: 100000 }, me);
+    assert.equal((await state(id)).stage, 'WON');
+  });
+});
+
 describe('Sales rules: each person changes only their own data', () => {
   it('only the person who raised it edits the details — Internal cannot, even while holding it', async () => {
     const e = await newEnquiry('GENERATED');
@@ -465,7 +498,9 @@ describe('Sales rules: closing and reopening', () => {
   });
 
   it('Reopen returns it to Follow-up with the field owner and clears the close-out', async () => {
-    await enquiryService.reopen(id, actor(fx.field));
+    await assert.rejects(enquiryService.reopen(id, actor(fx.field)), { name: 'ForbiddenError' },
+      'reopening needs Sales → Reassign');
+    await enquiryService.reopen(id, actor(fx.field, [...FULL, 'SALES_REASSIGN']));
     const s = await state(id);
     assert.equal(s.stage, 'FOLLOW_UP');
     assert.equal(s.handler_id, fx.field.id);

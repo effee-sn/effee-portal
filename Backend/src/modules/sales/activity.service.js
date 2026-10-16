@@ -5,7 +5,7 @@ const { notificationService } = require('../notification/notification.service');
 const config = require('../../config/env');
 const { zonedTime } = require('../../lib/timezone');
 const { NotFoundError } = require('../../core');
-const { assertFullEdit, assertCreatorWork, assertOwnItem } = require('./access');
+const { assertFullEdit, assertFlowWork, assertOwnItem } = require('./access');
 const { stageName } = require('./emailDetails');
 
 const MEDIUM = Object.freeze({ CALL: 'Call', MEETING: 'Meeting', TEAMS: 'Teams', SITE_VISIT: 'Site visit', EMAIL: 'Email' });
@@ -27,13 +27,12 @@ function createActivityService(repository) {
   }
 
   /**
-   * Logging / editing an activity: creator-level work (the creator may, while
-   * the enquiry is at New/Contacted). A review is Internal's job: full edit.
+   * Logging / editing an activity or review: the holder's work (the flow
+   * gives access).
    * @throws {ForbiddenError}
    */
   function assertCanLog(enquiry, actor, isReview) {
-    if (isReview) assertFullEdit(enquiry, actor, 'log reviews on this enquiry');
-    else assertCreatorWork(enquiry, actor, 'log activity on this enquiry');
+    assertFlowWork(enquiry, actor, isReview ? 'log reviews on it' : 'log activity on it');
   }
 
   /** Parses the stored JSON participant ids back into an array for the API. */

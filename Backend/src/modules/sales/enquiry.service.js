@@ -7,7 +7,9 @@ const { currencyService } = require('../master/currency.service');
 const { loadRates, toInr, paise } = require('../master/fx');
 const { NEXT_STEP, enquiryRows, money, sentence, stageName } = require('./emailDetails');
 const { NotFoundError, ConflictError, ValidationError, ForbiddenError, buildSearchClause } = require('../../core');
-const { hasEdit, canReassign, assertFullEdit, assertCreatorWork, assertDetailsEdit } = require('./access');
+const {
+  canReassign, assertFlowWork, assertDetailsEdit, assertCanWin, assertCanLose,
+} = require('./access');
 
 /** Human label for a stage enum, for notification text (`FOLLOW_UP` → `Follow up`). */
 function stageLabel(stage) {
@@ -65,31 +67,23 @@ function createEnquiryService(repository) {
    * @throws {ForbiddenError}
    */
   function assertCanManage(enquiry, actor) {
-    assertFullEdit(enquiry, actor, 'update this enquiry');
+    assertFlowWork(enquiry, actor, 'update this enquiry');
   }
 
   /**
-   * An update: full editors may change anything. The creator without Edit may
-   * only move their own New/Contacted enquiry on — to Contacted or Review —
-   * and change nothing else.
+   * An update. Moving the stage is the holder's work (the flow gives access);
+   * anything else is the enquiry's details — the raiser's, with Sales → Edit;
+   * changing the owner is a reassignment.
    * @throws {ForbiddenError}
    */
   function assertCanUpdate(enquiry, dto, actor) {
-    if (actor?.is_system || hasEdit(actor)) {
-      assertCanManage(enquiry, actor);
-      // Anything besides the stage is the enquiry's details — the raiser's data.
-      const details = Object.keys(dto).filter((k) => dto[k] !== undefined && k !== 'stage');
-      if (details.length) assertDetailsEdit(enquiry, actor);
-      // Changing the owner is a reassignment.
-      if (dto.owner_id !== undefined && dto.owner_id !== null && dto.owner_id !== enquiry.owner_id && !canReassign(actor)) {
-        throw new ForbiddenError('You need the Sales reassign permission to change the owner');
-      }
-      return;
+    if (actor?.is_system) return;
+    assertFlowWork(enquiry, actor, 'update this enquiry');
+    const details = Object.keys(dto).filter((k) => dto[k] !== undefined && k !== 'stage');
+    if (details.length) assertDetailsEdit(enquiry, actor);
+    if (dto.owner_id !== undefined && dto.owner_id !== null && dto.owner_id !== enquiry.owner_id && !canReassign(actor)) {
+      throw new ForbiddenError('You need the Sales reassign permission to change the owner');
     }
-    const fields = Object.keys(dto).filter((k) => dto[k] !== undefined);
-    const stageOnly = fields.length === 1 && fields[0] === 'stage' && ['CONTACTED', 'REVIEW'].includes(dto.stage);
-    if (!stageOnly) throw new ForbiddenError('You need Sales edit access to change this enquiry');
-    assertCreatorWork(enquiry, actor, 'move this enquiry on');
   }
 
   /**
@@ -483,7 +477,7 @@ function createEnquiryService(repository) {
     async win(id, dto, actor) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Enquiry');
-      assertCanManage(before, actor);
+      assertCanWin(before, actor);
       if (before.stage === 'WON') throw new ConflictError('Enquiry is already marked won');
       await assertStageGate(id, 'WON');
 
@@ -539,7 +533,7 @@ function createEnquiryService(repository) {
     async lose(id, dto, actor) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Enquiry');
-      assertCanManage(before, actor);
+      assertCanLose(before, actor);
       if (before.stage === 'LOST') throw new ConflictError('Enquiry is already marked lost');
 
       const data = {
@@ -581,7 +575,7 @@ function createEnquiryService(repository) {
     async reopen(id, actor) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Enquiry');
-      assertCanManage(before, actor);
+      if (!canReassign(actor)) throw new ForbiddenError('You need the Sales reassign permission to reopen an enquiry');
       if (before.stage !== 'WON' && before.stage !== 'LOST') {
         throw new ConflictError('Only a won or lost enquiry can be reopened');
       }

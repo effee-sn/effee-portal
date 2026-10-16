@@ -9,7 +9,7 @@ const { notificationService } = require('../notification/notification.service');
 const { loadRates } = require('../master/fx');
 const { money } = require('./emailDetails');
 const { NotFoundError, BadRequestError, ConflictError, ValidationError } = require('../../core');
-const { assertFullEdit, assertCreatorWork, assertOwnItem } = require('./access');
+const { assertFullEdit, assertFlowWork, assertOwnItem } = require('./access');
 
 // Kinds that hold a single *current* document. Re-uploading creates the next
 // version and keeps the old one as superseded history. OFFER is the exception —
@@ -56,7 +56,7 @@ function createAttachmentService(repository) {
       try {
         enquiry = await loadEnquiry(enquiryId);
         // Upload / replace: the creator may too, while the enquiry is at New/Contacted.
-        assertCreatorWork(enquiry, actor, 'upload documents on this enquiry');
+        assertFlowWork(enquiry, actor, 'upload documents on it');
       } catch (err) {
         discard(file); // don't leave the multer-saved file behind
         throw err;
@@ -139,7 +139,7 @@ function createAttachmentService(repository) {
       if (before.kind !== 'OFFER') throw new ConflictError('Only offer documents can be marked as sent');
       if (before.superseded_at) throw new ConflictError('An older version cannot be marked as sent');
       const enquiry = await loadEnquiry(before.enquiry_id);
-      assertFullEdit(enquiry, actor, 'mark offers as sent');
+      assertFlowWork(enquiry, actor, 'mark offers as sent');
       if (sent && before.offer_value === null) {
         throw new ConflictError('Add the offer price before marking this offer as sent');
       }
@@ -211,7 +211,7 @@ function createAttachmentService(repository) {
       if (!before) throw new NotFoundError('Attachment');
       if (before.kind !== 'OFFER') throw new ConflictError('Only offers have a price');
       const enquiry = await loadEnquiry(before.enquiry_id);
-      assertFullEdit(enquiry, actor, 'change an offer price');
+      assertFlowWork(enquiry, actor, 'change an offer price');
       if (before.sent_at && before.offer_value !== null) {
         throw new ConflictError('The price of a sent offer is fixed — upload a revised offer instead');
       }

@@ -87,7 +87,8 @@ export default function EnquiryAttachments({
   // canEdit: upload / replace. canManage: delete, offer price, mark sent (Sales
   // edit) — defaults to canEdit.
   // owns(doc): only the uploader replaces or deletes a document (admins: any).
-  enquiryId, canEdit, canManage = canEdit, owns = () => true, kinds = ALL_KINDS, bare = false, onChanged, currencyCode = 'INR', currencySymbol,
+  // canDelete: Sales → Edit (defaults to canManage).
+  enquiryId, canEdit, canManage = canEdit, canDelete = canManage, owns = () => true, kinds = ALL_KINDS, bare = false, onChanged, currencyCode = 'INR', currencySymbol,
 }) {
   const [items, setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
@@ -284,7 +285,7 @@ export default function EnquiryAttachments({
                               <button onClick={() => pick(kind)} disabled={busy || Boolean(pending)}
                                 title="Upload a new version — this one is kept in history"
                                 className="text-xs text-gray-500 hover:text-gray-800 cursor-pointer">Replace</button>
-                              {canManage && (
+                              {canDelete && (
                                 <button onClick={() => remove(a)} disabled={busy}
                                   className="text-xs text-red-500 hover:text-red-700 cursor-pointer">Delete</button>
                               )}
@@ -365,7 +366,7 @@ export default function EnquiryAttachments({
                             className={`text-xs cursor-pointer ${a.sent_at ? 'text-gray-500 hover:text-gray-800' : 'text-green-600 hover:text-green-800'}`}>
                             {a.sent_at ? 'Unmark sent' : 'Mark sent'}
                           </button>
-                          {owns(a) && (
+                          {canDelete && owns(a) && (
                             <button onClick={() => remove(a)} disabled={busy}
                               className="text-xs text-red-500 hover:text-red-700 cursor-pointer">Delete</button>
                           )}

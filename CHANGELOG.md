@@ -13,6 +13,17 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.1.1] — 2026-10-16
+
+### Changed — Sales: the flow gives access
+
+- Whoever an enquiry is **with** (as the flow hands it over) can do that stage's work **without the Sales → Edit permission**: log activities and reviews, upload documents and replace their own, set the offer price and mark it sent, and move the stage forward. Internal Sales works Review → Offer Released and Negotiation; Field Sales works New/Contacted and the follow-ups. When the enquiry moves on, they are read-only until it comes back.
+- **Won** — only the person who raised the enquiry, while it is with them. **Lost** — whoever holds it, including Internal Sales (e.g. not feasible).
+- **Reopen** a won or lost enquiry now needs **Sales → Reassign**.
+- **Sales → Edit** is now an extra: editing the enquiry's details (only the person who raised it) and deleting your own documents, activities and reviews.
+
+---
+
 ## [1.1.0] — 2026-10-16
 
 ### Sales — each person changes only their own data

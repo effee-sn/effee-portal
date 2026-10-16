@@ -4,24 +4,25 @@ const { ForbiddenError } = require('../../core');
  * Who may change an enquiry — one rule set for enquiries, documents and
  * activities.
  *
- *   - **Sales → Edit** (SALES_EDIT): full editing of the enquiry — details,
- *     stage, documents (upload / replace / delete), activities, Won/Lost —
- *     while the enquiry is with them (they are the current handler).
- *   - **The creator without Edit** (raised it with SALES_CREATE): only while
- *     their enquiry is at New or Contacted — upload and replace documents, log
- *     activities, and send it on to Review. Never delete. Once it moves on,
- *     read-only until they are given Edit.
- *   - **Your own data only:** the enquiry's details (customer, contact, title,
- *     value, …) are edited only by the person who raised it; a document is
- *     replaced or deleted, and an activity or review edited or deleted, only by
- *     the person who added it. So Internal Sales works on their own documents,
- *     reviews and offers but cannot change what Field Sales entered.
- *   - **Reassign** (changing the owner or handler) needs SALES_REASSIGN.
+ *   - **The flow gives access.** Whoever the enquiry is with right now (its
+ *     handler — Field Sales at New/Contacted/Follow-up, Internal Sales from
+ *     Review to Offer Released and in Negotiation) does that stage's work on
+ *     their own data, with no extra permission: log activities and reviews,
+ *     upload documents and replace their own, set the price of and send an
+ *     offer, move the stage forward (gates still apply). When it moves on,
+ *     they are read-only until the flow brings it back.
+ *   - **Won:** only the person who raised it, while it is with them.
+ *     **Lost:** whoever holds it — the raiser, or Internal Sales (e.g. not
+ *     feasible).
+ *   - **Sales → Edit** (SALES_EDIT) adds, while holding it: editing the
+ *     enquiry's details (only the person who raised it) and deleting their
+ *     own documents, activities and reviews.
+ *   - **Your own data only:** a document is replaced or deleted, and an
+ *     activity or review edited or deleted, only by whoever added it.
+ *   - **Sales → Reassign** (SALES_REASSIGN): reassign, change the owner,
+ *     reopen a closed enquiry.
  *   - System users (Super Admin): anything, any time — they fix mistakes.
  */
-
-/** Stages where the creator may still work on their own enquiry. */
-const CREATOR_STAGES = Object.freeze(['NEW', 'CONTACTED']);
 
 /** @param {{ is_system?: boolean, permissions?: string[] }} [actor] */
 const hasEdit = (actor) => Boolean(actor?.is_system || actor?.permissions?.includes('SALES_EDIT'));
@@ -33,40 +34,32 @@ const isHandler = (enquiry, actor) => Boolean(actor?.id) && actor.id === (enquir
 const isCreator = (enquiry, actor) => Boolean(actor?.id)
   && (actor.id === enquiry.created_by || actor.id === enquiry.owner_id);
 
-/** Creator-level work is allowed: their own enquiry, still at New / Contacted. */
-const creatorMayWork = (enquiry, actor) => isCreator(enquiry, actor) && CREATOR_STAGES.includes(enquiry.stage);
+/** May reassign, change the owner or reopen: SALES_REASSIGN or a system user. */
+const canReassign = (actor) => Boolean(actor?.is_system || actor?.permissions?.includes('SALES_REASSIGN'));
 
 /**
- * Full editing: SALES_EDIT and holding the enquiry (or a system user).
- * @param {object} enquiry @param {object} [actor] @param {string} [what] e.g. "update this enquiry"
+ * The stage's work: the person holding the enquiry (or a system user).
+ * @param {object} enquiry @param {object} [actor] @param {string} [what]
+ * @throws {ForbiddenError}
+ */
+function assertFlowWork(enquiry, actor, what = 'do that') {
+  if (actor?.is_system) return;
+  if (isHandler(enquiry, actor)) return;
+  throw new ForbiddenError(`This enquiry is not with you right now, so you cannot ${what}`);
+}
+
+/**
+ * Editing beyond the stage's work: Sales → Edit and holding it.
  * @throws {ForbiddenError}
  */
 function assertFullEdit(enquiry, actor, what = 'update this enquiry') {
   if (actor?.is_system) return;
   if (!hasEdit(actor)) throw new ForbiddenError(`You need Sales edit access to ${what}`);
-  if (!isHandler(enquiry, actor)) throw new ForbiddenError(`Only the current handler can ${what}`);
+  assertFlowWork(enquiry, actor, what);
 }
 
 /**
- * Creator-level work (upload / replace documents, log activities, send to
- * Review): full editors as above, or the creator while it is at New/Contacted.
- * @param {object} enquiry @param {object} [actor] @param {string} [what]
- * @throws {ForbiddenError}
- */
-function assertCreatorWork(enquiry, actor, what = 'do that') {
-  if (actor?.is_system) return;
-  if (hasEdit(actor)) {
-    if (isHandler(enquiry, actor)) return;
-    throw new ForbiddenError(`Only the current handler can ${what}`);
-  }
-  if (creatorMayWork(enquiry, actor)) return;
-  throw new ForbiddenError(isCreator(enquiry, actor)
-    ? `This enquiry has moved on to Review — you need Sales edit access to ${what}`
-    : `You need Sales edit access to ${what}`);
-}
-
-/**
- * The enquiry's details: only the person who raised it, with Sales edit and
+ * The enquiry's details: only the person who raised it, with Sales → Edit,
  * while it is with them (or a system user).
  * @throws {ForbiddenError}
  */
@@ -90,10 +83,21 @@ function assertOwnItem(item, actor, what) {
   throw new ForbiddenError(`Only the person who added it can ${what}`);
 }
 
-/** May reassign (owner / handler): SALES_REASSIGN or a system user. */
-const canReassign = (actor) => Boolean(actor?.is_system || actor?.permissions?.includes('SALES_REASSIGN'));
+/** Won: the person who raised it, while it is with them. @throws {ForbiddenError} */
+function assertCanWin(enquiry, actor) {
+  if (actor?.is_system) return;
+  assertFlowWork(enquiry, actor, 'mark it won');
+  if (!isCreator(enquiry, actor)) throw new ForbiddenError('Only the person who raised this enquiry can mark it won');
+}
+
+/** Lost: whoever holds it (the raiser, or Internal Sales). @throws {ForbiddenError} */
+function assertCanLose(enquiry, actor) {
+  assertFlowWork(enquiry, actor, 'mark it lost');
+}
 
 module.exports = {
-  CREATOR_STAGES, hasEdit, isHandler, isCreator, creatorMayWork, canReassign,
-  assertFullEdit, assertCreatorWork, assertDetailsEdit, assertOwnItem,
+  hasEdit, isHandler, isCreator, canReassign,
+  assertFlowWork, assertFullEdit, assertDetailsEdit, assertOwnItem, assertCanWin, assertCanLose,
+  // Earlier name for the flow check, still used by callers.
+  assertCreatorWork: assertFlowWork,
 };

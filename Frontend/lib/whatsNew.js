@@ -12,6 +12,24 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.1.1',
+    date: '2026-10-16',
+    items: [
+      {
+        icon: 'swap',
+        title: 'Work the enquiries that are with you',
+        text: 'When the flow hands an enquiry to you, you can do your stage’s work — activities, reviews, documents, the offer — without any extra permission. It becomes read-only for you once it moves on.',
+        perm: 'SALES_VIEW',
+      },
+      {
+        icon: 'lock',
+        title: 'Won, Lost and Reopen',
+        text: 'Won is marked by the person who raised the enquiry; Lost by whoever has it, including Internal Sales. Reopening a closed enquiry needs the Sales → Reassign permission.',
+        perm: 'SALES_VIEW',
+      },
+    ],
+  },
+  {
     version: '1.1.0',
     date: '2026-10-16',
     items: [
