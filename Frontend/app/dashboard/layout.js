@@ -77,6 +77,7 @@ export default function DashboardLayout({ children }) {
     else markSeen(); // nothing for this user in it: just note it as seen
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me]);
+  const openWhatsNew = () => setWhatsNew({ releases: releasesFor(can, { upTo: APP_VERSION }), history: true });
   const closeWhatsNew = () => { if (whatsNew && !whatsNew.history) markSeen(); setWhatsNew(null); };
 
   // Close the app drawer and mobile menu whenever the route changes.
@@ -216,6 +217,13 @@ export default function DashboardLayout({ children }) {
         {/* Theme + notifications */}
         <div className="ml-2 shrink-0 flex items-center gap-1">
           <ThemeSwitcher initial={me?.theme} />
+          <button type="button" onClick={openWhatsNew}
+            className="w-8 h-8 rounded-full flex items-center justify-center text-white/80 hover:bg-white/10 transition cursor-pointer"
+            aria-label="What’s new" title="What’s new">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3zM19 15l.8 1.9L21.7 18l-1.9.8L19 20.7l-.8-1.9-1.9-.8 1.9-.8L19 15z" />
+            </svg>
+          </button>
           <NotificationBell />
         </div>
 
@@ -237,7 +245,7 @@ export default function DashboardLayout({ children }) {
                   <p className="text-sm font-semibold text-gray-800 truncate">{me?.name}</p>
                   <p className="text-xs text-gray-400 truncate">{me?.email}</p>
                 </div>
-                <button onClick={() => { setUserMenuOpen(false); setWhatsNew({ releases: releasesFor(can, { upTo: APP_VERSION }), history: true }); }}
+                <button onClick={() => { setUserMenuOpen(false); openWhatsNew(); }}
                   className="w-full px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition text-left cursor-pointer">What’s new</button>
                 <button onClick={handleLogout} className="w-full px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition text-left cursor-pointer">Logout</button>
                 <p className="px-4 py-2 border-t border-gray-100 text-[11px] text-gray-400">Effee Portal v{APP_VERSION}</p>

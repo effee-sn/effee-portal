@@ -42,7 +42,7 @@ export const RELEASES = [
       {
         icon: 'spark',
         title: 'What’s new',
-        text: 'This window. It appears once after each update — open it again any time from your user menu.',
+        text: 'This window. It appears once after each update — open it again any time from the ✨ button in the top bar.',
         perm: null,
       },
     ],

@@ -23,42 +23,44 @@
    White *text* stays white, so buttons keep working. Screen only — printing
    stays light. */
 @media screen {
+  /* WhatsApp-style dark: blue-grey, not black. Page #111B21, panels #1F2C33,
+     raised #2A3942, soft white text. */
   html[data-theme="dark"] {
     color-scheme: dark;
-    --ams-primary: #A06E92;
-    --ams-primary-hover: #B482A6;
-    --ams-primary-light: #2A2029;
-    --ams-primary-mid: #33262F;
-    --ams-bg: #0F1117;
-    --background: #161922;
-    --foreground: #E0E3E9;
-    --ams-surface: #161922;
-    --ams-surface-hover: #1E222C;
-    --ams-input-border: #3A4052;
-    --ams-input-text: #E8EAEF;
-    --ams-btn-text: #D3D7DF;
+    --ams-primary: #A77A9A;
+    --ams-primary-hover: #B98CAC;
+    --ams-primary-light: #2B2A35;
+    --ams-primary-mid: #33303D;
+    --ams-bg: #111B21;
+    --background: #1F2C33;
+    --foreground: #E9EDEF;
+    --ams-surface: #1F2C33;
+    --ams-surface-hover: #2A3942;
+    --ams-input-border: #3B4A54;
+    --ams-input-text: #E9EDEF;
+    --ams-btn-text: #D1D7DB;
 
-    --color-gray-50:  #1B1F28;
-    --color-gray-100: #232733;
-    --color-gray-200: #2E3341;
-    --color-gray-300: #3D4354;
-    --color-gray-400: #8A92A5;
-    --color-gray-500: #9AA2B3;
-    --color-gray-600: #B3B9C6;
-    --color-gray-700: #C9CED8;
-    --color-gray-800: #E0E3E9;
-    --color-gray-900: #F1F3F6;
+    --color-gray-50:  #233138;
+    --color-gray-100: #2A3942;
+    --color-gray-200: #33444D;
+    --color-gray-300: #3F515B;
+    --color-gray-400: #8696A0;
+    --color-gray-500: #99A7AF;
+    --color-gray-600: #AEBAC1;
+    --color-gray-700: #C5CED3;
+    --color-gray-800: #E1E6E9;
+    --color-gray-900: #E9EDEF;
 
-    --color-red-50:  #33191C;  --color-red-100: #421F23;  --color-red-200: #63292F;
-    --color-red-600: #F87171;  --color-red-700: #FCA5A5;  --color-red-800: #FECACA;
-    --color-green-50:  #12291B; --color-green-100: #163420; --color-green-200: #1F4A2E;
-    --color-green-600: #4ADE80; --color-green-700: #86EFAC; --color-green-800: #BBF7D0;
-    --color-amber-50:  #2E2510; --color-amber-100: #3A2E10; --color-amber-200: #574416;
-    --color-amber-600: #FBBF24; --color-amber-700: #FCD34D; --color-amber-800: #FDE68A;
-    --color-blue-50:  #14213B;  --color-blue-200: #1E3A6B;
-    --color-blue-600: #60A5FA;  --color-blue-700: #93C5FD;
-    --color-indigo-50: #1C1B45; --color-indigo-100: #25235C;
-    --color-indigo-600: #A5B4FC;
+    --color-red-50:  #3A2A30;  --color-red-100: #46303A;  --color-red-200: #66404A;
+    --color-red-600: #F28B8B;  --color-red-700: #F7AFAF;  --color-red-800: #FBCFCF;
+    --color-green-50:  #213A35; --color-green-100: #26443D; --color-green-200: #2F5A4F;
+    --color-green-600: #5FD39A; --color-green-700: #8FE3B8; --color-green-800: #BDF0D4;
+    --color-amber-50:  #3A3527; --color-amber-100: #453E2B; --color-amber-200: #5E5233;
+    --color-amber-600: #F2C14E; --color-amber-700: #F6D37E; --color-amber-800: #FAE3AA;
+    --color-blue-50:  #233A4A;  --color-blue-200: #2F5268;
+    --color-blue-600: #6EB6F5;  --color-blue-700: #9CCBF8;
+    --color-indigo-50: #2D3050; --color-indigo-100: #353962;
+    --color-indigo-600: #AEB8F7;
   }
   html[data-theme="dark"] .bg-white { background-color: var(--ams-surface); }
   html[data-theme="dark"] .hover\:bg-white:hover { background-color: var(--ams-surface-hover); }
