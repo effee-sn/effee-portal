@@ -13,6 +13,25 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.1.0] — 2026-10-16
+
+### Sales — each person changes only their own data
+
+- **Enquiry details** (customer, contact, title, type, description, expected value and close date, currency, application) can be edited only by the **person who raised the enquiry** (with Sales → Edit, while it is with them). Internal Sales sees them read-only.
+- **Documents:** only the person who uploaded a document can **replace** or **delete** it. Internal Sales still uploads and manages its own concept, power calculation, costing and offer documents.
+- **Activities and reviews:** only the person who logged an entry can **edit** or **delete** it.
+- Super Admin can still change anything, to correct mistakes.
+
+### Added
+
+- New permission **Sales → Reassign** (`SALES_REASSIGN`): needed to reassign an enquiry or change its owner. Grant it per role in **Administrator → Roles**; Sales → Edit no longer includes it.
+
+### Fixed
+
+- The Roles permission matrix now shows every action, including **Export** (Reports) and the new **Reassign** — Export was missing before.
+
+---
+
 ## [1.0.0] — 2026-10-16
 
 The first numbered release: everything built from 29 July to 16 October 2026.

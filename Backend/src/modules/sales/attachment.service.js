@@ -9,7 +9,7 @@ const { notificationService } = require('../notification/notification.service');
 const { loadRates } = require('../master/fx');
 const { money } = require('./emailDetails');
 const { NotFoundError, BadRequestError, ConflictError, ValidationError } = require('../../core');
-const { assertFullEdit, assertCreatorWork } = require('./access');
+const { assertFullEdit, assertCreatorWork, assertOwnItem } = require('./access');
 
 // Kinds that hold a single *current* document. Re-uploading creates the next
 // version and keeps the old one as superseded history. OFFER is the exception —
@@ -73,6 +73,12 @@ function createAttachmentService(repository) {
       // current doc becomes superseded history (still downloadable).
       const version = (await repository.maxVersion(enquiryId, dto.kind)) + 1;
       if (SINGLE_KINDS.has(dto.kind)) {
+        // A new version replaces the current one — only its uploader may.
+        const current = await repository.findCurrent(enquiryId, dto.kind);
+        if (current) {
+          try { assertOwnItem(current, actor, 'replace this document'); }
+          catch (err) { discard(file); throw err; }
+        }
         await repository.supersedeCurrent(enquiryId, dto.kind, actor?.id ?? null);
       }
 
@@ -235,6 +241,7 @@ function createAttachmentService(repository) {
       if (!before) throw new NotFoundError('Attachment');
       const enquiry = await loadEnquiry(before.enquiry_id);
       assertFullEdit(enquiry, actor, 'delete documents');
+      assertOwnItem(before, actor, 'delete this document');
       // History is the record of what was shared and when — previous versions
       // stay. Only the current document (or an offer revision) can be deleted.
       if (before.superseded_at) {

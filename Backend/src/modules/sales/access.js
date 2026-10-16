@@ -11,7 +11,13 @@ const { ForbiddenError } = require('../../core');
  *     their enquiry is at New or Contacted — upload and replace documents, log
  *     activities, and send it on to Review. Never delete. Once it moves on,
  *     read-only until they are given Edit.
- *   - System users (Super Admin): anything, any time.
+ *   - **Your own data only:** the enquiry's details (customer, contact, title,
+ *     value, …) are edited only by the person who raised it; a document is
+ *     replaced or deleted, and an activity or review edited or deleted, only by
+ *     the person who added it. So Internal Sales works on their own documents,
+ *     reviews and offers but cannot change what Field Sales entered.
+ *   - **Reassign** (changing the owner or handler) needs SALES_REASSIGN.
+ *   - System users (Super Admin): anything, any time — they fix mistakes.
  */
 
 /** Stages where the creator may still work on their own enquiry. */
@@ -59,4 +65,35 @@ function assertCreatorWork(enquiry, actor, what = 'do that') {
     : `You need Sales edit access to ${what}`);
 }
 
-module.exports = { CREATOR_STAGES, hasEdit, isHandler, isCreator, creatorMayWork, assertFullEdit, assertCreatorWork };
+/**
+ * The enquiry's details: only the person who raised it, with Sales edit and
+ * while it is with them (or a system user).
+ * @throws {ForbiddenError}
+ */
+function assertDetailsEdit(enquiry, actor) {
+  if (actor?.is_system) return;
+  assertFullEdit(enquiry, actor, 'edit this enquiry');
+  if (!isCreator(enquiry, actor)) {
+    throw new ForbiddenError('Only the person who raised this enquiry can change its details');
+  }
+}
+
+/**
+ * Something someone added (a document, an activity, a review): only they may
+ * change or remove it (or a system user).
+ * @param {{ created_by?: number|null }} item @param {object} [actor] @param {string} what
+ * @throws {ForbiddenError}
+ */
+function assertOwnItem(item, actor, what) {
+  if (actor?.is_system) return;
+  if (item?.created_by && actor?.id === item.created_by) return;
+  throw new ForbiddenError(`Only the person who added it can ${what}`);
+}
+
+/** May reassign (owner / handler): SALES_REASSIGN or a system user. */
+const canReassign = (actor) => Boolean(actor?.is_system || actor?.permissions?.includes('SALES_REASSIGN'));
+
+module.exports = {
+  CREATOR_STAGES, hasEdit, isHandler, isCreator, creatorMayWork, canReassign,
+  assertFullEdit, assertCreatorWork, assertDetailsEdit, assertOwnItem,
+};

@@ -109,7 +109,8 @@ function ReviewModal({ enquiryId, review, users, onClose, onSaved }) {
 }
 
 // ── Reviews card ──────────────────────────────────────────────────────────────
-export default function EnquiryReviews({ enquiryId, canEdit, users = [], onChanged }) {
+// owns(review): only whoever logged it may edit or delete it (admins: any).
+export default function EnquiryReviews({ enquiryId, canEdit, owns = () => true, users = [], onChanged }) {
   const [items, setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal]   = useState(null);
@@ -155,7 +156,7 @@ export default function EnquiryReviews({ enquiryId, canEdit, users = [], onChang
             ) : null}
           </div>
         </div>
-        {canEdit && (
+        {canEdit && owns(r) && (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
             <button onClick={() => setModal({ type: 'edit', review: r })}
               className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-200 cursor-pointer" title="Edit">

@@ -96,6 +96,7 @@ const PERMISSIONS = [
   { module: 'sales', action: 'CREATE', code: 'SALES_CREATE' },
   { module: 'sales', action: 'EDIT',   code: 'SALES_EDIT' },
   { module: 'sales', action: 'DELETE', code: 'SALES_DELETE' },
+  { module: 'sales', action: 'REASSIGN', code: 'SALES_REASSIGN' },
 
   // Flow builder — administrator tool for defining workflows.
   { module: 'flow', action: 'VIEW',   code: 'FLOW_VIEW' },

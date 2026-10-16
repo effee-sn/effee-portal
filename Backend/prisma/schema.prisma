@@ -209,6 +209,7 @@ enum PermissionAction {
   APPROVE
   FINANCE
   EXPORT
+  REASSIGN
 }
 
 model RolePermission {

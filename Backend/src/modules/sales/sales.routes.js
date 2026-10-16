@@ -153,9 +153,10 @@ router.post(
   asyncHandler(reopenEnquiry)
 );
 
+// Reassign has its own permission, granted per role.
 router.post(
   '/enquiries/:id/reassign',
-  authorize('SALES_EDIT'),
+  authorize('SALES_REASSIGN'),
   validate({ params: enquiryIdParam, body: reassignEnquiryBody }),
   asyncHandler(reassignEnquiry)
 );

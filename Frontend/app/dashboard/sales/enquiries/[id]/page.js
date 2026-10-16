@@ -212,7 +212,7 @@ function ReassignModal({ enquiry, users, onClose, onDone }) {
 // ── Edit modal ────────────────────────────────────────────────────────────────
 // Edits the enquiry's details only. The stage is never changed here — it moves
 // through the process bar and the offer/follow-up actions, which enforce gates.
-function EditModal({ enquiry, users, onClose, onDone }) {
+function EditModal({ enquiry, users, onClose, onDone, canReassign = true }) {
   const config = useSalesConfig();
   const currencies = useCurrencies();
   // Active currencies, plus the enquiry's own even if it has since been deactivated.
@@ -275,7 +275,9 @@ function EditModal({ enquiry, users, onClose, onDone }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={label}>Owner</label>
-              <select name="owner_id" value={form.owner_id} onChange={change} className="ams-input">
+              <select name="owner_id" value={form.owner_id} onChange={change} disabled={!canReassign}
+                title={canReassign ? undefined : 'Changing the owner needs the Sales reassign permission'}
+                className="ams-input disabled:bg-gray-50">
                 {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
             </div>
@@ -398,9 +400,8 @@ export default function EnquiryDetailPage() {
   const [showHistory, setShowHistory] = useState(false);
 
   const canDelete = me?.is_system || can('SALES_DELETE');
-  // Reassignment is a supervisory action — any SALES_EDIT user, not only the
-  // current handler.
-  const canReassign = me?.is_system || can('SALES_EDIT');
+  // Reassignment (owner / handler) has its own permission, granted per role.
+  const canReassign = me?.is_system || can('SALES_REASSIGN');
 
   const loadReadiness = useCallback(() => {
     apiGet(`/sales/enquiries/${id}/readiness`, { silent: true }).then((r) => setReadiness(r.data)).catch(() => {});
@@ -461,6 +462,10 @@ export default function EnquiryDetailPage() {
   const isCreator = me?.id != null && (me.id === enquiry.created_by || me.id === enquiry.owner_id);
   const canCreatorWork = canManage
     || (!hasEditPerm && can('SALES_CREATE') && isCreator && ['NEW', 'CONTACTED'].includes(enquiry.stage));
+  // Each person changes only their own data: the details are the raiser's; a
+  // document, activity or review belongs to whoever added it (admins: anything).
+  const canEditDetails = me?.is_system || (canManage && isCreator);
+  const owns = (item) => Boolean(me?.is_system || (me?.id != null && item?.created_by === me.id));
   const wonBlocked = readiness?.blocked?.WON || [];
 
   return (
@@ -530,7 +535,9 @@ export default function EnquiryDetailPage() {
             <div className="flex items-center gap-2 shrink-0">
               {canManage && (
                 <>
-                  <button onClick={() => setModal('edit')} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Edit</button>
+                  {canEditDetails && (
+                    <button onClick={() => setModal('edit')} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Edit</button>
+                  )}
                   {!isClosed ? (
                     <>
                       <button onClick={() => setModal('win')} disabled={wonBlocked.length > 0}
@@ -630,13 +637,13 @@ export default function EnquiryDetailPage() {
                   )}
                 </div>
               </Section>
-              <EnquiryAttachments enquiryId={enquiry.id} canEdit={canCreatorWork} canManage={canManage} kinds={visibleDocKinds(enquiry.stage)} onChanged={load}
+              <EnquiryAttachments enquiryId={enquiry.id} canEdit={canCreatorWork} canManage={canManage} owns={owns} kinds={visibleDocKinds(enquiry.stage)} onChanged={load}
                 currencyCode={enquiry.currency_code} currencySymbol={enquiry.currency?.symbol} />
             </div>
             <div className="space-y-4 min-w-0">
-              {showReviews && <EnquiryReviews enquiryId={enquiry.id} canEdit={canManage} users={users} onChanged={load} />}
+              {showReviews && <EnquiryReviews enquiryId={enquiry.id} canEdit={canManage} owns={owns} users={users} onChanged={load} />}
               <div id="activity">
-                <EnquiryActivities enquiryId={enquiry.id} canEdit={canCreatorWork} canDelete={canManage} users={users} stage={enquiry.stage} onChanged={load} />
+                <EnquiryActivities enquiryId={enquiry.id} canEdit={canCreatorWork} canDelete={canManage} owns={owns} users={users} stage={enquiry.stage} onChanged={load} />
               </div>
             </div>
           </div>
@@ -646,7 +653,7 @@ export default function EnquiryDetailPage() {
 
       {showHistory && <StageHistoryDrawer events={enquiry.stageEvents} users={users} onClose={() => setShowHistory(false)} />}
 
-      {modal === 'edit'  && <EditModal enquiry={enquiry} users={users} onClose={() => setModal(null)} onDone={setEnquiry} />}
+      {modal === 'edit'  && <EditModal enquiry={enquiry} users={users} canReassign={canReassign} onClose={() => setModal(null)} onDone={setEnquiry} />}
       {modal === 'reassign' && <ReassignModal enquiry={enquiry} users={users} onClose={() => setModal(null)} onDone={setEnquiry} />}
       {modal === 'win'   && <WinModal enquiryId={enquiry.id} currencyCode={enquiry.currency_code} onClose={() => setModal(null)} onDone={setEnquiry} />}
       {modal === 'lose'  && <LoseModal enquiryId={enquiry.id} onClose={() => setModal(null)} onDone={setEnquiry} />}

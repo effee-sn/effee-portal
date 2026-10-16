@@ -7,7 +7,7 @@ const { currencyService } = require('../master/currency.service');
 const { loadRates, toInr, paise } = require('../master/fx');
 const { NEXT_STEP, enquiryRows, money, sentence, stageName } = require('./emailDetails');
 const { NotFoundError, ConflictError, ValidationError, ForbiddenError, buildSearchClause } = require('../../core');
-const { hasEdit, assertFullEdit, assertCreatorWork } = require('./access');
+const { hasEdit, canReassign, assertFullEdit, assertCreatorWork, assertDetailsEdit } = require('./access');
 
 /** Human label for a stage enum, for notification text (`FOLLOW_UP` → `Follow up`). */
 function stageLabel(stage) {
@@ -75,7 +75,17 @@ function createEnquiryService(repository) {
    * @throws {ForbiddenError}
    */
   function assertCanUpdate(enquiry, dto, actor) {
-    if (actor?.is_system || hasEdit(actor)) { assertCanManage(enquiry, actor); return; }
+    if (actor?.is_system || hasEdit(actor)) {
+      assertCanManage(enquiry, actor);
+      // Anything besides the stage is the enquiry's details — the raiser's data.
+      const details = Object.keys(dto).filter((k) => dto[k] !== undefined && k !== 'stage');
+      if (details.length) assertDetailsEdit(enquiry, actor);
+      // Changing the owner is a reassignment.
+      if (dto.owner_id !== undefined && dto.owner_id !== null && dto.owner_id !== enquiry.owner_id && !canReassign(actor)) {
+        throw new ForbiddenError('You need the Sales reassign permission to change the owner');
+      }
+      return;
+    }
     const fields = Object.keys(dto).filter((k) => dto[k] !== undefined);
     const stageOnly = fields.length === 1 && fields[0] === 'stage' && ['CONTACTED', 'REVIEW'].includes(dto.stage);
     if (!stageOnly) throw new ForbiddenError('You need Sales edit access to change this enquiry');

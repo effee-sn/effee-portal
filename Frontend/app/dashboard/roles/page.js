@@ -95,7 +95,8 @@ function DeleteRoleModal({ role, onClose, onDeleted }) {
 }
 
 // ── Permission Matrix Panel ───────────────────────────────────────────────────
-const ACTION_ORDER = ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE', 'FINANCE'];
+// Known actions in display order; any other action found is shown after them.
+const ACTION_ORDER = ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE', 'FINANCE', 'EXPORT', 'REASSIGN'];
 const titleCase = (s) => s.charAt(0) + s.slice(1).toLowerCase();
 
 function PermissionPanel({ role, onClose, canEdit }) {
@@ -112,7 +113,8 @@ function PermissionPanel({ role, onClose, canEdit }) {
     if (!byModule[m]) { byModule[m] = {}; modules.push(m); }
     byModule[m][rp.permission.action] = rp;
   }
-  const actions = ACTION_ORDER.filter((a) => permissions.some((rp) => rp.permission.action === a));
+  const present = [...new Set(permissions.map((rp) => rp.permission.action))];
+  const actions = [...ACTION_ORDER.filter((a) => present.includes(a)), ...present.filter((a) => !ACTION_ORDER.includes(a))];
 
   const grantedCount = permissions.filter((rp) => rp.allowed).length;
   const allOn = permissions.length > 0 && grantedCount === permissions.length;

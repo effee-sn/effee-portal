@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
@@ -12,7 +12,7 @@
     "test:invite": "node --test --test-reporter=spec --test-concurrency=1 tests/integration/userInvite.test.js",
     "test:service-access": "node --test --test-reporter=spec --test-concurrency=1 tests/integration/serviceAccess.test.js",
     "test:sso": "node --test --test-reporter=spec --test-concurrency=1 tests/integration/sso.test.js",
-    "test:integration":"node --test --test-reporter=spec --test-concurrency=1 \"tests/integration/**/*.test.js\"",
+    "test:integration": "node --test --test-reporter=spec --test-concurrency=1 \"tests/integration/**/*.test.js\"",
     "test:all": "node --test --test-reporter=spec --test-concurrency=1 \"tests/**/*.test.js\"",
     "seed": "node prisma/seed.js",
     "db:generate": "prisma generate",

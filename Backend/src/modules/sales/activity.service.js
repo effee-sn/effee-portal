@@ -5,7 +5,7 @@ const { notificationService } = require('../notification/notification.service');
 const config = require('../../config/env');
 const { zonedTime } = require('../../lib/timezone');
 const { NotFoundError } = require('../../core');
-const { assertFullEdit, assertCreatorWork } = require('./access');
+const { assertFullEdit, assertCreatorWork, assertOwnItem } = require('./access');
 const { stageName } = require('./emailDetails');
 
 const MEDIUM = Object.freeze({ CALL: 'Call', MEETING: 'Meeting', TEAMS: 'Teams', SITE_VISIT: 'Site visit', EMAIL: 'Email' });
@@ -178,6 +178,7 @@ function createActivityService(repository) {
       if (!before) throw new NotFoundError('Activity');
       const enquiry = await loadEnquiry(before.enquiry_id);
       assertCanLog(enquiry, actor, Boolean(before.is_review || dto.is_review));
+      assertOwnItem(before, actor, `edit this ${before.is_review ? 'review' : 'activity'}`);
 
       const data = pickWritable(dto, { updated_by: actor?.id ?? null });
       const activity = await repository.update(id, data);
@@ -212,6 +213,7 @@ function createActivityService(repository) {
       if (!before) throw new NotFoundError('Activity');
       const enquiry = await loadEnquiry(before.enquiry_id);
       assertFullEdit(enquiry, actor, 'delete activities');
+      assertOwnItem(before, actor, `delete this ${before.is_review ? 'review' : 'activity'}`);
 
       await repository.softDelete(id, actor?.id ?? null);
       await rollUpTemperature(before.enquiry_id);

@@ -56,6 +56,8 @@ const FULL = ['SALES_VIEW', 'SALES_CREATE', 'SALES_EDIT'];
 const actor = (user, permissions = FULL) => ({ id: user.id, email: user.email, permissions });
 /** The creator without Edit: may work only while their enquiry is at New / Contacted. */
 const creatorOnly = (user) => actor(user, ['SALES_VIEW', 'SALES_CREATE']);
+/** A Super Admin acting as this user — fixes anything. */
+const admin = (user) => ({ id: user.id, email: user.email, is_system: true, permissions: [] });
 
 async function newEnquiry(type = 'GENERATED', by = fx.field, extra = {}) {
   const e = await enquiryService.create({
@@ -315,6 +317,43 @@ describe('Sales rules: the creator without Sales edit', () => {
   });
 });
 
+describe('Sales rules: each person changes only their own data', () => {
+  it('only the person who raised it edits the details — Internal cannot, even while holding it', async () => {
+    const e = await newEnquiry('GENERATED');
+    await enquiryService.update(e.id, { title: `TEST renamed ${suffix}` }, actor(fx.field));
+    await upload(e.id, 'FORMAT_PDF', fx.field);
+    await move(e.id, 'REVIEW', fx.field); // → Internal holds it
+    await assert.rejects(enquiryService.update(e.id, { expected_value: 1 }, actor(fx.internal)),
+      { name: 'ForbiddenError', message: /raised this enquiry/ });
+    await enquiryService.update(e.id, { expected_value: 1 }, admin(fx.internal)); // an admin can fix it
+  });
+
+  it('documents: Internal cannot delete or replace what Field uploaded, but manages its own', async () => {
+    const e = await newEnquiry('GENERATED');
+    const format = await upload(e.id, 'FORMAT_PDF', fx.field);
+    await move(e.id, 'REVIEW', fx.field);
+    await assert.rejects(attachmentService.remove(format.id, actor(fx.internal)), { name: 'ForbiddenError' });
+    await concludeReview(e.id, fx.internal);
+    await move(e.id, 'CONCEPT', fx.internal);
+    const concept = await upload(e.id, 'CONCEPT', fx.internal);
+    await upload(e.id, 'CONCEPT', fx.internal); // replacing its own: fine
+    const current = (await attachmentService.listForEnquiry(e.id)).find((d) => d.kind === 'CONCEPT' && !d.superseded_at);
+    assert.notEqual(current.id, concept.id);
+    await attachmentService.remove(current.id, actor(fx.internal)); // deleting its own: fine
+  });
+
+  it('activities: only the person who logged one may edit or delete it', async () => {
+    const e = await newEnquiry('INCOMING');
+    const call = await log(e.id, fx.field, { subject: 'first call' }); // → Contacted
+    await upload(e.id, 'FORMAT_PDF', fx.field);
+    await move(e.id, 'REVIEW', fx.field); // → Internal
+    await assert.rejects(activityService.update(call.id, { subject: 'changed' }, actor(fx.internal)), { name: 'ForbiddenError' });
+    await assert.rejects(activityService.remove(call.id, actor(fx.internal)), { name: 'ForbiddenError' });
+    const review = await log(e.id, fx.internal, { type: 'MEETING', subject: 'review', is_review: true });
+    await activityService.update(review.id, { minutes: 'notes' }, actor(fx.internal)); // its own: fine
+  });
+});
+
 describe('Sales rules: Incoming enquiries', () => {
   it('the first logged activity moves New → Contacted, still held by Field', async () => {
     const id = (await newEnquiry('INCOMING')).id;
@@ -446,7 +485,9 @@ describe('Sales rules: closing and reopening', () => {
 describe('Sales rules: ownership, type and reassignment', () => {
   it('changing the owner while Field holds it moves the baton with them', async () => {
     const id = (await newEnquiry('GENERATED')).id;
-    await enquiryService.update(id, { owner_id: fx.field2.id }, actor(fx.field));
+    await assert.rejects(enquiryService.update(id, { owner_id: fx.field2.id }, actor(fx.field)),
+      { name: 'ForbiddenError' }, 'changing the owner is a reassignment');
+    await enquiryService.update(id, { owner_id: fx.field2.id }, actor(fx.field, [...FULL, 'SALES_REASSIGN']));
     const s = await state(id);
     assert.equal(s.owner_id, fx.field2.id);
     assert.equal(s.handler_id, fx.field2.id);
@@ -834,7 +875,11 @@ describe('Sales documents: versioning', () => {
   });
 
   it('the next upload after a delete continues the numbering from what is kept', async () => {
-    const v = await upload(id, 'FORMAT_PDF', fx.internal); // at Review, Internal holds it
+    // At Review, Internal holds it — but the format is Field's, so only an admin may replace it.
+    await assert.rejects(upload(id, 'FORMAT_PDF', fx.internal), { name: 'ForbiddenError' });
+    const v = await attachmentService.record(id, {
+      originalname: 'format.pdf', filename: `test-${suffix}-admin`, mimetype: 'application/pdf', size: 1,
+    }, { kind: 'FORMAT_PDF' }, admin(fx.internal));
     assert.equal(v.version, 2);
   });
 
@@ -887,7 +932,8 @@ describe('Currencies on enquiries', () => {
 
   it('a rate update moves open amounts, but a won order keeps the rate it was won at', async () => {
     const e = await toOfferReleased();
-    await enquiryService.update(e.id, { currency_code: fx.currency }, actor(fx.internal));
+    // The currency is part of the enquiry's details — an admin corrects it here.
+    await enquiryService.update(e.id, { currency_code: fx.currency }, admin(fx.internal));
     await sendOffer(e.id, fx.internal); // → Follow-up, with Field
     const won = await enquiryService.win(e.id, { order_value: 2000 }, actor(fx.field));
     assert.equal(won.order_value_inr, 160000); // 2000 × 80

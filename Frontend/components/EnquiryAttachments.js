@@ -86,7 +86,8 @@ const ALL_KINDS = ['FORMAT_PDF', 'FORMAT_EXCEL', 'CONCEPT', 'COSTING', 'OFFER'];
 export default function EnquiryAttachments({
   // canEdit: upload / replace. canManage: delete, offer price, mark sent (Sales
   // edit) — defaults to canEdit.
-  enquiryId, canEdit, canManage = canEdit, kinds = ALL_KINDS, bare = false, onChanged, currencyCode = 'INR', currencySymbol,
+  // owns(doc): only the uploader replaces or deletes a document (admins: any).
+  enquiryId, canEdit, canManage = canEdit, owns = () => true, kinds = ALL_KINDS, bare = false, onChanged, currencyCode = 'INR', currencySymbol,
 }) {
   const [items, setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
@@ -278,7 +279,7 @@ export default function EnquiryAttachments({
                             {fileLine(a)}
                             <Meta a={a} />
                           </div>
-                          {canEdit && (
+                          {canEdit && owns(a) && (
                             <div className="flex items-center gap-2 shrink-0 pt-0.5">
                               <button onClick={() => pick(kind)} disabled={busy || Boolean(pending)}
                                 title="Upload a new version — this one is kept in history"
@@ -364,8 +365,10 @@ export default function EnquiryAttachments({
                             className={`text-xs cursor-pointer ${a.sent_at ? 'text-gray-500 hover:text-gray-800' : 'text-green-600 hover:text-green-800'}`}>
                             {a.sent_at ? 'Unmark sent' : 'Mark sent'}
                           </button>
-                          <button onClick={() => remove(a)} disabled={busy}
-                            className="text-xs text-red-500 hover:text-red-700 cursor-pointer">Delete</button>
+                          {owns(a) && (
+                            <button onClick={() => remove(a)} disabled={busy}
+                              className="text-xs text-red-500 hover:text-red-700 cursor-pointer">Delete</button>
+                          )}
                         </div>
                       )}
                     </div>

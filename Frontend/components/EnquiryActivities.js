@@ -234,7 +234,8 @@ function ActivityModal({ enquiryId, activity, users, stage, onClose, onSaved }) 
 
 // ── Timeline ──────────────────────────────────────────────────────────────────
 // canEdit: log / edit activities. canDelete: Sales edit only (defaults to canEdit).
-export default function EnquiryActivities({ enquiryId, canEdit, canDelete = canEdit, users = [], stage, onChanged }) {
+// owns(activity): only whoever logged it may edit or delete it (admins: any).
+export default function EnquiryActivities({ enquiryId, canEdit, canDelete = canEdit, owns = () => true, users = [], stage, onChanged }) {
   const [items, setItems]     = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal]     = useState(null);
@@ -305,7 +306,7 @@ export default function EnquiryActivities({ enquiryId, canEdit, canDelete = canE
             </div>
           )}
         </div>
-        {canEdit && (
+        {canEdit && owns(a) && (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
             <button onClick={() => setModal({ type: 'edit', activity: a })}
               className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-200 cursor-pointer" title="Edit">

@@ -92,6 +92,14 @@ function createAttachmentRepository(db) {
       });
     },
 
+    /** The current (not superseded) doc of a kind, with who uploaded it. */
+    findCurrent(enquiryId, kind) {
+      return db.enquiryAttachment.findFirst({
+        where: active({ enquiry_id: enquiryId, kind, superseded_at: null }),
+        select: { id: true, created_by: true },
+      });
+    },
+
     /** Marks the current doc of a single-instance kind as superseded (kept as history). */
     supersedeCurrent(enquiryId, kind, actorId = null) {
       return db.enquiryAttachment.updateMany({
