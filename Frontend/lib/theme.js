@@ -8,6 +8,8 @@
  */
 
 export const THEMES = Object.freeze(['LIGHT', 'DARK', 'SYSTEM']);
+/** Fired on window with the new preference whenever it changes (detail: 'LIGHT'|'DARK'|'SYSTEM'). */
+export const THEME_EVENT = 'ams-theme';
 const KEY = 'theme';
 
 /** Runs in <head> before React — keep it tiny and dependency-free. */
@@ -39,6 +41,7 @@ export function applyTheme(pref) {
     document.documentElement.dataset.theme = p === 'DARK' || (p === 'SYSTEM' && systemDark()) ? 'dark' : 'light';
   };
   set();
+  window.dispatchEvent(new CustomEvent(THEME_EVENT, { detail: p }));
   unwatch?.();
   unwatch = null;
   if (p === 'SYSTEM' && window.matchMedia) {

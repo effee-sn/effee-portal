@@ -7,7 +7,7 @@ import { apiGet, apiPut, apiPost } from '@/lib/api';
 import { UPLOADS_URL } from '@/lib/config';
 import SsoSettings from '@/components/SsoSettings';
 import { APP_VERSION } from '@/lib/version';
-import { applyTheme, storedTheme } from '@/lib/theme';
+import { applyTheme, storedTheme, THEME_EVENT } from '@/lib/theme';
 
 // ── Shared UI ─────────────────────────────────────────────────────────────────
 function Section({ title, description, children }) {
@@ -91,6 +91,13 @@ const THEME_OPTIONS = [
 function AppearanceSection({ me }) {
   const [theme, setTheme] = useState(() => me?.theme || storedTheme());
   const [msg, setMsg] = useState({ type: '', text: '' });
+
+  // Stay in step with the top-bar switcher.
+  useEffect(() => {
+    const onTheme = (e) => setTheme(e.detail);
+    window.addEventListener(THEME_EVENT, onTheme);
+    return () => window.removeEventListener(THEME_EVENT, onTheme);
+  }, []);
 
   const pick = async (value) => {
     const before = theme;

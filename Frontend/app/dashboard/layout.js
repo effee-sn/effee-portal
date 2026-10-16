@@ -8,6 +8,7 @@ import { apiGet } from '@/lib/api';
 import { UPLOADS_URL } from '@/lib/config';
 import { areaKeyForPath, visibleAreasFor } from '@/lib/navigation';
 import NotificationBell from '@/components/NotificationBell';
+import ThemeSwitcher from '@/components/ThemeSwitcher';
 import useNav from '@/lib/useNav';
 import { APP_VERSION } from '@/lib/version';
 import { applyTheme, storedTheme } from '@/lib/theme';
@@ -197,8 +198,9 @@ export default function DashboardLayout({ children }) {
           </div>
         )}
 
-        {/* Notifications */}
-        <div className="ml-2 shrink-0">
+        {/* Theme + notifications */}
+        <div className="ml-2 shrink-0 flex items-center gap-1">
+          <ThemeSwitcher initial={me?.theme} />
           <NotificationBell />
         </div>
 
