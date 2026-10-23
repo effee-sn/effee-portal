@@ -13,6 +13,14 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.1.2] — 2026-10-23
+
+### Fixed
+
+- Uploading a document larger than 1 MB failed with "Unexpected token '<' … is not valid JSON". The cause is nginx's default upload limit (1 MB) on the server; raise it with `client_max_body_size 50M;` (see Installation.txt). The portal now also explains such errors in plain words — e.g. "This file is too large for the server…" for an upload over the limit, or "The server isn’t responding" when it is down — instead of the cryptic message, on every screen including the logo upload and password pages.
+
+---
+
 ## [1.1.1] — 2026-10-16
 
 ### Changed — Sales: the flow gives access

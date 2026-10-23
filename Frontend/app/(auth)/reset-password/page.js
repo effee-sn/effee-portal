@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { API_URL } from '@/lib/config';
+import { readBody } from '@/lib/api';
 import useNav from '@/lib/useNav';
 
 /** Why a link can't be used, worded for an invite or a reset. */
@@ -59,7 +60,7 @@ function ResetPasswordForm() {
     (async () => {
       try {
         const res = await fetch(`${API_URL}/auth/reset-password/status?token=${encodeURIComponent(token)}`);
-        const data = await res.json();
+        const data = await readBody(res);
         if (!cancelled) setLinkStatus(res.ok ? (data.valid ? 'valid' : data.reason || 'invalid') : 'valid');
       } catch {
         // Can't check (network): show the form; the submit still validates.
@@ -99,7 +100,7 @@ function ResetPasswordForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, new_password: passwords.new_password }),
       });
-      const data = await res.json();
+      const data = await readBody(res);
       if (!res.ok) {
         // Used or expired in the meantime (e.g. in another tab): show the explanation.
         if (/already been used/i.test(data.message || '')) { setLinkStatus('used'); return; }

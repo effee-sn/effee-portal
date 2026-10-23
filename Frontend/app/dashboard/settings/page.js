@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
-import { apiGet, apiPut, apiPost } from '@/lib/api';
+import { apiGet, apiPut, apiPost, readBody } from '@/lib/api';
 import { UPLOADS_URL } from '@/lib/config';
 import SsoSettings from '@/components/SsoSettings';
 import { APP_VERSION } from '@/lib/version';
@@ -355,7 +355,7 @@ function CompanyTab() {
       const token = localStorage.getItem('token');
       const { API_URL } = await import('@/lib/config');
       const res = await fetch(`${API_URL}/settings/logo`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.message); }
+      if (!res.ok) { const d = await readBody(res); throw new Error(d?.message || 'Upload failed'); }
       setLogoMsg({ type: 'success', text: 'Logo uploaded successfully' });
       setLogo(null);
     } catch (err) { setLogoMsg({ type: 'error', text: err.message }); }

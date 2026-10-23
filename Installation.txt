@@ -281,6 +281,12 @@ On the server (Node, MySQL/MariaDB, PM2 and nginx with HTTPS assumed):
      it corrupts the dev cache (fix: stop dev, delete Frontend/.next, start again).
    - nginx: serve the frontend (port 3000) at / and proxy /api and /uploads to
      the backend (port 4000). Set TRUST_PROXY_HOPS=1 in the backend .env.
+   - nginx upload size: in the portal's `server { … }` block add
+         client_max_body_size 50M;
+     then `sudo nginx -t && sudo systemctl reload nginx`. nginx's default is
+     1 MB, which rejects any larger document upload (the portal allows 25 MB)
+     with "413 Request Entity Too Large". Use a bigger value (e.g. 500M) if
+     full backups will be restored by uploading them in Backup.
    - Back up regularly — see section 13.
 
   Changing the portal's domain:

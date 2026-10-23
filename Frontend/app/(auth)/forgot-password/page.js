@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { API_URL } from '@/lib/config';
+import { readBody } from '@/lib/api';
 
 export default function ForgotPasswordPage() {
   const [email,   setEmail]   = useState('');
@@ -20,7 +21,7 @@ export default function ForgotPasswordPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
-      const data = await res.json();
+      const data = await readBody(res);
       if (!res.ok) throw new Error(data.message || 'Something went wrong');
       setSent(true);
     } catch (err) {

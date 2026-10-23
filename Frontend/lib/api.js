@@ -25,6 +25,31 @@ function errorMessage(data) {
   return data?.message || 'Something went wrong';
 }
 
+/** A plain-language message for a reply that isn't the API's JSON. */
+function nonJsonMessage(status) {
+  if (status === 413) {
+    return 'This file is too large for the server. Ask your administrator to raise the upload limit (nginx client_max_body_size).';
+  }
+  if (status === 502 || status === 503 || status === 504) return 'The server isn’t responding right now. Please try again in a moment.';
+  if (status === 404) return 'The server could not find this address (HTTP 404).';
+  return `Unexpected response from the server (HTTP ${status}). Please try again.`;
+}
+
+/**
+ * Reads a reply's body as the API's JSON. Something in front of the API (nginx,
+ * a proxy) may answer with an HTML error page instead — e.g. 413 when an
+ * upload is over its size limit — so a non-JSON body becomes `{ message }`
+ * with a readable explanation rather than "Unexpected token '<'".
+ * @param {Response} res
+ * @returns {Promise<any>}
+ */
+export async function readBody(res) {
+  const text = await res.text();
+  if (!text) return res.ok ? null : { message: nonJsonMessage(res.status), nonJson: true };
+  try { return JSON.parse(text); }
+  catch { return { message: nonJsonMessage(res.status), nonJson: true }; }
+}
+
 function authHeaders(extra = {}) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
   return {
@@ -49,8 +74,8 @@ async function request(endpoint, options = {}, { silent = false } = {}) {
   if (!silent) topLoader.start();
   try {
     const res = await fetch(`${BASE_URL}${endpoint}`, options);
-    const data = await res.json();
-    if (!res.ok) {
+    const data = await readBody(res);
+    if (!res.ok || data?.nonJson) {
       const err = new Error(errorMessage(data));
       err.status = res.status;
       err.code = data?.code;
@@ -101,7 +126,7 @@ export async function downloadFile(endpoint, filename) {
     });
     if (!res.ok) {
       let msg = 'Download failed';
-      try { msg = errorMessage(await res.json()); } catch { /* non-JSON error */ }
+      msg = errorMessage(await readBody(res));
       throw new Error(msg);
     }
     const blob = await res.blob();
