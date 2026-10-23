@@ -13,6 +13,16 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.3.0] — 2026-10-23
+
+### Added — Sales: refurbishment enquiries
+
+- A **Refurbishment enquiry** checkbox on new enquiries (Generated and Incoming) and in the enquiry's Edit form. A refurbishment enquiry **skips the Concept stage**: it goes from **Review straight to Costing**. Moving on from Review needs the review concluded; no concept or power-source documents are needed, and their slots are hidden.
+- The flag can be changed until the Review stage and is fixed after that.
+- Refurbishment enquiries are tagged in the enquiry header and in the enquiry list.
+
+---
+
 ## [1.2.0] — 2026-10-23
 
 ### Added — Manufacturing (started)

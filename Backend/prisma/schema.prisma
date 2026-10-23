@@ -929,6 +929,8 @@ model Enquiry {
   contact      Contact?     @relation(fields: [contact_id], references: [id])
   contact_id   Int?
   enquiry_type EnquiryType  @default(INCOMING)
+  // A refurbishment enquiry skips the Concept stage (Review → Costing).
+  is_refurbishment Boolean @default(false)
   stage        EnquiryStage @default(NEW)
   description  String?      @db.Text
 

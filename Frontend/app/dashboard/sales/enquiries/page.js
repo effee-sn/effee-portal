@@ -37,6 +37,7 @@ function EnquiryModal({ onClose, onSaved }) {
   const currencies = useCurrencies();
   const [form, setForm] = useState({
     title: '', customer_id: '', contact_id: '', application_id: '', currency_code: '', expected_value: '', description: '',
+    is_refurbishment: false,
   });
   // Until the user picks one, the form follows the default currency (Master Data → Currencies).
   const currencyCode = form.currency_code || currencies?.defaultCode || 'INR';
@@ -98,6 +99,15 @@ function EnquiryModal({ onClose, onSaved }) {
             </div>
 
             <EnquiryCustomerContact onChange={setCustomerContact} />
+
+            <label className="flex items-start gap-2.5 rounded-md border border-gray-200 bg-gray-50 px-3 py-2.5 cursor-pointer">
+              <input type="checkbox" className="mt-0.5" checked={form.is_refurbishment}
+                onChange={(e) => setForm((f) => ({ ...f, is_refurbishment: e.target.checked }))} />
+              <span className="text-sm text-gray-700">
+                <span className="font-medium">Refurbishment enquiry</span>
+                <span className="block text-xs text-gray-500 mt-0.5">Skips the Concept stage — goes from Review straight to Costing.</span>
+              </span>
+            </label>
 
             <div>
               <label className={label}>Application{activeApps.length > 0 && <span className="text-red-500"> *</span>}</label>
@@ -288,7 +298,7 @@ export default function EnquiriesPage() {
                     <td className="px-3 py-3 font-medium text-gray-800">
                       {e.title}
                       <span className="block text-xs text-gray-400 font-normal">
-                        {TYPE_LABEL[e.enquiry_type] || e.enquiry_type}{e.application && ` · ${e.application.name}`}
+                        {TYPE_LABEL[e.enquiry_type] || e.enquiry_type}{e.is_refurbishment && ' · Refurbishment'}{e.application && ` · ${e.application.name}`}
                       </span>
                     </td>
                     <td className="px-3 py-3 text-gray-600">{e.customer?.name || '—'}</td>

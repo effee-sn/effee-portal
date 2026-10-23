@@ -225,6 +225,7 @@ function EditModal({ enquiry, users, onClose, onDone, canReassign = true }) {
   const [form, setForm] = useState({
     title: enquiry.title || '', customer_id: enquiry.customer_id || '', contact_id: enquiry.contact_id || '',
     owner_id: enquiry.owner_id || '', enquiry_type: enquiry.enquiry_type || 'INCOMING',
+    is_refurbishment: Boolean(enquiry.is_refurbishment),
     application_id: enquiry.application_id ? String(enquiry.application_id) : '',
     currency_code: enquiry.currency_code || 'INR',
     expected_value: enquiry.expected_value ?? '', expected_close: toDateInput(enquiry.expected_close), description: enquiry.description || '',
@@ -233,6 +234,8 @@ function EditModal({ enquiry, users, onClose, onDone, canReassign = true }) {
   const [saving, setSaving] = useState(false);
   // The type picks the flow (Generated skips Contacted), so it's fixed after New.
   const typeLocked = enquiry.stage !== 'NEW';
+  // Refurbishment decides whether Concept is in the flow: fixed after Review.
+  const refurbLocked = !['NEW', 'CONTACTED', 'REVIEW'].includes(enquiry.stage);
 
   const change = (e) => {
     const { name, value } = e.target;
@@ -247,6 +250,7 @@ function EditModal({ enquiry, users, onClose, onDone, canReassign = true }) {
     setSaving(true); setError('');
     const payload = { ...form };
     if (typeLocked) delete payload.enquiry_type;
+    if (refurbLocked) delete payload.is_refurbishment;
     if (currencyLocked) delete payload.currency_code;
     try { const res = await apiPut(`/sales/enquiries/${enquiry.id}`, payload); onDone(res.data); onClose(); }
     catch (err) { setError(err.message); }
@@ -288,6 +292,17 @@ function EditModal({ enquiry, users, onClose, onDone, canReassign = true }) {
                 {ENQUIRY_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
               {typeLocked && <p className="text-xs text-gray-400 mt-1">Fixed once the enquiry leaves New.</p>}
+            </div>
+            <div className="sm:col-span-2">
+              <label className="flex items-start gap-2.5 rounded-md border border-gray-200 bg-gray-50 px-3 py-2.5 cursor-pointer">
+                <input type="checkbox" className="mt-0.5" checked={form.is_refurbishment} disabled={refurbLocked}
+                  onChange={(e) => setForm((f) => ({ ...f, is_refurbishment: e.target.checked }))} />
+                <span className="text-sm text-gray-700">
+                  <span className="font-medium">Refurbishment enquiry</span>
+                  <span className="block text-xs text-gray-500 mt-0.5">Skips the Concept stage — goes from Review straight to Costing.</span>
+                </span>
+              </label>
+              {refurbLocked && <p className="text-xs text-gray-400 mt-1">Fixed once the enquiry has passed Review.</p>}
             </div>
             <div className="sm:col-span-2">
               <label className={label}>Application</label>
@@ -484,6 +499,10 @@ export default function EnquiryDetailPage() {
               <span className="font-mono text-xs text-gray-400">{enquiry.ref_no}</span>
               <StageBadge stage={enquiry.stage} />
               <span className="text-xs text-gray-500">{TYPE_LABEL[enquiry.enquiry_type] || enquiry.enquiry_type}</span>
+              {enquiry.is_refurbishment && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-700"
+                  title="Refurbishment enquiry — skips the Concept stage">Refurbishment</span>
+              )}
               <button onClick={() => setShowHistory(true)}
                 className="text-xs text-blue-600 hover:underline cursor-pointer">Stage history</button>
               {enquiry.current_temperature && <TempChip value={enquiry.current_temperature} />}
@@ -636,7 +655,7 @@ export default function EnquiryDetailPage() {
                   )}
                 </div>
               </Section>
-              <EnquiryAttachments enquiryId={enquiry.id} canEdit={canFlow} canManage={canFlow} canDelete={canManage} owns={owns} kinds={visibleDocKinds(enquiry.stage)} onChanged={load}
+              <EnquiryAttachments enquiryId={enquiry.id} canEdit={canFlow} canManage={canFlow} canDelete={canManage} owns={owns} kinds={visibleDocKinds(enquiry.stage, enquiry.is_refurbishment)} onChanged={load}
                 currencyCode={enquiry.currency_code} currencySymbol={enquiry.currency?.symbol} />
             </div>
             <div className="space-y-4 min-w-0">

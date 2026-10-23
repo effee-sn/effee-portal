@@ -12,6 +12,18 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.3.0',
+    date: '2026-10-23',
+    items: [
+      {
+        icon: 'spark',
+        title: 'Refurbishment enquiries',
+        text: 'Tick “Refurbishment enquiry” when creating an enquiry: it skips the Concept stage and goes from Review straight to Costing. It can be changed until the Review stage.',
+        perm: 'SALES_VIEW',
+      },
+    ],
+  },
+  {
     version: '1.1.1',
     date: '2026-10-16',
     items: [

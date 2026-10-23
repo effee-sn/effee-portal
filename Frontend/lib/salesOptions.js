@@ -42,8 +42,11 @@ export const ALL_STAGES = [
  * CONTACTED (field sales already interacted).
  * @param {string} type
  */
-export function stagesForType(type) {
-  return type === 'GENERATED' ? ACTIVE_STAGES.filter((s) => s.value !== 'CONTACTED') : ACTIVE_STAGES;
+export function stagesForType(type, refurbishment = false) {
+  // Generated skips Contacted; a refurbishment enquiry skips Concept.
+  return ACTIVE_STAGES
+    .filter((s) => !(type === 'GENERATED' && s.value === 'CONTACTED'))
+    .filter((s) => !(refurbishment && s.value === 'CONCEPT'));
 }
 
 /** Badge styles per stage, for list/detail display. */
@@ -97,10 +100,11 @@ export const STAGE_RANK = {
  * stages, so earlier stages aren't cluttered with documents that don't apply yet.
  * @param {string} stage
  */
-export function visibleDocKinds(stage) {
+export function visibleDocKinds(stage, refurbishment = false) {
   const r = STAGE_RANK[stage] ?? 0;
   const kinds = ['FORMAT_PDF', 'FORMAT_EXCEL'];
-  if (r >= STAGE_RANK.CONCEPT) kinds.push('CONCEPT', 'POWER_CALC');
+  // A refurbishment enquiry skips Concept, so it has no concept documents.
+  if (r >= STAGE_RANK.CONCEPT && !refurbishment) kinds.push('CONCEPT', 'POWER_CALC');
   if (r >= STAGE_RANK.COSTING) kinds.push('COSTING');
   if (r >= STAGE_RANK.COSTING_REVIEW) kinds.push('COSTING_REVIEW');
   if (r >= STAGE_RANK.OFFER_RELEASED) kinds.push('OFFER');

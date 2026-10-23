@@ -387,6 +387,43 @@ describe('Sales rules: each person changes only their own data', () => {
   });
 });
 
+describe('Sales rules: refurbishment enquiries skip Concept', () => {
+  it('Review moves straight to Costing — no concept documents needed, and Concept is refused', async () => {
+    const id = (await newEnquiry('GENERATED', fx.field, { is_refurbishment: true })).id;
+    await upload(id, 'FORMAT_PDF', fx.field);
+    await move(id, 'REVIEW', fx.field);
+    await assert.rejects(move(id, 'CONCEPT', fx.internal), { name: 'ConflictError', message: /skips Concept/ });
+    await assert.rejects(move(id, 'COSTING', fx.internal), { name: 'ConflictError', message: /no future review/ },
+      'the review must be concluded first, as for Concept');
+    await concludeReview(id, fx.internal);
+    await move(id, 'COSTING', fx.internal);
+    assert.equal((await state(id)).stage, 'COSTING');
+    const r = await enquiryService.readiness(id);
+    assert.deepEqual(r.blocked.COSTING, [], 'readiness agrees');
+  });
+
+  it('a normal enquiry still goes through Concept', async () => {
+    const id = (await newEnquiry('GENERATED')).id;
+    await upload(id, 'FORMAT_PDF', fx.field);
+    await move(id, 'REVIEW', fx.field);
+    await concludeReview(id, fx.internal);
+    await assert.rejects(move(id, 'COSTING', fx.internal), { name: 'ConflictError' }, 'no skipping');
+  });
+
+  it('the flag can be changed until Review, and is fixed after that', async () => {
+    const id = (await newEnquiry('INCOMING')).id;
+    await enquiryService.update(id, { is_refurbishment: true }, actor(fx.field));
+    assert.equal((await enquiryService.getById(id)).is_refurbishment, true);
+    const r = (await newEnquiry('GENERATED', fx.field, { is_refurbishment: true })).id;
+    await upload(r, 'FORMAT_PDF', fx.field);
+    await move(r, 'REVIEW', fx.field);
+    await concludeReview(r, fx.internal);
+    await move(r, 'COSTING', fx.internal);
+    await assert.rejects(enquiryService.update(r, { is_refurbishment: false }, admin(fx.internal)),
+      { name: 'ValidationError' }, 'past Review it stays as it is');
+  });
+});
+
 describe('Sales rules: Incoming enquiries', () => {
   it('the first logged activity moves New → Contacted, still held by Field', async () => {
     const id = (await newEnquiry('INCOMING')).id;

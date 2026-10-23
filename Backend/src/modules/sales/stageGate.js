@@ -48,17 +48,37 @@ const GATED_STAGES = Object.freeze([...new Set([...FORMAT_STAGES, ...Object.keys
 
 /**
  * What's still missing before an enquiry may enter `targetStage`.
+ *
+ * A refurbishment enquiry skips Concept: it goes Review → Costing, so entering
+ * Costing needs what entering Concept normally does (the review concluded)
+ * and none of the concept documents.
+ *
  * @param {string} targetStage
  * @param {DocFlags} flags
+ * @param {{ refurbishment?: boolean }} [opts]
  * @returns {string[]} empty when the move is allowed
  */
-function missingForStage(targetStage, flags) {
+function missingForStage(targetStage, flags, { refurbishment = false } = {}) {
   const missing = [];
   if (FORMAT_STAGES.includes(targetStage) && !flags.hasFormat) {
     missing.push('the enquiry format (PDF or Excel)');
   }
-  if (EXTRA_GATES[targetStage]) missing.push(...EXTRA_GATES[targetStage](flags));
+  const gate = refurbishment && targetStage === 'COSTING' ? EXTRA_GATES.CONCEPT : EXTRA_GATES[targetStage];
+  if (gate) missing.push(...gate(flags));
   return missing;
 }
 
-module.exports = { GATED_STAGES, missingForStage };
+/**
+ * The manual stage order for an enquiry (the flow ends at Offer Released; the
+ * rest moves on its own). Generated skips Contacted; refurbishment skips
+ * Concept.
+ * @param {'GENERATED'|'INCOMING'} enquiryType @param {boolean} [refurbishment]
+ * @returns {string[]}
+ */
+function manualFlow(enquiryType, refurbishment = false) {
+  return ['NEW', 'CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED']
+    .filter((s) => !(s === 'CONTACTED' && enquiryType === 'GENERATED'))
+    .filter((s) => !(s === 'CONCEPT' && refurbishment));
+}
+
+module.exports = { GATED_STAGES, missingForStage, manualFlow };

@@ -2,7 +2,7 @@ const { enquiryRepository } = require('./enquiry.repository');
 const { workflowRepository } = require('./workflow.repository');
 const { auditService } = require('../audit/audit.service');
 const { notificationService } = require('../notification/notification.service');
-const { missingForStage, GATED_STAGES } = require('./stageGate');
+const { missingForStage, GATED_STAGES, manualFlow } = require('./stageGate');
 const { currencyService } = require('../master/currency.service');
 const { loadRates, toInr, paise } = require('../master/fx');
 const { NEXT_STEP, enquiryRows, money, sentence, stageName } = require('./emailDetails');
@@ -105,8 +105,8 @@ function createEnquiryService(repository) {
    * offer).
    * @throws {ConflictError}
    */
-  async function assertStageGate(enquiryId, targetStage) {
-    const missing = missingForStage(targetStage, await repository.docFlags(enquiryId));
+  async function assertStageGate(enquiryId, targetStage, refurbishment = false) {
+    const missing = missingForStage(targetStage, await repository.docFlags(enquiryId), { refurbishment });
     if (missing.length) {
       throw new ConflictError(`Needs ${missing.join(' and ')} to move to the next stage.`);
     }
@@ -179,7 +179,7 @@ function createEnquiryService(repository) {
   }
 
   function pickWritable(dto, data = {}) {
-    for (const f of ['title', 'customer_id', 'contact_id', 'enquiry_type', 'stage',
+    for (const f of ['title', 'customer_id', 'contact_id', 'enquiry_type', 'is_refurbishment', 'stage',
       'description', 'expected_value', 'expected_close', 'owner_id', 'application_id', 'currency_code']) {
       if (dto[f] !== undefined) data[f] = dto[f];
     }
@@ -285,11 +285,13 @@ function createEnquiryService(repository) {
      * @param {number} id
      */
     async readiness(id) {
-      if (!(await repository.findById(id))) throw new NotFoundError('Enquiry');
+      const enquiry = await repository.findById(id);
+      if (!enquiry) throw new NotFoundError('Enquiry');
       const flags = await repository.docFlags(id);
       /** @type {Record<string, string[]>} */
       const blocked = {};
-      for (const stage of GATED_STAGES) blocked[stage] = missingForStage(stage, flags);
+      const opts = { refurbishment: enquiry.is_refurbishment };
+      for (const stage of GATED_STAGES) blocked[stage] = missingForStage(stage, flags, opts);
       return { flags, blocked };
     },
 
@@ -359,22 +361,32 @@ function createEnquiryService(repository) {
           { field: 'enquiry_type', message: 'The enquiry type can only be changed while the enquiry is New' },
         ]);
       }
+      // Refurbishment decides whether Concept is in the flow, so it can only
+      // change before Concept would be reached (New, Contacted, Review).
+      if (dto.is_refurbishment !== undefined && dto.is_refurbishment !== before.is_refurbishment
+        && !['NEW', 'CONTACTED', 'REVIEW'].includes(before.stage)) {
+        throw new ValidationError('Validation failed', [
+          { field: 'is_refurbishment', message: 'Refurbishment can only be changed until the Review stage' },
+        ]);
+      }
+      const refurbishment = dto.is_refurbishment ?? before.is_refurbishment;
       if (dto.stage) assertStageAllowed(dto.stage, dto.enquiry_type ?? before.enquiry_type);
+      if (dto.stage === 'CONCEPT' && refurbishment) {
+        throw new ConflictError('A refurbishment enquiry skips Concept — it moves from Review to Costing.');
+      }
       if (dto.stage && dto.stage !== before.stage) {
-        // One step forward at a time, along the enquiry-type's own flow
-        // (Generated skips Contacted). No stepping back, no skipping ahead.
-        // The manual flow ends at Offer Released; from there the deal moves on
-        // its own — sending the offer flips it to Follow-up, flagging a
-        // follow-up for negotiation flips it to Negotiation (see setStageAuto).
-        const flow = before.enquiry_type === 'GENERATED'
-          ? ['NEW', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED']
-          : ['NEW', 'CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED'];
+        // One step forward at a time, along the enquiry's own flow (Generated
+        // skips Contacted; refurbishment skips Concept). No stepping back, no
+        // skipping ahead. The manual flow ends at Offer Released; from there
+        // the deal moves on its own — sending the offer flips it to Follow-up,
+        // flagging a follow-up for negotiation flips it to Negotiation.
+        const flow = manualFlow(before.enquiry_type, refurbishment);
         const fromIdx = flow.indexOf(before.stage);
         const toIdx = flow.indexOf(dto.stage);
         if (fromIdx === -1 || toIdx !== fromIdx + 1) {
           throw new ConflictError('An enquiry can only move to the next stage.');
         }
-        await assertStageGate(id, dto.stage);
+        await assertStageGate(id, dto.stage, refurbishment);
       }
 
       if (dto.application_id !== before.application_id) await assertApplication(dto.application_id);

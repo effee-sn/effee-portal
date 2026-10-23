@@ -22,7 +22,7 @@ const STAGE_HINT = {
 };
 
 export default function EnquiryProcess({ enquiry, canManage, busy, onPick, blocked = {} }) {
-  const flow = stagesForType(enquiry.enquiry_type);
+  const flow = stagesForType(enquiry.enquiry_type, enquiry.is_refurbishment);
   const closed = enquiry.stage === 'WON' || enquiry.stage === 'LOST';
   const curIdx = flow.findIndex((s) => s.value === enquiry.stage);
   const next = !closed && curIdx >= 0 && curIdx < flow.length - 1 ? flow[curIdx + 1] : null;
