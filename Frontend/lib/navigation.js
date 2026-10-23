@@ -74,6 +74,14 @@ export const AREAS = [
     ],
   },
   {
+    key: 'manufacturing',
+    label: 'Manufacturing',
+    subtitle: 'Production',
+    items: [
+      { label: 'Bill of Materials', href: '/dashboard/manufacturing/bom', perm: 'BOM_VIEW' },
+    ],
+  },
+  {
     key: 'reports',
     label: 'Reports',
     subtitle: 'MIS reports',

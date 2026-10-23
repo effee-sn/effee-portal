@@ -13,6 +13,15 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.2.0] — 2026-10-23
+
+### Added — Manufacturing (started)
+
+- New **Manufacturing** app in the app switcher with a **Bill of Materials** page (empty for now; its screens and workflow are being defined).
+- New permissions **BOM → View / Create / Edit / Delete**, granted per role in **Administrator → Roles** (a database migration adds them).
+
+---
+
 ## [1.1.2] — 2026-10-23
 
 ### Fixed
