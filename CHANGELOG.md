@@ -13,6 +13,14 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.3.1] — 2026-10-24
+
+### Added
+
+- **Rows per page** (10 / 20 / 50 / 100) on the paged lists: Sales → Enquiries, Master Data → Customers, Administrator → Users, Departments and Audit Log. Changing it keeps the search and filters; each person's choice is remembered per list in their browser.
+
+---
+
 ## [1.3.0] — 2026-10-23
 
 ### Added — Sales: refurbishment enquiries

@@ -7,6 +7,8 @@ import usePermissions from '@/lib/usePermissions';
 import useNav from '@/lib/useNav';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
+import usePageSize from '@/lib/usePageSize';
+import PageSizeSelect from '@/components/PageSizeSelect';
 
 const PALETTE = ['#6366F1','#0EA5E9','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#14B8A6'];
 const avatarBg = (name) => PALETTE[(name?.charCodeAt(0) ?? 0) % PALETTE.length];
@@ -227,7 +229,7 @@ function BulkDeleteModal({ ids, onClose, onDeleted }) {
 }
 
 // ── Odoo-style Control Panel ──────────────────────────────────────────────────
-function ControlPanel({ total, page, limit, canCreate, canDelete, onNew, onBulkDelete, selectedCount,
+function ControlPanel({ total, page, limit, onPageSize, canCreate, canDelete, onNew, onBulkDelete, selectedCount,
   search, setSearch, onSearch, onPrev, onNext }) {
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to   = Math.min(page * limit, total);
@@ -275,6 +277,7 @@ function ControlPanel({ total, page, limit, canCreate, canDelete, onNew, onBulkD
 
       {/* Pagination */}
       <div className="flex items-center gap-0.5 shrink-0 text-sm text-gray-500">
+        <PageSizeSelect value={limit} onChange={onPageSize} />
         <span className="px-1 tabular-nums">{total === 0 ? '0' : `${from}-${to}`} / {total}</span>
         <button onClick={onPrev} disabled={page === 1}
           className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500">
@@ -328,12 +331,12 @@ function UsersPageInner() {
   const [modal, setModal]     = useState(null);
   const [selected, setSelected] = useState(new Set());
 
-  const limit = 10;
+  const [limit, setLimit, limitRef] = usePageSize('users', 10);
 
   const fetchUsers = async (p = page, s = search) => {
     setLoading(true);
     try {
-      const data = await apiGet(`/users?page=${p}&limit=${limit}&search=${encodeURIComponent(s)}`);
+      const data = await apiGet(`/users?page=${p}&limit=${limitRef.current}&search=${encodeURIComponent(s)}`);
       setUsers(data.users); setTotal(data.total);
     } catch { setUsers([]); }
     finally { setLoading(false); }
@@ -411,6 +414,7 @@ function UsersPageInner() {
         {/* Control Panel */}
         <ControlPanel
           total={total} page={page} limit={limit}
+          onPageSize={(n) => { setLimit(n); setPage(1); fetchUsers(1, search); }}
           canCreate={canCreate} canDelete={canDelete}
           onNew={() => setModal({ type: 'add' })}
           onBulkDelete={handleBulkDelete}

@@ -5,6 +5,8 @@ import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
+import usePageSize from '@/lib/usePageSize';
+import PageSizeSelect from '@/components/PageSizeSelect';
 
 /** Formats an ISO timestamp as a short date + time — the trail is about "when". */
 const formatDateTime = (iso) => {
@@ -179,7 +181,7 @@ export default function AuditLogPage() {
   const [expanded, setExpanded] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const limit = 20;
+  const [limit, setLimit, limitRef] = usePageSize('audit-log', 20);
 
   // The backend endpoint is `requireSystemRole`; mirror that gate on the client
   // so the page never briefly renders for a non-system user.
@@ -190,7 +192,7 @@ export default function AuditLogPage() {
   const fetchLogs = async (p = page) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(p), limit: String(limit) });
+      const params = new URLSearchParams({ page: String(p), limit: String(limitRef.current) });
       if (action)   params.set('action', action);
       if (module)   params.set('entity', module);
       if (actorId)  params.set('actor_id', actorId);
@@ -222,12 +224,13 @@ export default function AuditLogPage() {
     setPage(1); setExpanded(null);
     // Fetch with everything cleared (state updates are batched, so pass a reset).
     setLoading(true);
-    apiGet(`/audit-logs?page=1&limit=${limit}`)
+    apiGet(`/audit-logs?page=1&limit=${limitRef.current}`)
       .then((res) => { setLogs(res.data); setTotal(res.meta.pagination.total); })
       .catch(() => setLogs([]))
       .finally(() => setLoading(false));
   };
   const goPage = (delta) => { const p = page + delta; setPage(p); setExpanded(null); fetchLogs(p); };
+  const onPageSize = (n) => { setLimit(n); setPage(1); setExpanded(null); fetchLogs(1); };
   const hasFilters = action || module || actorId || dateFrom || dateTo;
 
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
@@ -300,6 +303,7 @@ export default function AuditLogPage() {
           )}
 
           <div className="flex items-center gap-0.5 shrink-0 text-sm text-gray-500">
+            <PageSizeSelect value={limit} onChange={onPageSize} />
             <span className="px-1 tabular-nums">{total === 0 ? '0' : `${from}-${to}`} / {total}</span>
             <button type="button" onClick={() => goPage(-1)} disabled={page === 1}
               className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">

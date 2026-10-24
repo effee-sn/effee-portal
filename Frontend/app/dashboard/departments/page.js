@@ -5,6 +5,8 @@ import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
+import usePageSize from '@/lib/usePageSize';
+import PageSizeSelect from '@/components/PageSizeSelect';
 
 // ── Create / Edit modal ───────────────────────────────────────────────────────
 function DepartmentModal({ dept, onClose, onSaved }) {
@@ -117,7 +119,7 @@ export default function DepartmentsPage() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal]     = useState(null);
 
-  const limit = 10;
+  const [limit, setLimit, limitRef] = usePageSize('departments', 10);
 
   const canView   = me?.is_system || can('DEPT_VIEW');
   const canCreate = me?.is_system || can('DEPT_CREATE');
@@ -127,7 +129,7 @@ export default function DepartmentsPage() {
   const fetchRows = async (p = page, s = search) => {
     setLoading(true);
     try {
-      const res = await apiGet(`/departments?page=${p}&limit=${limit}&search=${encodeURIComponent(s)}`);
+      const res = await apiGet(`/departments?page=${p}&limit=${limitRef.current}&search=${encodeURIComponent(s)}`);
       setRows(res.data); setTotal(res.meta.pagination.total);
     } catch { setRows([]); }
     finally { setLoading(false); }
@@ -140,6 +142,7 @@ export default function DepartmentsPage() {
 
   const onSearch = (e) => { e.preventDefault(); setPage(1); fetchRows(1, search); };
   const goPage = (delta) => { const p = page + delta; setPage(p); fetchRows(p, search); };
+  const onPageSize = (n) => { setLimit(n); setPage(1); fetchRows(1, search); };
 
   const onSaved = (row, isEdit) => {
     if (isEdit) setRows((prev) => prev.map((r) => r.id === row.id ? { ...r, ...row } : r));
@@ -193,6 +196,7 @@ export default function DepartmentsPage() {
               className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-gray-700 outline-none bg-transparent" />
           </form>
           <div className="flex items-center gap-0.5 shrink-0 text-sm text-gray-500">
+            <PageSizeSelect value={limit} onChange={onPageSize} />
             <span className="px-1 tabular-nums">{total === 0 ? '0' : `${from}-${to}`} / {total}</span>
             <button onClick={() => goPage(-1)} disabled={page === 1}
               className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">

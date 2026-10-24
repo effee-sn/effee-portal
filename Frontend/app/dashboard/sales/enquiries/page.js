@@ -10,6 +10,8 @@ import EnquiryCustomerContact from '@/components/EnquiryCustomerContact';
 import useNav from '@/lib/useNav';
 import useSalesConfig from '@/lib/useSalesConfig';
 import useCurrencies, { formatMoney } from '@/lib/money';
+import usePageSize from '@/lib/usePageSize';
+import PageSizeSelect from '@/components/PageSizeSelect';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
@@ -165,7 +167,7 @@ export default function EnquiriesPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
 
-  const limit = 10;
+  const [limit, setLimit, limitRef] = usePageSize('sales-enquiries', 10);
 
   const canView   = me?.is_system || can('SALES_VIEW');
   const canCreate = me?.is_system || can('SALES_CREATE');
@@ -174,7 +176,7 @@ export default function EnquiriesPage() {
   const fetchRows = async (p = page, s = search, st = stage, app = appId) => {
     setLoading(true);
     try {
-      const q = new URLSearchParams({ page: String(p), limit: String(limit), search: s });
+      const q = new URLSearchParams({ page: String(p), limit: String(limitRef.current), search: s });
       if (st) q.set('stage', st);
       if (app) q.set('application_id', app);
       const res = await apiGet(`/sales/enquiries?${q.toString()}`);
@@ -196,6 +198,7 @@ export default function EnquiriesPage() {
   const onStage = (v) => { setStage(v); setPage(1); fetchRows(1, search, v); };
   const onApp = (v) => { setAppId(v); setPage(1); fetchRows(1, search, stage, v); };
   const goPage = (delta) => { const p = page + delta; setPage(p); fetchRows(p, search, stage); };
+  const onPageSize = (n) => { setLimit(n); setPage(1); fetchRows(1, search, stage, appId); };
   const onSaved = () => { setPage(1); setSearch(''); setStage(''); setAppId(''); fetchRows(1, '', '', ''); };
 
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
@@ -256,6 +259,7 @@ export default function EnquiriesPage() {
               className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-gray-700 outline-none bg-transparent" />
           </form>
           <div className="flex items-center gap-0.5 shrink-0 text-sm text-gray-500">
+            <PageSizeSelect value={limit} onChange={onPageSize} />
             <span className="px-1 tabular-nums">{total === 0 ? '0' : `${from}-${to}`} / {total}</span>
             <button onClick={() => goPage(-1)} disabled={page === 1}
               className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer">
