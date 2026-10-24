@@ -12,6 +12,18 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.3.1',
+    date: '2026-10-24',
+    items: [
+      {
+        icon: 'grid',
+        title: 'Rows per page',
+        text: 'Lists now have a “per page” dropdown next to the page counter — show 10, 20, 50 or 100 rows. Your choice is remembered for each list.',
+        perm: null,
+      },
+    ],
+  },
+  {
     version: '1.3.0',
     date: '2026-10-23',
     items: [
