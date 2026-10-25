@@ -4,8 +4,8 @@ const { auditService } = require('../audit/audit.service');
 const { notificationService } = require('../notification/notification.service');
 const config = require('../../config/env');
 const { zonedTime } = require('../../lib/timezone');
-const { NotFoundError } = require('../../core');
-const { assertFullEdit, assertFlowWork, assertOwnItem } = require('./access');
+const { NotFoundError, ForbiddenError } = require('../../core');
+const { assertActivityAccess, isHandler } = require('./access');
 const { stageName } = require('./emailDetails');
 
 const MEDIUM = Object.freeze({ CALL: 'Call', MEETING: 'Meeting', TEAMS: 'Teams', SITE_VISIT: 'Site visit', EMAIL: 'Email' });
@@ -27,12 +27,13 @@ function createActivityService(repository) {
   }
 
   /**
-   * Logging / editing an activity or review: the holder's work (the flow
-   * gives access).
+   * "Needs negotiation" moves the enquiry to Negotiation — moving stages is
+   * the work of whoever holds it, so only they (or a system user) may flag it.
    * @throws {ForbiddenError}
    */
-  function assertCanLog(enquiry, actor, isReview) {
-    assertFlowWork(enquiry, actor, isReview ? 'log reviews on it' : 'log activity on it');
+  function assertMayFlagNegotiation(enquiry, dto, actor) {
+    if (!dto.needs_negotiation || actor?.is_system || isHandler(enquiry, actor)) return;
+    throw new ForbiddenError('Only the person the enquiry is with can mark it as needing negotiation');
   }
 
   /** Parses the stored JSON participant ids back into an array for the API. */
@@ -101,7 +102,9 @@ function createActivityService(repository) {
      */
     async create(enquiryId, dto, actor) {
       const enquiry = await loadEnquiry(enquiryId);
-      assertCanLog(enquiry, actor, Boolean(dto.is_review));
+      // Open at every stage (Sales → View + Create), not only to the holder.
+      assertActivityAccess('log', actor);
+      assertMayFlagNegotiation(enquiry, dto, actor);
 
       const data = pickWritable(dto, {
         enquiry_id: enquiryId,
@@ -176,8 +179,8 @@ function createActivityService(repository) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Activity');
       const enquiry = await loadEnquiry(before.enquiry_id);
-      assertCanLog(enquiry, actor, Boolean(before.is_review || dto.is_review));
-      assertOwnItem(before, actor, `edit this ${before.is_review ? 'review' : 'activity'}`);
+      assertActivityAccess('edit', actor, before);
+      assertMayFlagNegotiation(enquiry, dto, actor);
 
       const data = pickWritable(dto, { updated_by: actor?.id ?? null });
       const activity = await repository.update(id, data);
@@ -211,8 +214,7 @@ function createActivityService(repository) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Activity');
       const enquiry = await loadEnquiry(before.enquiry_id);
-      assertFullEdit(enquiry, actor, 'delete activities');
-      assertOwnItem(before, actor, `delete this ${before.is_review ? 'review' : 'activity'}`);
+      assertActivityAccess('delete', actor, before);
 
       await repository.softDelete(id, actor?.id ?? null);
       await rollUpTemperature(before.enquiry_id);

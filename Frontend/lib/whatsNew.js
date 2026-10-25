@@ -12,6 +12,18 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.4.0',
+    date: '2026-10-25',
+    items: [
+      {
+        icon: 'spark',
+        title: 'Log activities and reviews at any stage',
+        text: 'Activities and reviews can now be logged at every stage of an enquiry, not only by the person it is with. You can edit or delete your own entries if you have Sales edit / delete access.',
+        perm: 'SALES_VIEW',
+      },
+    ],
+  },
+  {
     version: '1.3.1',
     date: '2026-10-24',
     items: [

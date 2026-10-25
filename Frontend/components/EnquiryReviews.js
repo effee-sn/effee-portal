@@ -109,9 +109,9 @@ function ReviewModal({ enquiryId, review, users, onClose, onSaved }) {
 }
 
 // ── Reviews card ──────────────────────────────────────────────────────────────
-// owns(review): only whoever logged it may edit or delete it (admins: any).
-// canDelete: Sales → Edit (defaults to canEdit).
-export default function EnquiryReviews({ enquiryId, canEdit, canDelete = canEdit, owns = () => true, users = [], onChanged }) {
+// canCreate: log (Sales → View + Create, any stage). canEdit / canDelete: Sales →
+// Edit / Delete. owns(review): only whoever logged it may edit or delete it.
+export default function EnquiryReviews({ enquiryId, canCreate, canEdit = canCreate, canDelete = canEdit, owns = () => true, users = [], onChanged }) {
   const [items, setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal]   = useState(null);
@@ -157,15 +157,17 @@ export default function EnquiryReviews({ enquiryId, canEdit, canDelete = canEdit
             ) : null}
           </div>
         </div>
-        {canEdit && owns(r) && (
+        {(canEdit || canDelete) && owns(r) && (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-            <button onClick={() => setModal({ type: 'edit', review: r })}
-              className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-200 cursor-pointer" title="Edit">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </button>
+            {canEdit && (
+              <button onClick={() => setModal({ type: 'edit', review: r })}
+                className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-200 cursor-pointer" title="Edit">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+            )}
             {canDelete && (
               <button onClick={() => setConfirmDel(r)}
                 className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 cursor-pointer" title="Delete">
@@ -189,7 +191,7 @@ export default function EnquiryReviews({ enquiryId, canEdit, canDelete = canEdit
           {items.length > 0 && (
             <button onClick={() => setShowAll(true)} className="text-xs text-blue-600 hover:underline cursor-pointer">Show reviews</button>
           )}
-          {canEdit && (
+          {canCreate && (
             <button onClick={() => setModal({ type: 'create' })}
               className="px-2.5 py-1 text-xs font-medium text-white rounded-sm cursor-pointer"
               style={{ backgroundColor: 'var(--ams-primary)' }}>Log Review</button>
@@ -226,7 +228,7 @@ export default function EnquiryReviews({ enquiryId, canEdit, canDelete = canEdit
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-800">Reviews ({items.length})</h2>
               <div className="flex items-center gap-3">
-                {canEdit && (
+                {canCreate && (
                   <button onClick={() => setModal({ type: 'create' })}
                     className="px-2.5 py-1 text-xs font-medium text-white rounded-sm cursor-pointer"
                     style={{ backgroundColor: 'var(--ams-primary)' }}>Log Review</button>

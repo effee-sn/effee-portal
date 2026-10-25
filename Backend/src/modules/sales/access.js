@@ -95,7 +95,35 @@ function assertCanLose(enquiry, actor) {
   assertFlowWork(enquiry, actor, 'mark it lost');
 }
 
+/** Holds a permission (system users hold all). */
+const hasPerm = (actor, code) => Boolean(actor?.is_system || actor?.permissions?.includes(code));
+
+/**
+ * Activities and reviews are open at every stage, not only to the holder:
+ * logging needs Sales → View + Create; editing an entry Sales → Edit and
+ * deleting it Sales → Delete — both on your own entries only (system users:
+ * any). The stage-moving side effect (needs negotiation) stays the holder's.
+ * @param {'log'|'edit'|'delete'} action
+ * @param {{ created_by?: number|null }|null} item  the entry, for edit / delete
+ * @throws {ForbiddenError}
+ */
+function assertActivityAccess(action, actor, item = null) {
+  if (actor?.is_system) return;
+  if (action === 'log') {
+    if (!hasPerm(actor, 'SALES_VIEW') || !hasPerm(actor, 'SALES_CREATE')) {
+      throw new ForbiddenError('You need Sales view and create access to log activities and reviews');
+    }
+    return;
+  }
+  const code = action === 'edit' ? 'SALES_EDIT' : 'SALES_DELETE';
+  if (!hasPerm(actor, code)) {
+    throw new ForbiddenError(`You need Sales ${action} access to ${action} activities and reviews`);
+  }
+  assertOwnItem(item, actor, `${action} this entry`);
+}
+
 module.exports = {
+  assertActivityAccess,
   hasEdit, isHandler, isCreator, canReassign,
   assertFlowWork, assertFullEdit, assertDetailsEdit, assertOwnItem, assertCanWin, assertCanLose,
   // Earlier name for the flow check, still used by callers.

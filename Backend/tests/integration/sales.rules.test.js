@@ -222,7 +222,7 @@ describe('Sales rules: progression and gates', () => {
   });
 
   it('only the current holder can act — Field is locked out while Internal holds it', async () => {
-    await assert.rejects(log(id, fx.field), { name: 'ForbiddenError' });
+    // (Activities and reviews are open at every stage — see their own tests.)
     await assert.rejects(upload(id, 'CONCEPT', fx.field), { name: 'ForbiddenError' });
     await assert.rejects(move(id, 'CONCEPT', fx.field), { name: 'ForbiddenError' });
   });
@@ -297,10 +297,8 @@ describe('Sales rules: the creator without Sales edit', () => {
     assert.equal((await state(id)).stage, 'REVIEW');
 
     await assert.rejects(uploadAs(id, 'FORMAT_EXCEL', me), { name: 'ForbiddenError' }, 'no upload after New');
-    await assert.rejects(
-      activityService.create(id, { type: 'CALL', activity_at: new Date(), subject: 'call' }, me),
-      { name: 'ForbiddenError' }, 'no activity after New',
-    );
+    // Activities are open at every stage with Sales → View + Create.
+    await activityService.create(id, { type: 'CALL', activity_at: new Date(), subject: 'call' }, me);
   });
 
   it('an Incoming enquiry: their first activity moves it to Contacted, and they can still work it there', async () => {
@@ -318,7 +316,7 @@ describe('Sales rules: the creator without Sales edit', () => {
 });
 
 describe('Sales rules: the flow gives access (no Sales edit needed)', () => {
-  const viewOnly = (user) => actor(user, ['SALES_VIEW']);
+  const viewOnly = (user) => actor(user, ['SALES_VIEW', 'SALES_CREATE']);
 
   it('Internal Sales with only View works its stages, sends the offer, and can mark it Lost — but not delete', async () => {
     const e = await newEnquiry('GENERATED');
@@ -341,12 +339,35 @@ describe('Sales rules: the flow gives access (no Sales edit needed)', () => {
 
   it('Field with only View: works its follow-up and marks Won; cannot act while Internal holds it', async () => {
     const id = (await toOfferReleased()).id;
-    await assert.rejects(log(id, fx.field), { name: 'ForbiddenError' }, 'Internal holds it at Offer Released');
+    await assert.rejects(upload(id, 'OFFER', fx.field), { name: 'ForbiddenError' }, 'Internal holds it at Offer Released');
     await sendOffer(id, fx.internal); // → Follow-up, with Field
     const me = viewOnly(fx.field);
     await activityService.create(id, { type: 'CALL', activity_at: new Date(), subject: 'follow-up call' }, me);
     await enquiryService.win(id, { order_value: 100000 }, me);
     assert.equal((await state(id)).stage, 'WON');
+  });
+});
+
+describe('Sales rules: activities and reviews are open at every stage', () => {
+  it('logging needs Sales View + Create — at any stage, whoever holds the enquiry', async () => {
+    const id = (await toOfferReleased()).id; // Internal holds it
+    await activityService.create(id, { type: 'CALL', activity_at: new Date(), subject: 'field call' }, actor(fx.field, ['SALES_VIEW', 'SALES_CREATE']));
+    await activityService.create(id, { type: 'MEETING', activity_at: new Date(), subject: 'extra review', is_review: true }, actor(fx.field, ['SALES_VIEW', 'SALES_CREATE']));
+    await assert.rejects(
+      activityService.create(id, { type: 'CALL', activity_at: new Date(), subject: 'x' }, actor(fx.field, ['SALES_VIEW'])),
+      { name: 'ForbiddenError', message: /view and create/ },
+    );
+  });
+
+  it('edit needs Sales Edit, delete needs Sales Delete — own entries only', async () => {
+    const id = (await newEnquiry('INCOMING')).id;
+    const a = await activityService.create(id, { type: 'CALL', activity_at: new Date(), subject: 'mine' }, actor(fx.field));
+    await assert.rejects(activityService.update(a.id, { subject: 'x' }, actor(fx.field, ['SALES_VIEW', 'SALES_CREATE'])), { name: 'ForbiddenError' });
+    await activityService.update(a.id, { subject: 'edited' }, actor(fx.field, ['SALES_VIEW', 'SALES_EDIT']));
+    await assert.rejects(activityService.update(a.id, { subject: 'x' }, actor(fx.internal, [...FULL, 'SALES_DELETE'])),
+      { name: 'ForbiddenError' }, 'not their entry');
+    await assert.rejects(activityService.remove(a.id, actor(fx.field, FULL)), { name: 'ForbiddenError' }, 'delete needs Sales Delete');
+    await activityService.remove(a.id, actor(fx.field, ['SALES_VIEW', 'SALES_DELETE']));
   });
 });
 
@@ -465,8 +486,9 @@ describe('Sales rules: offer → follow-up ⇄ negotiation loop', () => {
     assert.equal(s.handler_id, fx.field.id);
   });
 
-  it('Internal cannot act during Field follow-up', async () => {
-    await assert.rejects(log(id, fx.internal), { name: 'ForbiddenError' });
+  it('Internal may log during Field follow-up, but not flag negotiation (a stage move)', async () => {
+    await assert.rejects(log(id, fx.internal, { needs_negotiation: true }), { name: 'ForbiddenError', message: /negotiation/ });
+    await log(id, fx.internal, { subject: 'internal note during follow-up' });
   });
 
   it('a follow-up flagged "needs negotiation" moves to Negotiation and hands to Internal', async () => {

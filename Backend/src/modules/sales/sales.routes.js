@@ -176,24 +176,25 @@ router.get(
   asyncHandler(listActivities)
 );
 
-// Whoever holds the enquiry (the flow; checked in the service).
+// Activities & reviews, at any stage: log = Sales → View + Create, edit = Edit,
+// delete = Delete (own entries; checked in the service).
 router.post(
   '/enquiries/:enquiryId/activities',
-  authorize('SALES_VIEW'),
+  authorize('SALES_CREATE'),
   validate({ params: activityValidation.enquiryIdParam, body: activityValidation.createActivityBody }),
   asyncHandler(createActivity)
 );
 
 router.put(
   '/activities/:id',
-  authorize('SALES_VIEW'),
+  authorize('SALES_EDIT'),
   validate({ params: activityValidation.activityIdParam, body: activityValidation.updateActivityBody }),
   asyncHandler(updateActivity)
 );
 
 router.delete(
   '/activities/:id',
-  authorize('SALES_EDIT'),
+  authorize('SALES_DELETE'),
   validate({ params: activityValidation.activityIdParam }),
   asyncHandler(deleteActivity)
 );
