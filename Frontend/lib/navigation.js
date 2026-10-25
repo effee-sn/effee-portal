@@ -17,6 +17,7 @@
  * @property {string} href
  * @property {string|null} perm Permission code, or null for always-visible.
  * @property {boolean} [system] Restrict to system (super-admin) users, regardless of `perm`.
+ * @property {string[]} [anyPerm] Visible with any of these permission codes, in place of `perm`.
  * @property {string} [flag] Visible when this flag on /auth/me is true (system users always), in place of `perm`.
  * @property {boolean} [exact] Match the path exactly (used for the dashboard root).
  */
@@ -62,7 +63,6 @@ export const AREAS = [
     items: [
       { label: 'Dashboard', href: '/dashboard/sales',           perm: 'SALES_VIEW', exact: true },
       { label: 'Enquiries', href: '/dashboard/sales/enquiries', perm: 'SALES_VIEW' },
-      { label: 'Configuration', href: '/dashboard/sales/config', perm: 'SALES_CONFIG_VIEW' },
     ],
   },
   {
@@ -71,14 +71,6 @@ export const AREAS = [
     subtitle: 'Project tracking',
     items: [
       { label: 'Projects', href: '/dashboard/projects', perm: 'PROJECT_VIEW' },
-    ],
-  },
-  {
-    key: 'manufacturing',
-    label: 'Manufacturing',
-    subtitle: 'Production',
-    items: [
-      { label: 'Bill of Materials', href: '/dashboard/manufacturing/bom', perm: 'BOM_VIEW' },
     ],
   },
   {
@@ -96,6 +88,9 @@ export const AREAS = [
     items: [
       { label: 'Customers', href: '/dashboard/master-data/customers', perm: 'CUSTOMER_VIEW' },
       { label: 'Currencies', href: '/dashboard/master-data/currencies', perm: 'CURRENCY_VIEW' },
+      { label: 'Materials', href: '/dashboard/master-data/materials', perm: 'MATERIAL_VIEW' },
+      // Drawing-wise BOMs: a reusable library that projects pick from.
+      { label: 'BOM', href: '/dashboard/master-data/bom', perm: 'BOM_VIEW' },
     ],
   },
   {
@@ -107,6 +102,8 @@ export const AREAS = [
       { label: 'Roles',        href: '/dashboard/roles',       perm: 'ROLE_VIEW' },
       { label: 'Departments',  href: '/dashboard/departments', perm: 'DEPT_VIEW' },
       { label: 'Flow Builder', href: '/dashboard/flows',       perm: 'FLOW_VIEW' },
+      // Every module's settings in one place (Sales, Material Codes, …).
+      { label: 'Configuration', href: '/dashboard/configuration', perm: null, anyPerm: ['SALES_CONFIG_VIEW', 'MATERIAL_CONFIG_VIEW'] },
       { label: 'Audit Log',    href: '/dashboard/audit',       perm: null, system: true },
       { label: 'Backup',       href: '/dashboard/backup',      perm: null, system: true },
       { label: 'Settings',     href: '/dashboard/settings',    perm: null },

@@ -14,7 +14,7 @@ const MEDIUM = Object.freeze({ CALL: 'Call', MEETING: 'Meeting', TEAMS: 'Teams',
  *
  *   - **Follow-up / review coming up** — a timed follow-up (a call at 3 PM,
  *     a review at 5:30) is reminded at its kind's times before it, set in
- *     Sales → Configuration (a site visit: 1 day, 3 hours and 15 minutes
+ *     Administrator → Configuration → Sales (a site visit: 1 day, 3 hours and 15 minutes
  *     before; others 15 minutes before). A date-only follow-up is reminded at
  *     its morning time (9:00 local) that day, plus the morning of any whole
  *     day set before it. Which reminder is due is decided in reminderPlan.

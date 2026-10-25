@@ -520,7 +520,7 @@ export default function EnquiryDetailPage() {
               return (
                 <div className="mt-0.5 flex items-center gap-2 flex-wrap">
                   {prob !== undefined && (
-                    <span title="Win probability at the current stage (Sales → Configuration)"
+                    <span title="Win probability at the current stage (Administrator → Configuration → Sales)"
                       className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium text-gray-800 bg-gray-100">
                       <span className="text-gray-500 font-normal">Probability:</span> {prob}%
                       {showWeighted && (

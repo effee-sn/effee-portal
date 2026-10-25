@@ -12,6 +12,36 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.5.0',
+    date: '2026-10-25',
+    items: [
+      {
+        icon: 'grid',
+        title: 'Material master',
+        text: 'Master Data → Materials lists every material with its IMM code. Add many at once in a grid, or paste them from Excel — each code is generated from the prefix you pick.',
+        perm: 'MATERIAL_VIEW',
+      },
+      {
+        icon: 'grid',
+        title: 'BOM — subassemblies',
+        text: 'Master Data → BOM: build subassemblies (name + drawing no.) from the material master — search by IMM code, drawing no. or name, then set the quantity.',
+        perm: 'BOM_VIEW',
+      },
+      {
+        icon: 'grid',
+        title: 'All settings in one place',
+        text: 'Administrator → Configuration now holds every module’s settings, with a sidebar per module. Sales configuration has moved there from the Sales menu.',
+        perm: 'SALES_CONFIG_VIEW',
+      },
+      {
+        icon: 'spark',
+        title: 'Material code prefixes',
+        text: 'Administrator → Configuration → Material Codes sets the IMM code prefixes and their numbering (separator, digits, next number), with a live preview.',
+        perm: 'MATERIAL_CONFIG_VIEW',
+      },
+    ],
+  },
+  {
     version: '1.4.0',
     date: '2026-10-25',
     items: [

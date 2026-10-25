@@ -49,7 +49,7 @@ function createActivityService(repository) {
    * Maps a validated DTO to writable columns (serialising participant ids).
    *
    * Follow-up timing: an exact date-time is reminded at the kind's configured
-   * times before it (Sales → Configuration); a day ('YYYY-MM-DD') is stored at
+   * times before it (Administrator → Configuration → Sales); a day ('YYYY-MM-DD') is stored at
    * the morning reminder time in the business timezone. Any new follow-up date
    * re-arms all its reminders.
    */

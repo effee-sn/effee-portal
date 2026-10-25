@@ -4,7 +4,7 @@ const { NotFoundError, ConflictError } = require('../../core');
 const config = require('../../config/env');
 
 /**
- * Sales configuration business logic (Sales → Configuration).
+ * Sales configuration business logic (Administrator → Configuration → Sales).
  *
  *   - **Applications** — the list an enquiry's application is picked from
  *     (Annealing, Hardening, …). Names are unique. One already used by an

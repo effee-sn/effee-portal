@@ -1295,3 +1295,92 @@ model QuotationItem {
   @@index([quotation_id])
   @@index([product_id])
 }
+
+/// IMM code prefixes for materials (Administrator → Material Codes). Each
+/// prefix numbers its own codes: prefix + separator + zero-padded number,
+/// e.g. "IMM" + "-" + 5 digits → IMM-00001.
+model ImmPrefix {
+  id          Int        @id @default(autoincrement())
+  prefix      String     @unique @db.VarChar(20)
+  // "", "-" or "_" between the prefix and the number.
+  separator   String     @default("") @db.VarChar(1)
+  digits      Int        @default(5)
+  // The number the next material with this prefix receives.
+  next_number Int        @default(1)
+  description String?    @db.VarChar(191)
+  is_active   Boolean    @default(true)
+  materials   Material[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by Int?
+  updated_by Int?
+}
+
+enum MaterialType {
+  FINISHED
+  BOUGHT_OUT
+  CONSUMABLE
+}
+
+/// Material master (Master Data → Materials). The IMM code is generated from
+/// the chosen prefix on creation and never changes.
+model Material {
+  id             Int          @id @default(autoincrement())
+  imm_code       String       @unique @db.VarChar(40)
+  prefix         ImmPrefix    @relation(fields: [prefix_id], references: [id])
+  prefix_id      Int
+  drawing_no     String?      @db.VarChar(100)
+  item_name      String       @db.VarChar(191)
+  description    String       @db.Text
+  technical_spec String       @db.Text
+  material_type  MaterialType
+  // What it is made of, e.g. MS, SS304, Copper.
+  material       String       @db.VarChar(191)
+  remarks        String?      @db.Text
+  is_active      Boolean      @default(true)
+  bom_items      SubassemblyItem[]
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+  created_by Int?
+  updated_by Int?
+
+  @@index([prefix_id])
+  @@index([item_name])
+  @@index([deleted_at])
+}
+
+/// A subassembly (Master Data → BOM): a drawing-wise bill of materials — a
+/// named, drawn part built from materials of the material master. Reusable:
+/// projects will pick subassemblies with their quantities.
+model Subassembly {
+  id         Int               @id @default(autoincrement())
+  name       String            @db.VarChar(191)
+  drawing_no String            @db.VarChar(100)
+  items      SubassemblyItem[]
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+  created_by Int?
+  updated_by Int?
+
+  @@index([drawing_no])
+  @@index([deleted_at])
+}
+
+/// One material on a subassembly, with how many are needed.
+model SubassemblyItem {
+  id             Int         @id @default(autoincrement())
+  subassembly    Subassembly @relation(fields: [subassembly_id], references: [id], onDelete: Cascade)
+  subassembly_id Int
+  material       Material    @relation(fields: [material_id], references: [id])
+  material_id    Int
+  quantity       Decimal     @default(1) @db.Decimal(12, 3)
+  sort_order     Int         @default(0)
+
+  @@unique([subassembly_id, material_id])
+  @@index([material_id])
+}

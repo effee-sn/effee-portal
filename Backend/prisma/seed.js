@@ -55,7 +55,9 @@ const MODULES = [
   { name: 'PROJECT',    slug: 'project',    description: 'Projects' },
   { name: 'CUSTOMER',   slug: 'customer',   description: 'Master data — customers & contacts' },
   { name: 'CURRENCY',   slug: 'currency',   description: 'Master data — currencies & exchange rates' },
-  { name: 'BOM',        slug: 'bom',        description: 'Manufacturing — bills of materials' },
+  { name: 'BOM',        slug: 'bom',        description: 'Master data — bills of materials (BOM)' },
+  { name: 'MATERIAL',   slug: 'material',   description: 'Master data — materials' },
+  { name: 'MATERIAL_CONFIG', slug: 'material-config', description: 'Material code prefixes and numbering' },
   { name: 'REPORT',     slug: 'report',     description: 'Reports (MIS) — view and export' },
   { name: 'SALES_CONFIG', slug: 'sales-config', description: 'Sales configuration — applications, stage probabilities' },
 ];
@@ -132,6 +134,14 @@ const PERMISSIONS = [
   { module: 'bom', action: 'CREATE', code: 'BOM_CREATE' },
   { module: 'bom', action: 'EDIT',   code: 'BOM_EDIT' },
   { module: 'bom', action: 'DELETE', code: 'BOM_DELETE' },
+  { module: 'material', action: 'VIEW',   code: 'MATERIAL_VIEW' },
+  { module: 'material', action: 'CREATE', code: 'MATERIAL_CREATE' },
+  { module: 'material', action: 'EDIT',   code: 'MATERIAL_EDIT' },
+  { module: 'material', action: 'DELETE', code: 'MATERIAL_DELETE' },
+  { module: 'material-config', action: 'VIEW',   code: 'MATERIAL_CONFIG_VIEW' },
+  { module: 'material-config', action: 'CREATE', code: 'MATERIAL_CONFIG_CREATE' },
+  { module: 'material-config', action: 'EDIT',   code: 'MATERIAL_CONFIG_EDIT' },
+  { module: 'material-config', action: 'DELETE', code: 'MATERIAL_CONFIG_DELETE' },
 
   // Reports (MIS). Each report set also needs its module's view permission.
   { module: 'report', action: 'VIEW',   code: 'REPORT_VIEW' },

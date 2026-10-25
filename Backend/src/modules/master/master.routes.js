@@ -149,4 +149,76 @@ router.delete(
   asyncHandler(currencyController.deleteCurrency)
 );
 
+// ── Materials & their IMM code prefixes ──────────────────────────────────────
+const materialValidation = require('./material.validation');
+const materialController = require('./material.controller');
+
+// Prefixes: readable by material users (the IMM code dropdown) and their
+// administrators; changed only with the Material Codes permissions.
+router.get('/materials/prefixes', authorize('MATERIAL_VIEW', 'MATERIAL_CONFIG_VIEW'), asyncHandler(materialController.listPrefixes));
+router.post(
+  '/materials/prefixes',
+  authorize('MATERIAL_CONFIG_CREATE'),
+  validate({ body: materialValidation.createPrefixBody }),
+  asyncHandler(materialController.createPrefix)
+);
+router.put(
+  '/materials/prefixes/:id',
+  authorize('MATERIAL_CONFIG_EDIT'),
+  validate({ params: materialValidation.idParam, body: materialValidation.updatePrefixBody }),
+  asyncHandler(materialController.updatePrefix)
+);
+router.delete(
+  '/materials/prefixes/:id',
+  authorize('MATERIAL_CONFIG_DELETE'),
+  validate({ params: materialValidation.idParam }),
+  asyncHandler(materialController.deletePrefix)
+);
+
+// For the material forms' drawing no. list (before /materials/:id).
+router.get('/materials/drawing-options', authorize('MATERIAL_CREATE', 'MATERIAL_EDIT'),
+  validate({ query: materialValidation.drawingOptionsQuery }), asyncHandler(materialController.getDrawingOptions));
+router.get(
+  '/materials',
+  authorize('MATERIAL_VIEW'),
+  validate({ query: materialValidation.listMaterialsQuery }),
+  asyncHandler(materialController.listMaterials)
+);
+router.post(
+  '/materials/bulk',
+  authorize('MATERIAL_CREATE'),
+  validate({ body: materialValidation.bulkCreateBody }),
+  asyncHandler(materialController.createMaterials)
+);
+router.get(
+  '/materials/:id',
+  authorize('MATERIAL_VIEW'),
+  validate({ params: materialValidation.idParam }),
+  asyncHandler(materialController.getMaterial)
+);
+router.put(
+  '/materials/:id',
+  authorize('MATERIAL_EDIT'),
+  validate({ params: materialValidation.idParam, body: materialValidation.updateMaterialBody }),
+  asyncHandler(materialController.updateMaterial)
+);
+router.delete(
+  '/materials/:id',
+  authorize('MATERIAL_DELETE'),
+  validate({ params: materialValidation.idParam }),
+  asyncHandler(materialController.deleteMaterial)
+);
+
+// ── BOM: subassemblies built from materials ───────────────────────────────────
+const bomValidation = require('./bom.validation');
+const bomController = require('./bom.controller');
+
+router.get('/bom/subassemblies', authorize('BOM_VIEW'), validate({ query: bomValidation.listSubassembliesQuery }), asyncHandler(bomController.listSubassemblies));
+// Picking materials needs only BOM access, not the material master's.
+router.get('/bom/material-search', authorize('BOM_CREATE', 'BOM_EDIT'), validate({ query: bomValidation.materialSearchQuery }), asyncHandler(bomController.searchMaterials));
+router.post('/bom/subassemblies', authorize('BOM_CREATE'), validate({ body: bomValidation.createSubassemblyBody }), asyncHandler(bomController.createSubassembly));
+router.get('/bom/subassemblies/:id', authorize('BOM_VIEW'), validate({ params: bomValidation.idParam }), asyncHandler(bomController.getSubassembly));
+router.put('/bom/subassemblies/:id', authorize('BOM_EDIT'), validate({ params: bomValidation.idParam, body: bomValidation.updateSubassemblyBody }), asyncHandler(bomController.updateSubassembly));
+router.delete('/bom/subassemblies/:id', authorize('BOM_DELETE'), validate({ params: bomValidation.idParam }), asyncHandler(bomController.deleteSubassembly));
+
 module.exports = router;

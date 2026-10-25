@@ -1,7 +1,7 @@
 const { z } = require('zod');
 const { schemas } = require('../../core');
 
-/** Request schemas for Sales → Configuration. */
+/** Request schemas for Administrator → Configuration → Sales. */
 
 const STAGES = ['NEW', 'CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW',
   'OFFER_RELEASED', 'FOLLOW_UP', 'NEGOTIATION', 'NEGOTIATION_FOLLOW_UP', 'WON', 'LOST'];

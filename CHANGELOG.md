@@ -13,6 +13,19 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.5.0] — 2026-10-25
+
+### Added — Material master
+
+- **Master Data → Materials**: the material master. Each material has an **IMM code**, drawing no. (optional — picked from the **BOM** subassemblies' drawing numbers, never typed freely; renaming a subassembly's drawing no. updates its materials), item name, description, technical specification, material type (**Finished / Bought-out / Consumables**), material (e.g. MS, SS304) and remarks (optional). Search and filter by type and prefix; open a row to edit it. The IMM code never changes.
+- **Bulk entry**: add many materials at once in a grid — each row picks its IMM code prefix from a searchable list and shows the code it will get; rows can be **pasted from Excel**; everything saves together.
+- **Administrator → Configuration → Material Codes**: the IMM code prefixes. Each prefix has its own numbering — prefix, an optional separator (`-` or `_`), number of digits and next number, with a live preview (e.g. `IMM-00001`). Once a prefix is used its format is fixed and its counter only moves forward. Codes are unique even when several people save at the same time.
+- **Administrator → Configuration**: every module's settings in one place, with a sidebar per module — **Sales** (stage probability, applications, reminders — moved here from the Sales menu; the old link forwards) and **Material Codes**. Each section shows to those with its configuration permission.
+- **Master Data → BOM — Bill of Materials (Subassemblies)**: build subassemblies — a **name** and **drawing no.**, then add materials from the material master by searching their **IMM code, drawing no. or item name**, each with a **quantity**. Drawing numbers are unique; a material appears once per subassembly. Inactive or deleted materials can't be added but stay flagged where already used. (BOM moved here from the Manufacturing app, which is removed; its old link forwards.)
+- New permissions **Materials → View / Create / Edit / Delete** and **Material Codes → View / Create / Edit / Delete** (a database migration adds them and the two new tables).
+
+---
+
 ## [1.4.0] — 2026-10-25
 
 ### Changed — Sales: activities and reviews open at every stage
@@ -113,7 +126,7 @@ Service ticketing and multi-department tasks are in **beta**: complete and in us
 - **Field ⇄ Internal handoff:** the enquiry is always "with" one person; it passes automatically between field sales and the chosen Internal Sales handler at the right stages. **Reassign** for supervisors.
 - **Documents** per stage with **versions** (replacing keeps the old file as history); **offer revisions** each carry their own price; mark offers as sent.
 - **Activity timeline** (calls, meetings, Teams, site visits, email) with minutes, outcomes, participants, temperature and the next follow-up; **internal reviews** with minutes of meeting and the next review date.
-- **Follow-up reminders:** a set time before each follow-up (site visits 1 day, 3 hours and 15 minutes before by default; other kinds 15 minutes before), date-only follow-ups at 9:00 AM; timings set in **Sales → Configuration**. **Stalled-stage** reminders when an enquiry sits too long in a stage.
+- **Follow-up reminders:** a set time before each follow-up (site visits 1 day, 3 hours and 15 minutes before by default; other kinds 15 minutes before), date-only follow-ups at 9:00 AM; timings set in **Administrator → Configuration → Sales**. **Stalled-stage** reminders when an enquiry sits too long in a stage.
 - **Stage history**, time in stage and aging badges; **Won / Lost** with close-out details; **Reopen**.
 - **Sales configuration:** applications list, win probability per stage (with stage explanations), reminder timings.
 - **Sales dashboard:** pipeline, weighted value, Offered vs Won and more.

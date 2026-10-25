@@ -141,7 +141,7 @@ export function formatINR(value) {
 }
 
 /**
- * What each stage means, for help tooltips (e.g. Sales → Configuration).
+ * What each stage means, for help tooltips (e.g. Administrator → Configuration → Sales).
  * `who` holds the enquiry in that stage; `enter` is what has to be in place to
  * reach it (the gates enforced by the backend — see stageGate.js).
  */
