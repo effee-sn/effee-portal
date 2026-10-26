@@ -53,7 +53,7 @@ const paise = (n) => Math.round(n * 100) / 100;
  */
 async function displayConverter(code, db = prisma) {
   const none = { code: 'INR', fromInr: (inr) => (inr === null || inr === undefined ? null : Number(inr)) };
-  if (!code || code === 'INR') return none;
+  if (!code || code === 'INR' || !/^[A-Z]{3}$/.test(String(code))) return none;
   const cur = await db.currency.findUnique({
     where: { code },
     select: { code: true, rate: true, rates: { select: { rate: true, effective_from: true }, orderBy: { effective_from: 'asc' } } },

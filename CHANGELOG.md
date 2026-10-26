@@ -15,9 +15,9 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ## [1.6.0] — 2026-10-27
 
-### Added — Sales: show amounts in any currency
+### Added — Show money in any currency, from the top bar
 
-- A **currency dropdown** (the active currencies) at the top of **Sales → Dashboard** and **Sales → Enquiries** shows every amount in the chosen currency — the dashboard's totals and charts, and each enquiry's value in the list and the Kanban (hover a value to see it as entered, e.g. "Entered as $50,000.00"). The choice is shared by both pages and remembered per browser; INR by default.
+- A **currency switch** (the active currencies) in the **top navigation bar**, beside the theme switch, shows money across the portal in the chosen currency — one choice for every page, applied the moment it changes (other open tabs follow too), remembered per browser; INR by default. It covers the **home dashboard**'s Sales tiles and pipeline, **Sales → Dashboard** (totals and charts), **Sales → Enquiries** (each value in the list and the Kanban — hover a value to see it as entered, e.g. "Entered as $50,000.00"), and an **enquiry's page**, where the expected value, the weighted value and the order value show their "≈" amount in it ("₹42,00,000.00 (≈ €38,181.82)"). MIS reports and their Excel exports stay in ₹.
 - **Which rate:** an **open** enquiry converts at the chosen currency's rate **today**; a **won order** at its rate **on the day it was won**, and a **sent offer** at its rate **on the day it was sent** — from the currency's rate history (Master Data → Currencies). So past figures keep their actual value: with €1 = ₹100 last month and ₹110 now, ₹1,000 won last month shows as **€10.00**, while an open ₹1,000 shows as **€9.09**. Dashboard totals add each deal at its own day's rate. Display only — nothing stored changes.
 
 ### Added — Sales: sortable, sticky enquiry list

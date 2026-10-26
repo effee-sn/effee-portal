@@ -291,12 +291,24 @@ function createEnquiryService(repository) {
       };
     },
 
-    /** @param {number} id @param {object} [actor] @throws {NotFoundError} */
-    async getById(id, actor) {
+    /**
+     * @param {number} id @param {object} [actor]
+     * @param {string} [displayCurrency]  also give its values in this currency (the expected value at
+     *   today's rate, the order at the rate on the day it was won)
+     * @throws {NotFoundError}
+     */
+    async getById(id, actor, displayCurrency) {
       const enquiry = await repository.findById(id);
       if (!enquiry) throw new NotFoundError('Enquiry');
       assertCanSeeEnquiry(enquiry, actor);
-      return withMoney(enquiry);
+      const e = await withMoney(enquiry);
+      const conv = await displayConverter(displayCurrency);
+      return {
+        ...e,
+        display_currency: conv.code,
+        expected_value_display: e.expected_value_inr === null ? null : paise(conv.fromInr(e.expected_value_inr)),
+        order_value_display: e.order_value_inr === null ? null : paise(conv.fromInr(e.order_value_inr, e.won_at)),
+      };
     },
 
     /**

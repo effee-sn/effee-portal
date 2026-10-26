@@ -13,7 +13,7 @@ import useCurrencies, { formatMoney } from '@/lib/money';
 import usePageSize from '@/lib/usePageSize';
 import PageSizeSelect from '@/components/PageSizeSelect';
 import EnquiryKanban from '@/components/sales/EnquiryKanban';
-import { useDisplayCurrency, CurrencySelect } from '@/lib/displayCurrency';
+import { useDisplayCurrency } from '@/lib/displayCurrency';
 
 // List or Kanban — remembered per browser.
 const VIEW_KEY = 'sales-enquiries-view';
@@ -204,7 +204,7 @@ export default function EnquiriesPage() {
   const canView   = me?.is_system || can('SALES_VIEW') || can('SALES_VIEW_OWN'); // all, or only their own (the API decides which)
   const canCreate = me?.is_system || can('SALES_CREATE');
   const config    = useSalesConfig();
-  const money     = useDisplayCurrency(); // the currency values are shown in (shared with the Sales dashboard)
+  const money     = useDisplayCurrency(); // the navbar's currency (the server converts)
   // Column sort: newest first until a header is clicked.
   const [sort, setSort] = useState({ field: 'created_at', dir: 'desc' });
   const sortRef = useRef(sort);
@@ -295,7 +295,6 @@ export default function EnquiriesPage() {
               </button>
             ))}
           </div>
-          <CurrencySelect money={money} />
           {view === 'list' && (
             <select value={stage} onChange={(e) => onStage(e.target.value)}
               className="shrink-0 text-sm border border-gray-300 rounded px-2 py-1.5 text-gray-700 bg-white cursor-pointer">

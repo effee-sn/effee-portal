@@ -29,7 +29,8 @@ function createDashboardService(repository) {
      * @returns {Promise<object>}
      * @throws {NotFoundError}
      */
-    async getOverview(actor) {
+    /** @param {object} actor @param {string} [currency]  show the Sales money in it */
+    async getOverview(actor, currency) {
       const user = await repository.findUserSummary(actor.id);
       if (!user) throw new NotFoundError('User');
 
@@ -37,7 +38,7 @@ function createDashboardService(repository) {
 
       const [myWork, sales, projects, org] = await Promise.all([
         repository.myWork(actor),
-        can('SALES_VIEW') ? repository.salesSnapshot() : null,
+        can('SALES_VIEW') ? repository.salesSnapshot(currency) : null,
         can('PROJECT_VIEW') ? repository.projectsSnapshot() : null,
         can('USER_VIEW') ? repository.countOrganisation() : null,
       ]);

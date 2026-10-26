@@ -73,17 +73,21 @@ export default function useCurrencies() {
 
 /**
  * An amount in its own currency, followed by its rupee value when it isn't INR:
- * "$50,000.00 (≈ ₹42,00,000.00)".
- * @param {{ value: unknown, inr?: unknown, code?: string, symbol?: string, className?: string }} props
+ * "$50,000.00 (≈ ₹42,00,000.00)". With `shown` (the navbar's currency, when
+ * not INR) the "≈" part is in that currency instead: "₹42,00,000.00 (≈ €45,000.00)".
+ * @param {{ value: unknown, inr?: unknown, code?: string, symbol?: string, className?: string,
+ *   shown?: { value: unknown, code: string, symbol?: string } }} props
  */
-export function MoneyText({ value, inr, code = 'INR', symbol, className = '' }) {
+export function MoneyText({ value, inr, code = 'INR', symbol, className = '', shown }) {
   if (value === null || value === undefined || value === '') return <span className={className}>—</span>;
-  const foreign = code !== 'INR';
+  const alt = shown && shown.code !== 'INR'
+    ? (shown.code !== code ? { v: shown.value, code: shown.code, symbol: shown.symbol } : null)
+    : (code !== 'INR' ? { v: inr, code: 'INR' } : null);
   return (
     <span className={className}>
       {formatMoney(value, code, symbol)}
-      {foreign && inr !== null && inr !== undefined && (
-        <span className="text-gray-500 font-normal"> (≈ {formatMoney(inr, 'INR')})</span>
+      {alt && alt.v !== null && alt.v !== undefined && (
+        <span className="text-gray-500 font-normal"> (≈ {formatMoney(alt.v, alt.code, alt.symbol)})</span>
       )}
     </span>
   );

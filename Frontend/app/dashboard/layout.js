@@ -9,6 +9,7 @@ import { UPLOADS_URL } from '@/lib/config';
 import { areaKeyForPath, visibleAreasFor } from '@/lib/navigation';
 import NotificationBell from '@/components/NotificationBell';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
+import { useDisplayCurrency, CurrencySelect } from '@/lib/displayCurrency';
 import WhatsNewModal from '@/components/WhatsNewModal';
 import { compareVersions, releasesFor } from '@/lib/whatsNew';
 import useNav from '@/lib/useNav';
@@ -69,6 +70,7 @@ export default function DashboardLayout({ children }) {
   // What's new: once per user after each release (new accounts start at the
   // version they were created on). Opened again from the user menu.
   const [whatsNew, setWhatsNew] = useState(null); // { releases, history }
+  const displayCurrency = useDisplayCurrency(); // the currency money is shown in, portal-wide
   const markSeen = () => apiPut('/auth/preferences', { seen_version: APP_VERSION }).catch(() => {});
   useEffect(() => {
     if (!me || compareVersions(me.last_seen_version, APP_VERSION) >= 0) return;
@@ -216,8 +218,9 @@ export default function DashboardLayout({ children }) {
           </div>
         )}
 
-        {/* Theme + notifications */}
+        {/* Currency + theme + notifications */}
         <div className="ml-2 shrink-0 flex items-center gap-1">
+          <CurrencySelect money={displayCurrency} navbar />
           <ThemeSwitcher initial={me?.theme} />
           <button type="button" onClick={openWhatsNew}
             className="w-8 h-8 rounded-full flex items-center justify-center text-white/80 hover:bg-white/10 transition cursor-pointer"

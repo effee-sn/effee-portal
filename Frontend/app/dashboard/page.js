@@ -5,11 +5,12 @@ import Link from 'next/link';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet } from '@/lib/api';
+import { useDisplayCurrency } from '@/lib/displayCurrency';
 import {
-  ACTIVE_STAGES, TEMPERATURE_STYLE, formatINR, isAging, stageAgeDays,
+  ACTIVE_STAGES, TEMPERATURE_STYLE, isAging, stageAgeDays,
 } from '@/lib/salesOptions';
 import {
-  Card, CardLink, Empty, Pulse, Stat, StageChip, compactINR,
+  Card, CardLink, Empty, Pulse, Stat, StageChip,
 } from '@/components/DashboardKit';
 
 /**
@@ -77,7 +78,7 @@ function AttentionTile({ label, value, icon, href, tone = 'neutral', hint }) {
  * Open enquiries per stage, in pipeline order. Single series → one hue (brand),
  * values written beside each bar, whole row is the hover/click target.
  */
-function PipelineChart({ pipeline }) {
+function PipelineChart({ pipeline, money }) {
   const rows = ACTIVE_STAGES.map((s) => {
     const hit = pipeline.find((p) => p.stage === s.value);
     return { ...s, count: hit?.count || 0, value: hit?.value || 0 };
@@ -89,7 +90,7 @@ function PipelineChart({ pipeline }) {
       {rows.map((r) => (
         <li key={r.value}>
           <Link href={`/dashboard/sales/enquiries?stage=${r.value}`}
-            title={`${r.label}: ${r.count} open ${r.count === 1 ? 'enquiry' : 'enquiries'} · ${formatINR(r.value)} expected`}
+            title={`${r.label}: ${r.count} open ${r.count === 1 ? 'enquiry' : 'enquiries'} · ${money.format(r.value)} expected`}
             className="grid grid-cols-[7.5rem_minmax(0,1fr)_5.5rem] items-center gap-3 px-2 py-1.5 rounded-md hover:bg-gray-50">
             <span className={`text-xs truncate ${r.count ? 'text-gray-700' : 'text-gray-400'}`}>{r.label}</span>
             <span className="relative h-2.5 rounded-sm bg-gray-100">
@@ -100,7 +101,7 @@ function PipelineChart({ pipeline }) {
             </span>
             <span className="text-xs tabular-nums text-right whitespace-nowrap">
               <span className={r.count ? 'font-semibold text-gray-800' : 'text-gray-400'}>{r.count}</span>
-              {r.value > 0 && <span className="text-gray-500"> · {compactINR(r.value)}</span>}
+              {r.value > 0 && <span className="text-gray-500"> · {money.compact(r.value)}</span>}
             </span>
           </Link>
         </li>
@@ -136,12 +137,14 @@ export default function DashboardPage() {
   const canService  = me?.is_system || can('SERVICE_VIEW');
   const canProjects = me?.is_system || can('PROJECT_VIEW');
 
+  // The Sales money in the navbar's currency (the server converts).
+  const dc = useDisplayCurrency();
   useEffect(() => {
-    apiGet('/dashboard')
+    apiGet(`/dashboard${dc.code !== 'INR' ? `?currency=${dc.code}` : ''}`)
       .then(setData)
       .catch(() => setData({}))
       .finally(() => setLoading(false));
-  }, []);
+  }, [dc.code]);
 
   // Service snapshot comes from the service module's own aggregate (oversight tier).
   useEffect(() => {
@@ -152,6 +155,7 @@ export default function DashboardPage() {
   if (loading || permLoading) return <DashboardSkeleton />;
 
   const { user, myWork: w = {}, sales, projects, orgStats } = data;
+  const salesMoney = dc.formatterFor(sales?.currency); // amounts arrive in this currency
   const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const myEnquiries = w.enquiries || [];
   const followups = w.followups || [];
@@ -272,9 +276,9 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
           <Card title={<>Sales overview <span className="font-normal text-gray-400" title="Other currencies converted at their rates (Master Data → Currencies)">· in ₹</span></>} className="lg:col-span-1" action={<CardLink href="/dashboard/sales">Sales dashboard →</CardLink>}>
             <div className="grid grid-cols-2 gap-px bg-gray-100 rounded-b-lg overflow-hidden">
-              <Stat label="Open pipeline" value={compactINR(sales.open_value)} title={formatINR(sales.open_value)}
+              <Stat label="Open pipeline" value={salesMoney.compact(sales.open_value)} title={salesMoney.format(sales.open_value)}
                 sub={`${sales.open_count} open ${sales.open_count === 1 ? 'enquiry' : 'enquiries'}`} />
-              <Stat label="Won this month" value={compactINR(sales.won_this_month.value)} title={formatINR(sales.won_this_month.value)}
+              <Stat label="Won this month" value={salesMoney.compact(sales.won_this_month.value)} title={salesMoney.format(sales.won_this_month.value)}
                 sub={`${sales.won_this_month.count} ${sales.won_this_month.count === 1 ? 'order' : 'orders'}`} />
               <Stat label="Win rate · 90 days" value={sales.win_rate_90d === null ? '—' : `${sales.win_rate_90d}%`}
                 sub={sales.decided_90d ? `of ${sales.decided_90d} closed` : 'No deals closed yet'} />
@@ -287,7 +291,7 @@ export default function DashboardPage() {
 
           <Card title="Pipeline by stage" className="lg:col-span-2"
             action={<span className="text-xs text-gray-500">Open enquiries · expected value</span>}>
-            {sales.open_count === 0 ? <Empty>No open enquiries yet.</Empty> : <PipelineChart pipeline={sales.pipeline} />}
+            {sales.open_count === 0 ? <Empty>No open enquiries yet.</Empty> : <PipelineChart pipeline={sales.pipeline} money={salesMoney} />}
           </Card>
         </div>
       )}

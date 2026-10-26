@@ -14,7 +14,7 @@ import useSalesConfig from '@/lib/useSalesConfig';
 import { PRESETS, presetRange } from '@/lib/periods';
 import PeriodPicker from '@/components/PeriodPicker';
 import { formatMoney } from '@/lib/money';
-import { DisplayCurrencyContext, useDisplayCurrency, useMoney, CurrencySelect } from '@/lib/displayCurrency';
+import { DisplayCurrencyContext, useDisplayCurrency, useMoney } from '@/lib/displayCurrency';
 
 /**
  * Sales → Dashboard. How the sales team is doing over a period: headline
@@ -271,7 +271,7 @@ function SalesSkeleton() {
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default function SalesDashboardPage() {
   useAuth();
-  const dc = useDisplayCurrency(); // the currency amounts are shown in (the server converts)
+  const dc = useDisplayCurrency(); // the navbar's currency (the server converts)
 
   const [preset, setPreset] = useState('fy');
   const [range, setRange]   = useState(() => presetRange('fy'));
@@ -339,8 +339,6 @@ export default function SalesDashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <CurrencySelect money={dc} />
-
           <PeriodPicker presets={PRESETS} preset={preset} range={range}
             onChange={(next) => { setPreset(next.preset); setRange(next.range); }} />
 

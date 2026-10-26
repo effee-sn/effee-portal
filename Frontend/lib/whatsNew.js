@@ -17,8 +17,8 @@ export const RELEASES = [
     items: [
       {
         icon: 'grid',
-        title: 'Show Sales amounts in any currency',
-        text: 'Pick a currency at the top of Sales → Dashboard or Enquiries to see every amount in it. Open enquiries use today’s rate; won orders and sent offers keep the rate of their day. Hover a value to see it as entered.',
+        title: 'Show money in any currency',
+        text: 'Pick a currency in the top bar, beside the theme switch, to see Sales money in it on every page — the home dashboard, Sales dashboard, enquiry list and each enquiry. Open enquiries use today’s rate; won orders and sent offers keep the rate of their day. Hover a value to see it as entered.',
         perm: 'SALES_VIEW',
       },
       {

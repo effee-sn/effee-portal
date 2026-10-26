@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
-import { ENQUIRY_TYPES, STAGE_STYLE, STAGE_RANK, TYPE_LABEL, TEMPERATURE_STYLE, visibleDocKinds, formatINR } from '@/lib/salesOptions';
+import { ENQUIRY_TYPES, STAGE_STYLE, STAGE_RANK, TYPE_LABEL, TEMPERATURE_STYLE, visibleDocKinds } from '@/lib/salesOptions';
 import EnquiryCustomerContact from '@/components/EnquiryCustomerContact';
 import EnquiryActivities from '@/components/EnquiryActivities';
 import EnquiryReviews from '@/components/EnquiryReviews';
@@ -14,6 +14,7 @@ import EnquiryAttachments from '@/components/EnquiryAttachments';
 import useNav from '@/lib/useNav';
 import useSalesConfig from '@/lib/useSalesConfig';
 import useCurrencies, { MoneyText, formatMoney } from '@/lib/money';
+import { useDisplayCurrency } from '@/lib/displayCurrency';
 import { DetailPageSkeleton } from '@/components/Skeleton';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
@@ -404,6 +405,7 @@ export default function EnquiryDetailPage() {
   const nav = useNav();
   const { me, can, loading: permLoading } = usePermissions();
   const salesConfig = useSalesConfig();
+  const dc = useDisplayCurrency(); // the navbar's currency: the "≈" values (the server converts)
 
   const [enquiry, setEnquiry] = useState(null);
   const [users, setUsers]     = useState([]);
@@ -424,10 +426,10 @@ export default function EnquiryDetailPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { const res = await apiGet(`/sales/enquiries/${id}`); setEnquiry(res.data); loadReadiness(); }
+    try { const res = await apiGet(`/sales/enquiries/${id}${dc.code !== 'INR' ? `?display_currency=${dc.code}` : ''}`); setEnquiry(res.data); loadReadiness(); }
     catch { setNotFound(true); }
     finally { setLoading(false); }
-  }, [id, loadReadiness]);
+  }, [id, loadReadiness, dc.code]);
 
   useEffect(() => {
     if (!permLoading) { load(); apiGet('/lookup/users').then(setUsers).catch(() => {}); }
@@ -464,6 +466,13 @@ export default function EnquiryDetailPage() {
       </div>
     );
   }
+
+  // The "≈" values in the navbar's currency (expected at today's rate, the order at its won-day rate).
+  const shownIn = (value) => (enquiry.display_currency && enquiry.display_currency !== 'INR'
+    ? { value, code: enquiry.display_currency, symbol: dc.list.find((c) => c.code === enquiry.display_currency)?.symbol }
+    : undefined);
+  const shownExpected = shownIn(enquiry.expected_value_display);
+  const shownOrder = shownIn(enquiry.order_value_display);
 
   const isClosed = enquiry.stage === 'WON' || enquiry.stage === 'LOST';
   const handlerId = enquiry.handler_id ?? enquiry.owner_id;
@@ -528,7 +537,7 @@ export default function EnquiryDetailPage() {
                       <span className="text-gray-500 font-normal">Probability:</span> {prob}%
                       {showWeighted && (
                         <span className="text-gray-500 font-normal">
-                          · weighted {formatINR(Number(enquiry.expected_value_inr ?? enquiry.expected_value) * prob / 100)}
+                          · weighted {dc.formatterFor(enquiry.display_currency).format(Number(enquiry.expected_value_display ?? enquiry.expected_value_inr ?? enquiry.expected_value) * prob / 100)}
                         </span>
                       )}
                     </span>
@@ -553,7 +562,7 @@ export default function EnquiryDetailPage() {
                 </span>
               )}
               {enquiry.expected_value != null && (
-                <span>Value: <MoneyText value={enquiry.expected_value} inr={enquiry.expected_value_inr} code={enquiry.currency_code} symbol={enquiry.currency?.symbol} /></span>
+                <span>Value: <MoneyText value={enquiry.expected_value} inr={enquiry.expected_value_inr} code={enquiry.currency_code} symbol={enquiry.currency?.symbol} shown={shownExpected} /></span>
               )}
             </div>
           </div>
@@ -601,7 +610,7 @@ export default function EnquiryDetailPage() {
           <div className="flex flex-wrap gap-x-8 gap-y-2">
             <Field label="Order Value">
               <MoneyText className="font-semibold text-green-800" value={enquiry.order_value} inr={enquiry.order_value_inr}
-                code={enquiry.currency_code} symbol={enquiry.currency?.symbol} />
+                code={enquiry.currency_code} symbol={enquiry.currency?.symbol} shown={shownOrder} />
             </Field>
             <Field label="PO Number">{enquiry.order_no}</Field>
             <Field label="Order Date">{fmtDate(enquiry.order_date)}</Field>
@@ -652,7 +661,7 @@ export default function EnquiryDetailPage() {
                   <Field label="Currency">{enquiry.currency_code}{enquiry.currency?.name ? ` · ${enquiry.currency.name}` : ''}</Field>
                   <Field label="Expected Value">
                     {enquiry.expected_value != null
-                      ? <MoneyText value={enquiry.expected_value} inr={enquiry.expected_value_inr} code={enquiry.currency_code} symbol={enquiry.currency?.symbol} />
+                      ? <MoneyText value={enquiry.expected_value} inr={enquiry.expected_value_inr} code={enquiry.currency_code} symbol={enquiry.currency?.symbol} shown={shownExpected} />
                       : null}
                   </Field>
                   <Field label="Expected Close">{fmtDate(enquiry.expected_close)}</Field>

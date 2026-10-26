@@ -1,6 +1,6 @@
 const prisma = require('../../lib/prisma');
 const { STAGE_AGING_DAYS } = require('../sales/followup.service');
-const { loadRates, toInr } = require('../master/fx');
+const { loadRates, toInr, displayConverter } = require('../master/fx');
 
 /**
  * Dashboard data-access layer.
@@ -109,19 +109,25 @@ function createDashboardRepository(db) {
       };
     },
 
-    /** Organisation-wide sales picture. Money is in INR (see master/fx). */
-    async salesSnapshot() {
+    /**
+     * Organisation-wide sales picture. Money is in INR (see master/fx), or in
+     * `currency` when given: open amounts at its rate today, orders won this
+     * month at its rate on the day they were won.
+     * @param {string} [currency]
+     */
+    async salesSnapshot(currency) {
       const now = Date.now();
       const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
       const ninetyDaysAgo = new Date(now - 90 * DAY_MS);
       const open = { deleted_at: null, stage: { notIn: CLOSED_STAGES } };
 
-      const [rates, byStage, wonMonth, lostMonth, won90, lost90, stalled, hot] = await Promise.all([
+      const [rates, conv, byStage, wonMonth, lostMonth, won90, lost90, stalled, hot] = await Promise.all([
         loadRates(db),
+        displayConverter(currency, db),
         db.enquiry.groupBy({ by: ['stage', 'currency_code'], where: open, _count: { _all: true }, _sum: { expected_value: true } }),
         db.enquiry.findMany({
           where: { deleted_at: null, stage: 'WON', won_at: { gte: monthStart } },
-          select: { order_value: true, currency_code: true, order_fx_rate: true },
+          select: { order_value: true, currency_code: true, order_fx_rate: true, won_at: true },
         }),
         db.enquiry.count({ where: { deleted_at: null, stage: 'LOST', lost_at: { gte: monthStart } } }),
         db.enquiry.count({ where: { deleted_at: null, stage: 'WON', won_at: { gte: ninetyDaysAgo } } }),
@@ -135,18 +141,19 @@ function createDashboardRepository(db) {
       for (const row of byStage) {
         const p = perStage.get(row.stage) || { stage: row.stage, count: 0, value: 0 };
         p.count += row._count._all;
-        p.value += toInr(row._sum.expected_value, row.currency_code, rates);
+        p.value += conv.fromInr(toInr(row._sum.expected_value, row.currency_code, rates));
         perStage.set(row.stage, p);
       }
       const pipeline = [...perStage.values()].map((p) => ({ ...p, value: Math.round(p.value) }));
 
       return {
+        currency: conv.code,
         pipeline,
         open_count: pipeline.reduce((n, r) => n + r.count, 0),
         open_value: pipeline.reduce((n, r) => n + r.value, 0),
         won_this_month: {
           count: wonMonth.length,
-          value: Math.round(wonMonth.reduce((n, e) => n + toInr(e.order_value, e.currency_code, rates, e.order_fx_rate), 0)),
+          value: Math.round(wonMonth.reduce((n, e) => n + conv.fromInr(toInr(e.order_value, e.currency_code, rates, e.order_fx_rate), e.won_at), 0)),
         },
         lost_this_month: lostMonth,
         win_rate_90d: won90 + lost90 > 0 ? Math.round((won90 / (won90 + lost90)) * 100) : null,

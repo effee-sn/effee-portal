@@ -10,7 +10,7 @@ const { dashboardService } = require('./dashboard.service');
  * @type {import('express').RequestHandler}
  */
 const getDashboard = async (req, res) => {
-  const overview = await dashboardService.getOverview(req.user);
+  const overview = await dashboardService.getOverview(req.user, typeof req.query.currency === 'string' ? req.query.currency.toUpperCase() : undefined);
   res.json(overview);
 };
 

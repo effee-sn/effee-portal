@@ -18,7 +18,8 @@ const getEnquiries = async (req, res) => {
 
 /** `GET /sales/enquiries/:id` */
 const getEnquiryById = async (req, res) => {
-  ApiResponse.ok(res, await enquiryService.getById(req.params.id, requestContext(req)));
+  const display = typeof req.query.display_currency === 'string' ? req.query.display_currency.toUpperCase() : undefined;
+  ApiResponse.ok(res, await enquiryService.getById(req.params.id, requestContext(req), display));
 };
 
 /** `GET /sales/enquiries/:id/readiness` — prerequisite gate status for the UI. */
