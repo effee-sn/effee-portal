@@ -12,6 +12,24 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.4.3',
+    date: '2026-10-27',
+    items: [
+      {
+        icon: 'spark',
+        title: 'Who can correct their activities and reviews — set per role',
+        text: 'Editing the activities and reviews you logged is now the “Sales activity → Edit” permission, set in Roles. Nobody can edit someone else’s entries.',
+        perm: 'ROLE_EDIT',
+      },
+      {
+        icon: 'spark',
+        title: 'Activities and reviews stay with their stage',
+        text: 'You can correct an activity or review you logged while the enquiry is still in that stage. Once it moves on, that stage’s entries are kept as they are. Only a review logged in the Review stage can conclude it.',
+        perm: 'SALES_VIEW',
+      },
+    ],
+  },
+  {
     version: '1.4.2',
     date: '2026-10-27',
     items: [

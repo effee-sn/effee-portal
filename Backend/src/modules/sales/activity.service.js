@@ -150,10 +150,13 @@ function createActivityService(repository) {
       });
 
       // An Incoming enquiry moves to Contacted on its first logged (non-review)
-      // activity.
+      // activity — that activity is the contact, so it is recorded under
+      // Contacted (and stays editable there).
       if (!dto.is_review && enquiry.enquiry_type === 'INCOMING' && enquiry.stage === 'NEW') {
-        try { await enquiryService.update(enquiryId, { stage: 'CONTACTED' }, actor); }
+        let moved = false;
+        try { await enquiryService.update(enquiryId, { stage: 'CONTACTED' }, actor); moved = true; }
         catch { /* prerequisites not met yet — leave it at New */ }
+        if (moved) return mapRow(await repository.update(activity.id, { stage: 'CONTACTED' }));
       }
 
       // Flagging a follow-up for negotiation moves the deal into the
@@ -179,7 +182,7 @@ function createActivityService(repository) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Activity');
       const enquiry = await loadEnquiry(before.enquiry_id);
-      assertActivityAccess('edit', actor, before);
+      assertActivityAccess('edit', actor, before, enquiry); // own entry, still in its stage
       assertMayFlagNegotiation(enquiry, dto, actor);
 
       const data = pickWritable(dto, { updated_by: actor?.id ?? null });

@@ -190,7 +190,12 @@ function createEnquiryRepository(db) {
           select: { kind: true, sent_at: true },
         }),
         db.enquiryActivity.count({ where: { enquiry_id: enquiryId, deleted_at: null, is_review: false } }),
-        db.enquiryActivity.count({ where: { enquiry_id: enquiryId, deleted_at: null, is_review: true, follow_up_ended: true } }),
+        // Only a review logged in the Review stage concludes it (one logged at
+        // New / Contacted is history); entries from before stages were stamped
+        // (stage null) still count.
+        db.enquiryActivity.count({
+          where: { enquiry_id: enquiryId, deleted_at: null, is_review: true, follow_up_ended: true, OR: [{ stage: 'REVIEW' }, { stage: null }] },
+        }),
       ]);
       return {
         hasFormat: rows.some((r) => r.kind === 'FORMAT_PDF' || r.kind === 'FORMAT_EXCEL'),

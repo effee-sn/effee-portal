@@ -18,9 +18,9 @@ const { ForbiddenError } = require('../../core');
  *     enquiry's details (only the person who raised it) and deleting their
  *     own documents.
  *   - **Your own data only:** a document is replaced or deleted, and an
- *     activity or review edited or deleted, only by whoever added it. Your
- *     own activities and reviews you can always edit; deleting them needs
- *     Sales → Delete.
+ *     activity or review edited or deleted, only by whoever added it —
+ *     editing your own activities and reviews needs Sales activity → Edit,
+ *     deleting them Sales → Delete.
  *   - **Sales → Reassign** (SALES_REASSIGN): reassign, change the owner,
  *     reopen a closed enquiry.
  *   - System users (Super Admin): anything, any time — they fix mistakes.
@@ -108,13 +108,15 @@ const hasPerm = (actor, code) => Boolean(actor?.is_system || actor?.permissions?
  * Lost, not only to the holder: logging needs Sales → View, plus either
  * Sales → Create or the enquiry being with you (the flow gives the holder —
  * e.g. Internal Sales at Review — access with View alone). An entry is
- * edited only by the person who logged it — no other permission, so they can
- * always correct their own mistakes — and deleted with Sales → Delete, also
- * own entries only (system users: any). The stage-moving side effect (needs
+ * edited with **Sales activity → Edit** (SALES_ACTIVITY_EDIT) and only while
+ * the enquiry is still in the stage it was logged in — once it moves on, that
+ * stage's entries are its record (a review can't be changed later to meet a
+ * gate). It is deleted with Sales → Delete. Both only by the person who
+ * logged it (system users: any). The stage-moving side effect (needs
  * negotiation) stays the holder's.
  * @param {'log'|'edit'|'delete'} action
- * @param {{ created_by?: number|null }|null} item  the entry, for edit / delete
- * @param {{ stage: string, handler_id?: number|null, owner_id?: number|null }|null} enquiry  for log
+ * @param {{ created_by?: number|null, stage?: string|null }|null} item  the entry, for edit / delete
+ * @param {{ stage: string, handler_id?: number|null, owner_id?: number|null }|null} enquiry  for log / edit
  * @throws {ForbiddenError}
  */
 function assertActivityAccess(action, actor, item = null, enquiry = null) {
@@ -129,17 +131,20 @@ function assertActivityAccess(action, actor, item = null, enquiry = null) {
     if (hasPerm(actor, 'SALES_CREATE') || (enquiry && isHandler(enquiry, actor))) return;
     throw new ForbiddenError('You need Sales create access to log activities and reviews on an enquiry that is not with you');
   }
-  if (action === 'edit') {
-    // Your own entry: you can always correct it (seeing the enquiry is enough).
-    if (!hasPerm(actor, 'SALES_VIEW')) throw new ForbiddenError('You need Sales view access to edit activities and reviews');
-    assertOwnItem(item, actor, 'edit this entry');
-    return;
+  const [code, name] = action === 'edit' ? ['SALES_ACTIVITY_EDIT', 'Sales activity edit'] : ['SALES_DELETE', 'Sales delete'];
+  if (!hasPerm(actor, code)) {
+    throw new ForbiddenError(`You need ${name} access to ${action} activities and reviews`);
   }
-  if (!hasPerm(actor, 'SALES_DELETE')) {
-    throw new ForbiddenError('You need Sales delete access to delete activities and reviews');
+  assertOwnItem(item, actor, `${action} this entry`);
+  if (action === 'edit' && enquiry && item?.stage !== enquiry.stage) {
+    throw new ForbiddenError(item?.stage
+      ? `This entry was logged at ${stageName(item.stage)}; the enquiry is now at ${stageName(enquiry.stage)}, so it can no longer be edited`
+      : 'This entry is from before stages were recorded and can no longer be edited');
   }
-  assertOwnItem(item, actor, 'delete this entry');
 }
+
+/** REVIEW → "Review", OFFER_RELEASED → "Offer released". */
+const stageName = (s) => s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' ');
 
 module.exports = {
   assertActivityAccess,

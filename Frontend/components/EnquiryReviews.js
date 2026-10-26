@@ -110,8 +110,9 @@ function ReviewModal({ enquiryId, review, users, onClose, onSaved }) {
 
 // ── Reviews card ──────────────────────────────────────────────────────────────
 // canCreate: log (until Won / Lost: View + Create, or View while holding it). canEdit: your own entries
-// (always — to correct them); canDelete: Sales → Delete. owns(review): only whoever logged it may edit or delete it.
-export default function EnquiryReviews({ enquiryId, canCreate, canEdit = canCreate, canDelete = canEdit, owns = () => true, users = [], onChanged }) {
+// (Sales activity → Edit); canDelete: Sales → Delete. owns(review): only whoever logged it may edit or delete it.
+// editableAt(review): still in the stage it was logged in (an entry is fixed once the enquiry moves on).
+export default function EnquiryReviews({ enquiryId, canCreate, canEdit = canCreate, canDelete = canEdit, owns = () => true, editableAt = () => true, users = [], onChanged }) {
   const [items, setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal]   = useState(null);
@@ -157,9 +158,9 @@ export default function EnquiryReviews({ enquiryId, canCreate, canEdit = canCrea
             ) : null}
           </div>
         </div>
-        {(canEdit || canDelete) && owns(r) && (
+        {((canEdit && editableAt(r)) || canDelete) && owns(r) && (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-            {canEdit && (
+            {canEdit && editableAt(r) && (
               <button onClick={() => setModal({ type: 'edit', review: r })}
                 className="p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-200 cursor-pointer" title="Edit">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

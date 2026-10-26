@@ -383,15 +383,49 @@ describe('Sales rules: activities and reviews are open at every stage until Won 
       { name: 'ForbiddenError' });
   });
 
-  it('whoever logged an entry can always edit it; nobody else can; delete needs Sales Delete — own entries only', async () => {
+  it('edit needs Sales activity Edit, delete needs Sales Delete — own entries only', async () => {
     const id = (await newEnquiry('INCOMING')).id;
     const a = await activityService.create(id, { type: 'CALL', activity_at: new Date(), subject: 'mine' }, actor(fx.field));
-    await activityService.update(a.id, { subject: 'corrected' }, actor(fx.field, ['SALES_VIEW'])); // their own: no other permission needed
-    await assert.rejects(activityService.update(a.id, { subject: 'x' }, actor(fx.field, [])), { name: 'ForbiddenError' }, 'still needs View');
-    await assert.rejects(activityService.update(a.id, { subject: 'x' }, actor(fx.internal, [...FULL, 'SALES_DELETE'])),
-      { name: 'ForbiddenError' }, 'not their entry — even with Edit');
+    await activityService.update(a.id, { subject: 'corrected' }, actor(fx.field, ['SALES_VIEW', 'SALES_ACTIVITY_EDIT']));
+    await assert.rejects(activityService.update(a.id, { subject: 'x' }, actor(fx.field, FULL)),
+      { name: 'ForbiddenError', message: /Sales activity edit/ }, 'Sales Edit is not the permission for this');
+    await assert.rejects(activityService.update(a.id, { subject: 'x' }, actor(fx.internal, [...FULL, 'SALES_ACTIVITY_EDIT', 'SALES_DELETE'])),
+      { name: 'ForbiddenError' }, 'not their entry — even with the permission');
     await assert.rejects(activityService.remove(a.id, actor(fx.field, FULL)), { name: 'ForbiddenError' }, 'delete needs Sales Delete');
     await activityService.remove(a.id, actor(fx.field, ['SALES_VIEW', 'SALES_DELETE']));
+  });
+
+  it('an entry is edited only while the enquiry is still in the stage it was logged in', async () => {
+    const editor = (u) => actor(u, [...FULL, 'SALES_ACTIVITY_EDIT']);
+    const e = await newEnquiry('GENERATED');
+    const atNew = await log(e.id, fx.field, { subject: 'call at New' });
+    assert.equal(atNew.stage, 'NEW');
+    await activityService.update(atNew.id, { subject: 'call at New (fixed)' }, editor(fx.field)); // same stage: fine
+    await upload(e.id, 'FORMAT_PDF', fx.field);
+    await move(e.id, 'REVIEW', fx.field);
+    await assert.rejects(activityService.update(atNew.id, { subject: 'later change' }, editor(fx.field)),
+      { name: 'ForbiddenError', message: /logged at New; the enquiry is now at Review/ });
+    await activityService.update(atNew.id, { subject: 'admin fix' }, admin(fx.field)); // Super Admin: any time
+    await activityService.remove(atNew.id, actor(fx.field, ['SALES_VIEW', 'SALES_DELETE'])); // delete: no stage rule
+  });
+
+  it('the first activity that moves an Incoming enquiry to Contacted is recorded under Contacted', async () => {
+    const e = await newEnquiry('INCOMING');
+    const first = await log(e.id, fx.field, { subject: 'first call' });
+    assert.equal((await state(e.id)).stage, 'CONTACTED');
+    assert.equal(first.stage, 'CONTACTED');
+    await activityService.update(first.id, { subject: 'first call (fixed)' }, actor(fx.field, [...FULL, 'SALES_ACTIVITY_EDIT']));
+  });
+
+  it('a review logged before the Review stage does not open the Review gate', async () => {
+    const e = await newEnquiry('GENERATED');
+    await concludeReview(e.id, fx.field); // at New, marked "no future review"
+    await upload(e.id, 'FORMAT_PDF', fx.field);
+    await move(e.id, 'REVIEW', fx.field);
+    await assert.rejects(move(e.id, 'CONCEPT', fx.internal), { name: 'ConflictError' }, 'the New-stage review does not count');
+    await concludeReview(e.id, fx.internal); // at Review
+    await move(e.id, 'CONCEPT', fx.internal);
+    assert.equal((await state(e.id)).stage, 'CONCEPT');
   });
 });
 
@@ -428,7 +462,7 @@ describe('Sales rules: each person changes only their own data', () => {
     await assert.rejects(activityService.update(call.id, { subject: 'changed' }, actor(fx.internal)), { name: 'ForbiddenError' });
     await assert.rejects(activityService.remove(call.id, actor(fx.internal)), { name: 'ForbiddenError' });
     const review = await log(e.id, fx.internal, { type: 'MEETING', subject: 'review', is_review: true });
-    await activityService.update(review.id, { minutes: 'notes' }, actor(fx.internal)); // its own: fine
+    await activityService.update(review.id, { minutes: 'notes' }, actor(fx.internal, [...FULL, 'SALES_ACTIVITY_EDIT'])); // its own: fine
   });
 });
 
@@ -723,7 +757,7 @@ describe('Sales rules: reminders', () => {
     assert.equal(await notified(fx.field.id, 'FOLLOWUP_DUE', id), 1);
 
     const later = new Date(Date.now() + 2 * 60 * 60 * 1000);
-    await activityService.update(a.id, { follow_up_at: later }, actor(fx.field));
+    await activityService.update(a.id, { follow_up_at: later }, actor(fx.field, [...FULL, 'SALES_ACTIVITY_EDIT']));
     await followup.runDueFollowupReminders(new Date(later.getTime() - 10 * 60 * 1000));
     assert.equal(await notified(fx.field.id, 'FOLLOWUP_DUE', id), 2, 'reminded again for the new time');
   });

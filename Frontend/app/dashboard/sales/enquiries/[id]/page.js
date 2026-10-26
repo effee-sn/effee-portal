@@ -481,11 +481,13 @@ export default function EnquiryDetailPage() {
   const canReopen = me?.is_system || can('SALES_REASSIGN');
   // Activities & reviews: open at every stage until Won / Lost — log with
   // Sales → View + Create, or View while it is with you (the flow gives access);
-  // your own entries you can always edit (to correct them); deleting them needs Delete.
+  // your own entries: edit with Sales activity → Edit while still in their stage, delete with Sales → Delete.
   const canLogActivity = me?.is_system || (!isClosed && can('SALES_VIEW') && (can('SALES_CREATE') || isHolder));
-  const canEditActivity = me?.is_system || can('SALES_VIEW');
+  const canEditActivity = me?.is_system || can('SALES_ACTIVITY_EDIT');
   const canDeleteActivity = me?.is_system || can('SALES_DELETE');
   const owns = (item) => Boolean(me?.is_system || (me?.id != null && item?.created_by === me.id));
+  // An entry is edited only while the enquiry is still in the stage it was logged in.
+  const editableAt = (item) => Boolean(me?.is_system || (item?.stage && item.stage === enquiry.stage));
   const wonBlocked = readiness?.blocked?.WON || [];
 
   return (
@@ -665,9 +667,9 @@ export default function EnquiryDetailPage() {
                 currencyCode={enquiry.currency_code} currencySymbol={enquiry.currency?.symbol} />
             </div>
             <div className="space-y-4 min-w-0">
-              {showReviews && <EnquiryReviews enquiryId={enquiry.id} canCreate={canLogActivity} canEdit={canEditActivity} canDelete={canDeleteActivity} owns={owns} users={users} onChanged={load} />}
+              {showReviews && <EnquiryReviews enquiryId={enquiry.id} canCreate={canLogActivity} canEdit={canEditActivity} canDelete={canDeleteActivity} owns={owns} editableAt={editableAt} users={users} onChanged={load} />}
               <div id="activity">
-                <EnquiryActivities enquiryId={enquiry.id} canCreate={canLogActivity} canEdit={canEditActivity} canDelete={canDeleteActivity} owns={owns} users={users} stage={enquiry.stage} onChanged={load} />
+                <EnquiryActivities enquiryId={enquiry.id} canCreate={canLogActivity} canEdit={canEditActivity} canDelete={canDeleteActivity} owns={owns} editableAt={editableAt} users={users} stage={enquiry.stage} onChanged={load} />
               </div>
             </div>
           </div>

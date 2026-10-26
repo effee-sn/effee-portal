@@ -13,6 +13,20 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.4.3] — 2026-10-27
+
+### Changed — Sales: editing activities and reviews; the Review gate
+
+- New permission **Sales activity → Edit** (`SALES_ACTIVITY_EDIT`): edit the activities and reviews **you logged** — never anyone else's. Set it per role in **Roles**, instead of it being fixed. On upgrade it is given to **every role that has Sales → View**, so nothing changes until you take it away from a role (a database migration adds it).
+- **An entry can be edited only while the enquiry is still in the stage it was logged in.** Once the enquiry moves on, that stage's activities and reviews are its record and stay as they are. (The first activity that moves an Incoming enquiry to Contacted is recorded under Contacted.)
+- Deleting is unchanged: **Sales → Delete**, own entries only. Super Admin can still edit and delete any entry, at any stage.
+
+### Fixed — Sales: the Review gate
+
+- **Review → Concept** (and Costing, for refurbishments) now needs a review marked "no future review" that was **logged in the Review stage**. A review logged earlier, at New or Contacted, no longer opens it.
+
+---
+
 ## [1.4.2] — 2026-10-27
 
 ### Changed — Sales: your own activities and reviews you can always correct
