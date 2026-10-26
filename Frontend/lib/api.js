@@ -1,5 +1,6 @@
 import { API_URL } from './config';
 import { topLoader } from './topLoader';
+import { endSession } from './session';
 
 const BASE_URL = API_URL;
 
@@ -50,6 +51,15 @@ export async function readBody(res) {
   catch { return { message: nonJsonMessage(res.status), nonJson: true }; }
 }
 
+/**
+ * A 401 on a request that carried a token means the session is over (expired,
+ * or the user was disabled): end it. A wrong password at login is also a 401,
+ * but its code says so and there is no session to end.
+ */
+function endSessionOn401(res, headers, data) {
+  if (res.status === 401 && headers?.Authorization && data?.code !== 'INVALID_CREDENTIALS') endSession('expired');
+}
+
 function authHeaders(extra = {}) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
   return {
@@ -75,6 +85,7 @@ async function request(endpoint, options = {}, { silent = false } = {}) {
   try {
     const res = await fetch(`${BASE_URL}${endpoint}`, options);
     const data = await readBody(res);
+    endSessionOn401(res, options.headers, data);
     if (!res.ok || data?.nonJson) {
       const err = new Error(errorMessage(data));
       err.status = res.status;
@@ -126,7 +137,9 @@ export async function downloadFile(endpoint, filename) {
     });
     if (!res.ok) {
       let msg = 'Download failed';
-      msg = errorMessage(await readBody(res));
+      const body = await readBody(res);
+      endSessionOn401(res, token ? { Authorization: true } : null, body);
+      msg = errorMessage(body);
       throw new Error(msg);
     }
     const blob = await res.blob();

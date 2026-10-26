@@ -13,6 +13,17 @@ const toLocalInput = (d) => {
 };
 const fmtDateTime = (iso) => new Date(iso).toLocaleString(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+/** "Logged by Ravi · 27 Oct 2026, 3:15 PM" — and, if corrected later, who edited it and when. */
+function LoggedBy({ item }) {
+  if (!item.created_by_name && !item.edited_at) return null;
+  return (
+    <p className="text-[11px] text-gray-400 mt-1.5">
+      Logged by <span className="text-gray-500">{item.created_by_name || 'unknown'}</span>{item.created_at ? ` · ${fmtDateTime(item.created_at)}` : ''}
+      {item.edited_at && <> · edited by <span className="text-gray-500">{item.edited_by_name || 'unknown'}</span> · {fmtDateTime(item.edited_at)}</>}
+    </p>
+  );
+}
+
 // ── Log / edit review ─────────────────────────────────────────────────────────
 function ReviewModal({ enquiryId, review, users, onClose, onSaved }) {
   const isEdit = Boolean(review);
@@ -157,6 +168,7 @@ export default function EnquiryReviews({ enquiryId, canCreate, canEdit = canCrea
               <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium">Next review: {fmtDateTime(r.follow_up_at)}</span>
             ) : null}
           </div>
+          <LoggedBy item={r} />
         </div>
         {((canEdit && editableAt(r)) || canDelete) && owns(r) && (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">

@@ -417,6 +417,18 @@ describe('Sales rules: activities and reviews are open at every stage until Won 
     await activityService.update(first.id, { subject: 'first call (fixed)' }, actor(fx.field, [...FULL, 'SALES_ACTIVITY_EDIT']));
   });
 
+  it('each entry shows who logged it, and who last edited it and when', async () => {
+    const e = await newEnquiry('GENERATED');
+    const a = await log(e.id, fx.field, { subject: 'site call' });
+    let [row] = (await activityService.listForEnquiry(e.id, false)).filter((x) => x.id === a.id);
+    assert.equal(row.created_by_name, fx.field.name);
+    assert.equal(row.edited_at, null, 'not edited yet');
+    await activityService.update(a.id, { subject: 'site call (fixed)' }, actor(fx.field, [...FULL, 'SALES_ACTIVITY_EDIT']));
+    [row] = (await activityService.listForEnquiry(e.id, false)).filter((x) => x.id === a.id);
+    assert.equal(row.edited_by_name, fx.field.name);
+    assert.ok(row.edited_at, 'when it was edited');
+  });
+
   it('a review logged before the Review stage does not open the Review gate', async () => {
     const e = await newEnquiry('GENERATED');
     await concludeReview(e.id, fx.field); // at New, marked "no future review"

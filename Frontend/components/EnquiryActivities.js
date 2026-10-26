@@ -26,6 +26,17 @@ const toTimeInput = (iso) => {
 };
 const fmtTime = (iso) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 const fmtDateTime = (iso) => new Date(iso).toLocaleString(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+/** "Logged by Ravi · 27 Oct 2026, 3:15 PM" — and, if corrected later, who edited it and when. */
+function LoggedBy({ item }) {
+  if (!item.created_by_name && !item.edited_at) return null;
+  return (
+    <p className="text-[11px] text-gray-400 mt-1.5">
+      Logged by <span className="text-gray-500">{item.created_by_name || 'unknown'}</span>{item.created_at ? ` · ${fmtDateTime(item.created_at)}` : ''}
+      {item.edited_at && <> · edited by <span className="text-gray-500">{item.edited_by_name || 'unknown'}</span> · {fmtDateTime(item.edited_at)}</>}
+    </p>
+  );
+}
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
 const isOverdue = (iso, ended) => iso && !ended && new Date(iso) < new Date(new Date().toDateString());
 
@@ -306,6 +317,7 @@ export default function EnquiryActivities({ enquiryId, canCreate, canEdit = canC
               {a.next_action && <span className="text-gray-500">{a.next_action}</span>}
             </div>
           )}
+          <LoggedBy item={a} />
         </div>
         {((canEdit && editableAt(a)) || canDelete) && owns(a) && (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">

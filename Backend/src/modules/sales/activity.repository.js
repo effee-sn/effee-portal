@@ -52,6 +52,32 @@ function createActivityRepository(db) {
       });
     },
 
+    /**
+     * The last edit of each of these entries, by a person — from the audit
+     * log (the row's own updated_at also moves when reminders are sent).
+     * @param {number[]} ids
+     * @returns {Promise<Map<number, { actor_id: number|null, at: Date }>>}
+     */
+    async lastEdits(ids) {
+      if (!ids.length) return new Map();
+      const rows = await db.auditLog.findMany({
+        where: { entity: 'EnquiryActivity', action: 'UPDATE', entity_id: { in: ids.map(String) } },
+        select: { entity_id: true, actor_id: true, created_at: true },
+        orderBy: { created_at: 'desc' },
+      });
+      const out = new Map();
+      for (const r of rows) if (!out.has(Number(r.entity_id))) out.set(Number(r.entity_id), { actor_id: r.actor_id, at: r.created_at });
+      return out;
+    },
+
+    /** id → name (deleted users included, so old entries keep their author). @param {number[]} ids */
+    async userNames(ids) {
+      const want = [...new Set(ids.filter(Boolean))];
+      if (!want.length) return new Map();
+      const rows = await db.user.findMany({ where: { id: { in: want } }, select: { id: true, name: true } });
+      return new Map(rows.map((u) => [u.id, u.name]));
+    },
+
     findById(id) {
       return db.enquiryActivity.findFirst({ where: active({ id }), select: activitySelect });
     },

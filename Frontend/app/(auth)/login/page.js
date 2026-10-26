@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { apiGet, apiPost } from '@/lib/api';
 import { API_URL } from '@/lib/config';
 import useNav from '@/lib/useNav';
@@ -20,6 +21,8 @@ function MicrosoftLogo() {
 
 function LoginForm() {
   const nav = useNav();
+  // Sent here because the session ran out (lib/session.js).
+  const expired = useSearchParams().get('expired') === '1';
   // What sign-in methods to offer (Administrator → Settings → Security).
   const [sso, setSso] = useState({ microsoft: false, password_login: 'all' });
   const [showPassword, setShowPassword] = useState(false);
@@ -92,6 +95,9 @@ function LoginForm() {
       </>
     )}
     <form onSubmit={handleSubmit} className="space-y-4">
+      {expired && !error && (
+        <div className="px-3 py-2.5 rounded bg-amber-50 border border-amber-200 text-amber-800 text-sm">Your session has expired — please sign in again.</div>
+      )}
       {error && (
         <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm">{error}</div>
       )}

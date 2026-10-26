@@ -12,6 +12,30 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.5.0',
+    date: '2026-10-27',
+    items: [
+      {
+        icon: 'grid',
+        title: 'Kanban view of the enquiries',
+        text: 'Sales → Enquiries now has a List / Kanban switcher. The Kanban shows a column for every stage with its enquiries as cards — open one to work on it.',
+        perm: 'SALES_VIEW',
+      },
+      {
+        icon: 'spark',
+        title: 'See who logged each activity and review',
+        text: 'Every activity and review now shows who logged it and when — and, if it was corrected later, who edited it and when.',
+        perm: 'SALES_VIEW',
+      },
+      {
+        icon: 'spark',
+        title: 'Signed out automatically when your session expires',
+        text: 'When your sign-in expires, the portal now takes you to the login page by itself — no more failing screens until you log out and back in.',
+        perm: null,
+      },
+    ],
+  },
+  {
     version: '1.4.3',
     date: '2026-10-27',
     items: [

@@ -13,6 +13,23 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.5.0] — 2026-10-27
+
+### Added — Sales: Kanban view of the enquiries
+
+- **Sales → Enquiries** has a **List / Kanban** switcher (remembered per browser). The Kanban shows one column per stage, New to Lost, each with its count; cards show the ref no., title, customer, who it is with, value, temperature and the "days in stage" warning, and open the enquiry. Each column loads 20 at a time (**Show more**), with the same search and application filter as the list. Stages are still moved on the enquiry itself, where the gates apply.
+
+### Added — Sales: who logged each activity and review
+
+- Every activity and review now shows **"Logged by NAME · DATE TIME"**, and — when it was corrected later — **"edited by NAME · DATE TIME"** (the last edit, taken from the audit log).
+
+### Fixed — Sessions now end by themselves when they expire
+
+- When a sign-in expires (JWT_EXPIRES_IN, 7 days by default) the portal now **signs out on its own** and opens the login page with **"Your session has expired — please sign in again."** Before, the expired session stayed on screen and every action failed until you logged out and back in by hand.
+- It happens at the expiry time even on an idle page (re-checked when you return to a sleeping or background tab), and whenever the server no longer accepts the session (expired, or the user was disabled). A stale expired token no longer sends the login page round in a loop.
+
+---
+
 ## [1.4.3] — 2026-10-27
 
 ### Changed — Sales: editing activities and reviews; the Review gate

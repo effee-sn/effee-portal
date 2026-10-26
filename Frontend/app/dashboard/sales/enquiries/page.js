@@ -12,6 +12,14 @@ import useSalesConfig from '@/lib/useSalesConfig';
 import useCurrencies, { formatMoney } from '@/lib/money';
 import usePageSize from '@/lib/usePageSize';
 import PageSizeSelect from '@/components/PageSizeSelect';
+import EnquiryKanban from '@/components/sales/EnquiryKanban';
+
+// List or Kanban — remembered per browser.
+const VIEW_KEY = 'sales-enquiries-view';
+const savedView = () => {
+  try { return typeof window !== 'undefined' && window.localStorage.getItem(VIEW_KEY) === 'kanban' ? 'kanban' : 'list'; }
+  catch { return 'list'; }
+};
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
@@ -166,6 +174,13 @@ export default function EnquiriesPage() {
   const [appId, setAppId]     = useState('');
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [view, setView] = useState(savedView);
+  const [applied, setApplied] = useState(''); // the search as last submitted (the board uses it)
+  const [boardVersion, setBoardVersion] = useState(0);
+  const switchView = (v) => {
+    setView(v);
+    try { window.localStorage.setItem(VIEW_KEY, v); } catch { /* private mode: not remembered */ }
+  };
 
   const [limit, setLimit, limitRef] = usePageSize('sales-enquiries', 10);
 
@@ -194,12 +209,12 @@ export default function EnquiriesPage() {
     } else if (!permLoading) setLoading(false);
   }, [permLoading]);
 
-  const onSearch = (e) => { e.preventDefault(); setPage(1); fetchRows(1, search, stage); };
+  const onSearch = (e) => { e.preventDefault(); setPage(1); setApplied(search); fetchRows(1, search, stage); };
   const onStage = (v) => { setStage(v); setPage(1); fetchRows(1, search, v); };
   const onApp = (v) => { setAppId(v); setPage(1); fetchRows(1, search, stage, v); };
   const goPage = (delta) => { const p = page + delta; setPage(p); fetchRows(p, search, stage); };
   const onPageSize = (n) => { setLimit(n); setPage(1); fetchRows(1, search, stage, appId); };
-  const onSaved = () => { setPage(1); setSearch(''); setStage(''); setAppId(''); fetchRows(1, '', '', ''); };
+  const onSaved = () => { setPage(1); setSearch(''); setApplied(''); setStage(''); setAppId(''); fetchRows(1, '', '', ''); setBoardVersion((v) => v + 1); };
 
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to   = Math.min(page * limit, total);
@@ -235,11 +250,21 @@ export default function EnquiriesPage() {
             </button>
           )}
           <span className="text-sm font-medium text-gray-700 shrink-0 px-1">Enquiries</span>
-          <select value={stage} onChange={(e) => onStage(e.target.value)}
-            className="shrink-0 text-sm border border-gray-300 rounded px-2 py-1.5 text-gray-700 bg-white cursor-pointer">
-            <option value="">All stages</option>
-            {ALL_STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
+          <div className="shrink-0 inline-flex rounded border border-gray-300 overflow-hidden" role="group" aria-label="View">
+            {[{ v: 'list', label: 'List' }, { v: 'kanban', label: 'Kanban' }].map((o) => (
+              <button key={o.v} type="button" onClick={() => switchView(o.v)} aria-pressed={view === o.v}
+                className={`px-2.5 py-1.5 text-sm cursor-pointer ${view === o.v ? 'bg-[var(--ams-primary)] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                {o.label}
+              </button>
+            ))}
+          </div>
+          {view === 'list' && (
+            <select value={stage} onChange={(e) => onStage(e.target.value)}
+              className="shrink-0 text-sm border border-gray-300 rounded px-2 py-1.5 text-gray-700 bg-white cursor-pointer">
+              <option value="">All stages</option>
+              {ALL_STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          )}
           {config?.applications?.length > 0 && (
             <select value={appId} onChange={(e) => onApp(e.target.value)} aria-label="Application"
               className="shrink-0 text-sm border border-gray-300 rounded px-2 py-1.5 text-gray-700 bg-white cursor-pointer">
@@ -258,7 +283,7 @@ export default function EnquiriesPage() {
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search ref or title…"
               className="flex-1 min-w-0 py-1.5 pr-2.5 text-sm text-gray-700 outline-none bg-transparent" />
           </form>
-          <div className="flex items-center gap-0.5 shrink-0 text-sm text-gray-500">
+          {view === 'list' && <div className="flex items-center gap-0.5 shrink-0 text-sm text-gray-500">
             <PageSizeSelect value={limit} onChange={onPageSize} />
             <span className="px-1 tabular-nums">{total === 0 ? '0' : `${from}-${to}`} / {total}</span>
             <button onClick={() => goPage(-1)} disabled={page === 1}
@@ -273,11 +298,15 @@ export default function EnquiriesPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
-          </div>
+          </div>}
         </div>
 
+        {view === 'kanban' && (
+          <EnquiryKanban search={applied} appId={appId} version={boardVersion} onOpen={(id) => nav(`/dashboard/sales/enquiries/${id}`)} />
+        )}
+
         {/* Table */}
-        <div className="overflow-x-auto">
+        {view === 'list' && <div className="overflow-x-auto">
           {rows.length === 0 ? (
             <div className="py-20 text-center text-sm text-gray-400">No enquiries {stage || appId || search ? 'match your filters' : 'yet'}.</div>
           ) : (
@@ -335,7 +364,7 @@ export default function EnquiriesPage() {
               </tbody>
             </table>
           )}
-        </div>
+        </div>}
       </div>
 
       {showCreate && <EnquiryModal onClose={() => setShowCreate(false)} onSaved={onSaved} />}

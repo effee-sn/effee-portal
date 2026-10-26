@@ -88,11 +88,25 @@ function createActivityService(repository) {
   }
 
   return {
-    /** @param {number} enquiryId @param {boolean} [isReview] */
+    /**
+     * An enquiry's activities (or reviews), each with who logged it and — when
+     * it was corrected later — who last edited it and when.
+     * @param {number} enquiryId @param {boolean} [isReview]
+     */
     async listForEnquiry(enquiryId, isReview) {
       await loadEnquiry(enquiryId);
       const rows = await repository.findByEnquiry(enquiryId, isReview);
-      return rows.map(mapRow);
+      const edits = await repository.lastEdits(rows.map((r) => r.id));
+      const names = await repository.userNames([...rows.map((r) => r.created_by), ...[...edits.values()].map((e) => e.actor_id)]);
+      return rows.map((r) => {
+        const edit = edits.get(r.id);
+        return {
+          ...mapRow(r),
+          created_by_name: names.get(r.created_by) ?? null,
+          edited_at: edit?.at ?? null,
+          edited_by_name: edit ? names.get(edit.actor_id) ?? null : null,
+        };
+      });
     },
 
     /**
