@@ -93,7 +93,7 @@ const notified = (userId, type, enquiryId) => prisma.notification.count({
   where: { user_id: userId, type, entity_id: String(enquiryId) },
 });
 
-/** Field raises a Generated enquiry and Internal walks it to Offer Released. */
+/** Field raises a Generated enquiry and Internal walks it to Offer. */
 async function toOfferReleased() {
   const e = await newEnquiry('GENERATED');
   await upload(e.id, 'FORMAT_PDF', fx.field);
@@ -186,6 +186,7 @@ after(async () => {
       await salesConfigService.saveProbabilities({ items: fx.previousProbabilities }, actor(fx.field));
     }
     if (fx.customer) await prisma.customer.delete({ where: { id: fx.customer.id } });
+    if (fx.sortCustomers) await prisma.customer.deleteMany({ where: { id: { in: fx.sortCustomers } } });
     await prisma.user.deleteMany({ where: { id: { in: ids.users } } });
   } finally {
     await prisma.$disconnect();
@@ -255,7 +256,7 @@ describe('Sales rules: progression and gates', () => {
     await assert.rejects(move(id, 'CONCEPT', fx.internal), { name: 'ConflictError' });
   });
 
-  it('Costing → Costing Review needs the costing; Costing Review → Offer Released needs the costing review', async () => {
+  it('Costing → Costing Review needs the costing; Costing Review → Offer needs the costing review', async () => {
     await assert.rejects(move(id, 'COSTING_REVIEW', fx.internal), { name: 'ConflictError' });
     await upload(id, 'COSTING', fx.internal);
     await move(id, 'COSTING_REVIEW', fx.internal);
@@ -267,7 +268,7 @@ describe('Sales rules: progression and gates', () => {
     assert.equal(s.handler_id, fx.internal.id);
   });
 
-  it('the manual flow ends at Offer Released — Follow-up is reached only by sending the offer', async () => {
+  it('the manual flow ends at Offer — Follow-up is reached only by sending the offer', async () => {
     await assert.rejects(move(id, 'FOLLOW_UP', fx.internal), { name: 'ConflictError' });
   });
 });
@@ -339,7 +340,7 @@ describe('Sales rules: the flow gives access (no Sales edit needed)', () => {
 
   it('Field with only View: works its follow-up and marks Won; cannot act while Internal holds it', async () => {
     const id = (await toOfferReleased()).id;
-    await assert.rejects(upload(id, 'OFFER', fx.field), { name: 'ForbiddenError' }, 'Internal holds it at Offer Released');
+    await assert.rejects(upload(id, 'OFFER', fx.field), { name: 'ForbiddenError' }, 'Internal holds it at Offer');
     await sendOffer(id, fx.internal); // → Follow-up, with Field
     const me = viewOnly(fx.field);
     await activityService.create(id, { type: 'CALL', activity_at: new Date(), subject: 'follow-up call' }, me);
@@ -438,6 +439,25 @@ describe('Sales rules: activities and reviews are open at every stage until Won 
     await concludeReview(e.id, fx.internal); // at Review
     await move(e.id, 'CONCEPT', fx.internal);
     assert.equal((await state(e.id)).stage, 'CONCEPT');
+  });
+});
+
+describe('Sales: sorting the enquiry list', () => {
+  it('sorts by customer name, field person, value and stage (in flow order)', async () => {
+    const a = await prisma.customer.create({ data: { name: `AAA SORT ${suffix}` }, select: { id: true } });
+    const z = await prisma.customer.create({ data: { name: `ZZZ SORT ${suffix}` }, select: { id: true } });
+    fx.sortCustomers = [a.id, z.id];
+    const e1 = await newEnquiry('INCOMING', fx.field, { customer_id: z.id, expected_value: 100, title: `SORT ${suffix} one` });
+    const e2 = await newEnquiry('INCOMING', fx.field2, { customer_id: a.id, expected_value: 900, title: `SORT ${suffix} two` });
+    const q = (field, dir) => ({ filters: {}, search: `SORT ${suffix}`, orderBy: { [field]: dir }, skip: 0, take: 50 });
+    const ids = async (field, dir) => (await enquiryService.list(q(field, dir), admin(fx.field))).items.map((e) => e.id);
+    assert.deepEqual(await ids('customer', 'asc'), [e2.id, e1.id], 'AAA before ZZZ');
+    assert.deepEqual(await ids('customer', 'desc'), [e1.id, e2.id]);
+    assert.deepEqual(await ids('expected_value', 'desc'), [e2.id, e1.id], '900 before 100');
+    const byOwner = await ids('owner', 'asc'); // Field … before FieldTwo …
+    assert.deepEqual(byOwner, [e1.id, e2.id]);
+    await log(e2.id, fx.field2, { subject: 'first call' }); // an Incoming enquiry's first activity → Contacted
+    assert.deepEqual(await ids('stage', 'asc'), [e1.id, e2.id], 'New before Contacted — flow order, not A–Z');
   });
 });
 
@@ -587,7 +607,7 @@ describe('Sales rules: Incoming enquiries', () => {
 describe('Sales rules: offer → follow-up ⇄ negotiation loop', () => {
   let id;
 
-  it('sending the first offer moves Offer Released → Follow-up and hands to Field', async () => {
+  it('sending the first offer moves Offer → Follow-up and hands to Field', async () => {
     id = (await toOfferReleased()).id;
     const offer = await sendOffer(id, fx.internal);
     assert.equal(offer.stage, 'OFFER_RELEASED', 'v1 is stamped with the stage it was added in');

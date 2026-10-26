@@ -49,6 +49,8 @@ const listEnquiriesQuery = schemas.listQuery.extend({
   owner_id:     z.coerce.number().int().positive().optional(),
   customer_id:  z.coerce.number().int().positive().optional(),
   application_id: z.coerce.number().int().positive().optional(),
+  // Show each value in this currency (default INR).
+  display_currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/, 'A 3-letter currency code').optional(),
 });
 
 const enquiryIdParam = schemas.idParam;

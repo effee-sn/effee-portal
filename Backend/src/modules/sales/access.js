@@ -6,7 +6,7 @@ const { ForbiddenError, NotFoundError } = require('../../core');
  *
  *   - **The flow gives access.** Whoever the enquiry is with right now (its
  *     handler — Field Sales at New/Contacted/Follow-up, Internal Sales from
- *     Review to Offer Released and in Negotiation) does that stage's work on
+ *     Review to Offer and in Negotiation) does that stage's work on
  *     their own data, with no extra permission: log activities and reviews,
  *     upload documents and replace their own, set the price of and send an
  *     offer, move the stage forward (gates still apply). When it moves on,
@@ -172,8 +172,8 @@ function assertActivityAccess(action, actor, item = null, enquiry = null) {
   }
 }
 
-/** REVIEW → "Review", OFFER_RELEASED → "Offer released". */
-const stageName = (s) => s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' ');
+/** REVIEW → "Review", COSTING_REVIEW → "Costing review"; OFFER_RELEASED is shown as "Offer". */
+const stageName = (s) => (s === 'OFFER_RELEASED' ? 'Offer' : s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' '));
 
 module.exports = {
   assertActivityAccess, enquiryScope, canSeeEnquiry, assertCanSeeEnquiry,

@@ -4,7 +4,7 @@ const { auditService } = require('../audit/audit.service');
 const { notificationService } = require('../notification/notification.service');
 const { missingForStage, GATED_STAGES, manualFlow } = require('./stageGate');
 const { currencyService } = require('../master/currency.service');
-const { loadRates, toInr, paise } = require('../master/fx');
+const { loadRates, toInr, paise, displayConverter } = require('../master/fx');
 const { NEXT_STEP, enquiryRows, money, sentence, stageName } = require('./emailDetails');
 const { NotFoundError, ConflictError, ValidationError, ForbiddenError, buildSearchClause } = require('../../core');
 const {
@@ -49,7 +49,8 @@ function phaseRole(stage) {
  * @param {ReturnType<typeof import('./enquiry.repository').createEnquiryRepository>} repository
  */
 function createEnquiryService(repository) {
-  const SORTABLE_FIELDS   = Object.freeze(['created_at', 'expected_close', 'title', 'stage', 'ref_no']);
+  // customer / owner sort by their name (see list); stage sorts in flow order (the column is an enum).
+  const SORTABLE_FIELDS   = Object.freeze(['created_at', 'expected_close', 'title', 'stage', 'ref_no', 'customer', 'owner', 'expected_value']);
   const SEARCHABLE_FIELDS = Object.freeze(['ref_no', 'title']);
 
   // Config for parseListQuery — turns query params into a Prisma `where`.
@@ -101,7 +102,7 @@ function createEnquiryService(repository) {
 
   /**
    * Prerequisite gate — a stage that requires documents can't be entered until
-   * they exist (e.g. Offer Released needs concept + costing; Won needs a sent
+   * they exist (e.g. Offer needs concept + costing; Won needs a sent
    * offer).
    * @throws {ConflictError}
    */
@@ -272,9 +273,22 @@ function createEnquiryService(repository) {
       const scope = enquiryScope(actor);
       const base = { ...query.filters, ...(search || {}) };
       const where = scope ? { AND: [base, scope] } : base;
-      const page = await repository.findPage({ where, orderBy: query.orderBy, skip: query.skip, take: query.take });
-      const rates = await loadRates();
-      return { ...page, items: page.items.map((e) => withInr(e, rates)) };
+      // Customer / field person sort by name; a stable tie-break keeps paging steady.
+      const [[field, dir] = ['created_at', 'desc']] = Object.entries(query.orderBy || {});
+      const orderBy = [field === 'customer' ? { customer: { name: dir } } : field === 'owner' ? { owner: { name: dir } } : { [field]: dir }, { id: 'desc' }];
+      const page = await repository.findPage({ where, orderBy, skip: query.skip, take: query.take });
+      const [rates, conv] = await Promise.all([loadRates(), displayConverter(query.display_currency)]);
+      // display_value: the value shown (order once won, else expected) in the chosen
+      // currency — a won order at the rate on the day it was won, else today's.
+      return {
+        ...page,
+        items: page.items.map((e) => {
+          const r = withInr(e, rates);
+          const won = e.stage === 'WON';
+          const inr = won ? r.order_value_inr : r.expected_value_inr;
+          return { ...r, display_currency: conv.code, display_value: inr === null ? null : paise(conv.fromInr(inr, won ? e.won_at : null)) };
+        }),
+      };
     },
 
     /** @param {number} id @param {object} [actor] @throws {NotFoundError} */
@@ -385,7 +399,7 @@ function createEnquiryService(repository) {
       if (dto.stage && dto.stage !== before.stage) {
         // One step forward at a time, along the enquiry's own flow (Generated
         // skips Contacted; refurbishment skips Concept). No stepping back, no
-        // skipping ahead. The manual flow ends at Offer Released; from there
+        // skipping ahead. The manual flow ends at Offer; from there
         // the deal moves on its own — sending the offer flips it to Follow-up,
         // flagging a follow-up for negotiation flips it to Negotiation.
         const flow = manualFlow(before.enquiry_type, refurbishment);
@@ -458,7 +472,7 @@ function createEnquiryService(repository) {
 
     /**
      * System-driven stage move, bypassing the one-step-forward flow and the
-     * document gates. Used for the Offer Released → Follow-up ⇄ Negotiation
+     * document gates. Used for the Offer → Follow-up ⇄ Negotiation
      * loop, where sending an offer or flagging a follow-up for negotiation moves
      * the stage as a side effect rather than a manual "move to next" click.
      * No-op (returns the current row) if already at the target stage.

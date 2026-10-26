@@ -175,7 +175,7 @@ function createActivityService(repository) {
 
       // Flagging a follow-up for negotiation moves the deal into the
       // Negotiation stage (where a revised offer is added and re-sent). Allowed
-      // from either follow-up: the Offer Released follow-up, or a later
+      // from either follow-up: the Offer follow-up, or a later
       // Negotiation Follow-up round.
       if (!dto.is_review && dto.needs_negotiation
         && (enquiry.stage === 'FOLLOW_UP' || enquiry.stage === 'NEGOTIATION_FOLLOW_UP')) {

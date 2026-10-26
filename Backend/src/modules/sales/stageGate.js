@@ -69,7 +69,7 @@ function missingForStage(targetStage, flags, { refurbishment = false } = {}) {
 }
 
 /**
- * The manual stage order for an enquiry (the flow ends at Offer Released; the
+ * The manual stage order for an enquiry (the flow ends at Offer; the
  * rest moves on its own). Generated skips Contacted; refurbishment skips
  * Concept.
  * @param {'GENERATED'|'INCOMING'} enquiryType @param {boolean} [refurbishment]

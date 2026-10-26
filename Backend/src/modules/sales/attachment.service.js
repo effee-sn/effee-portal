@@ -164,7 +164,7 @@ function createAttachmentService(repository) {
       });
 
       // Sending an offer moves the deal forward into a follow-up: the first
-      // offer (Offer Released) → Follow-up; a revised offer (Negotiation) →
+      // offer (Offer) → Follow-up; a revised offer (Negotiation) →
       // Negotiation Follow-up, its own forward stage. The move is a side effect
       // of sending, not a manual step.
       if (sent && enquiry.stage === 'OFFER_RELEASED') {

@@ -13,6 +13,23 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.6.0] — 2026-10-27
+
+### Added — Sales: show amounts in any currency
+
+- A **currency dropdown** (the active currencies) at the top of **Sales → Dashboard** and **Sales → Enquiries** shows every amount in the chosen currency — the dashboard's totals and charts, and each enquiry's value in the list and the Kanban (hover a value to see it as entered, e.g. "Entered as $50,000.00"). The choice is shared by both pages and remembered per browser; INR by default.
+- **Which rate:** an **open** enquiry converts at the chosen currency's rate **today**; a **won order** at its rate **on the day it was won**, and a **sent offer** at its rate **on the day it was sent** — from the currency's rate history (Master Data → Currencies). So past figures keep their actual value: with €1 = ₹100 last month and ₹110 now, ₹1,000 won last month shows as **€10.00**, while an open ₹1,000 shows as **€9.09**. Dashboard totals add each deal at its own day's rate. Display only — nothing stored changes.
+
+### Added — Sales: sortable, sticky enquiry list
+
+- **Sales → Enquiries** (List view): the **column headers stay on top** while the rows scroll, and a click on **Ref, Title, Customer, Stage, Owner or Value** sorts the list by it (click again to reverse; ▲ / ▼ shows which). Stage sorts in flow order (New → … → Won, Lost); Value by the amount as entered. Sorting works with the search, filters and paging.
+
+### Changed — Sales: "Offer Released" is now "Offer"
+
+- The stage where the offer is priced and its document added is now called **Offer** — the offer is only released when it is marked sent, which moves the enquiry on to Follow-up. Renamed everywhere it shows: stage badges, the Kanban, filters, emails and notifications, the Sales dashboard and the MIS reports. Only the name changed: enquiries, gates and history are as before (no database change).
+
+---
+
 ## [1.5.1] — 2026-10-27
 
 ### Added — Sales: see only your own enquiries

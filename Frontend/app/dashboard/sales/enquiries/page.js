@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
-import { ALL_STAGES, STAGE_STYLE, TYPE_LABEL, TEMPERATURE_STYLE, formatINR, isAging, stageAgeDays } from '@/lib/salesOptions';
+import { ALL_STAGES, STAGE_STYLE, TYPE_LABEL, TEMPERATURE_STYLE, isAging, stageAgeDays } from '@/lib/salesOptions';
 import EnquiryCustomerContact from '@/components/EnquiryCustomerContact';
 import useNav from '@/lib/useNav';
 import useSalesConfig from '@/lib/useSalesConfig';
@@ -13,6 +13,7 @@ import useCurrencies, { formatMoney } from '@/lib/money';
 import usePageSize from '@/lib/usePageSize';
 import PageSizeSelect from '@/components/PageSizeSelect';
 import EnquiryKanban from '@/components/sales/EnquiryKanban';
+import { useDisplayCurrency, CurrencySelect } from '@/lib/displayCurrency';
 
 // List or Kanban — remembered per browser.
 const VIEW_KEY = 'sales-enquiries-view';
@@ -161,6 +162,22 @@ function EnquiryModal({ onClose, onSaved }) {
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
+/** A column header that sorts the list (and stays on top while the rows scroll). */
+function SortTh({ field, label, sort, onSort, align = 'left', title }) {
+  const active = field && sort.field === field;
+  const th = `px-3 py-3 font-normal sticky top-0 z-10 bg-white ${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : ''}`;
+  if (!field) return <th className={th} title={title}>{label}</th>;
+  return (
+    <th className={th} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'} title={title}>
+      <button type="button" onClick={() => onSort(field)}
+        className={`inline-flex items-center gap-1 cursor-pointer hover:text-gray-800 ${active ? 'text-gray-800 font-medium' : ''}`}>
+        {label}
+        <span aria-hidden="true" className={`text-[10px] ${active ? '' : 'opacity-0 group-hover:opacity-40'}`}>{active && sort.dir === 'asc' ? '▲' : '▼'}</span>
+      </button>
+    </th>
+  );
+}
+
 export default function EnquiriesPage() {
   useAuth();
   const nav = useNav();
@@ -187,13 +204,19 @@ export default function EnquiriesPage() {
   const canView   = me?.is_system || can('SALES_VIEW') || can('SALES_VIEW_OWN'); // all, or only their own (the API decides which)
   const canCreate = me?.is_system || can('SALES_CREATE');
   const config    = useSalesConfig();
+  const money     = useDisplayCurrency(); // the currency values are shown in (shared with the Sales dashboard)
+  // Column sort: newest first until a header is clicked.
+  const [sort, setSort] = useState({ field: 'created_at', dir: 'desc' });
+  const sortRef = useRef(sort);
 
-  const fetchRows = async (p = page, s = search, st = stage, app = appId) => {
+  const fetchRows = async (p = page, s = search, st = stage, app = appId, cur = money.code) => {
     setLoading(true);
     try {
       const q = new URLSearchParams({ page: String(p), limit: String(limitRef.current), search: s });
       if (st) q.set('stage', st);
       if (app) q.set('application_id', app);
+      if (cur && cur !== 'INR') q.set('display_currency', cur); // values converted by the server
+      q.set('sort', sortRef.current.field); q.set('order', sortRef.current.dir);
       const res = await apiGet(`/sales/enquiries?${q.toString()}`);
       setRows(res.data); setTotal(res.meta.pagination.total);
     } catch { setRows([]); }
@@ -208,6 +231,20 @@ export default function EnquiriesPage() {
       fetchRows(1, search, fromUrl);
     } else if (!permLoading) setLoading(false);
   }, [permLoading]);
+
+  // The chosen currency settles once the currency list arrives, or changes: show the values in it.
+  useEffect(() => {
+    if (!permLoading && canView && money.list.length) fetchRows(page, search, stage, appId, money.code);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [money.code, money.list.length]);
+
+  // Click a header to sort by it (text A→Z, value high→low first); click again to flip.
+  const onSort = (field) => {
+    const cur = sortRef.current;
+    const next = cur.field === field ? { field, dir: cur.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: field === 'expected_value' ? 'desc' : 'asc' };
+    sortRef.current = next; setSort(next); setPage(1);
+    fetchRows(1, search, stage, appId);
+  };
 
   const onSearch = (e) => { e.preventDefault(); setPage(1); setApplied(search); fetchRows(1, search, stage); };
   const onStage = (v) => { setStage(v); setPage(1); fetchRows(1, search, v); };
@@ -258,6 +295,7 @@ export default function EnquiriesPage() {
               </button>
             ))}
           </div>
+          <CurrencySelect money={money} />
           {view === 'list' && (
             <select value={stage} onChange={(e) => onStage(e.target.value)}
               className="shrink-0 text-sm border border-gray-300 rounded px-2 py-1.5 text-gray-700 bg-white cursor-pointer">
@@ -302,25 +340,26 @@ export default function EnquiriesPage() {
         </div>
 
         {view === 'kanban' && (
-          <EnquiryKanban search={applied} appId={appId} version={boardVersion} onOpen={(id) => nav(`/dashboard/sales/enquiries/${id}`)} />
+          <EnquiryKanban search={applied} appId={appId} version={boardVersion} money={money} displayCurrency={money.code} onOpen={(id) => nav(`/dashboard/sales/enquiries/${id}`)} />
         )}
 
         {/* Table */}
-        {view === 'list' && <div className="overflow-x-auto">
+        {/* The rows scroll inside the card, so the column headers stay on top. */}
+        {view === 'list' && <div className="overflow-auto max-h-[calc(100vh-190px)]">
           {rows.length === 0 ? (
             <div className="py-20 text-center text-sm text-gray-400">No enquiries {stage || appId || search ? 'match your filters' : 'yet'}.</div>
           ) : (
             <table className="w-full text-sm" style={{ minWidth: 880 }}>
               <thead>
-                <tr className="border-b border-gray-200 text-left text-gray-500 sticky top-0 bg-white z-10">
-                  <th className="px-3 py-3 font-normal">Ref</th>
-                  <th className="px-3 py-3 font-normal">Title</th>
-                  <th className="px-3 py-3 font-normal">Customer</th>
-                  <th className="px-3 py-3 font-normal">Stage</th>
-                  <th className="px-3 py-3 font-normal text-right" title="Win probability at this stage">Prob.</th>
-                  <th className="px-3 py-3 font-normal">Owner</th>
-                  <th className="px-3 py-3 font-normal text-right">Value</th>
-                  <th className="px-3 py-3 font-normal text-center">Acts</th>
+                <tr className="border-b border-gray-200 text-left text-gray-500 group">
+                  <SortTh field="ref_no" label="Ref" sort={sort} onSort={onSort} />
+                  <SortTh field="title" label="Title" sort={sort} onSort={onSort} />
+                  <SortTh field="customer" label="Customer" sort={sort} onSort={onSort} />
+                  <SortTh field="stage" label="Stage" sort={sort} onSort={onSort} title="In flow order, New to Lost" />
+                  <SortTh label="Prob." sort={sort} onSort={onSort} align="right" title="Win probability at this stage" />
+                  <SortTh field="owner" label="Owner" sort={sort} onSort={onSort} />
+                  <SortTh field="expected_value" label="Value" sort={sort} onSort={onSort} align="right" title="Sorted by the amount as entered" />
+                  <SortTh label="Acts" sort={sort} onSort={onSort} align="center" />
                 </tr>
               </thead>
               <tbody>
@@ -355,8 +394,8 @@ export default function EnquiriesPage() {
                     </td>
                     <td className="px-3 py-3 text-gray-600">{e.owner?.name || '—'}</td>
                     <td className="px-3 py-3 text-gray-700 tabular-nums text-right whitespace-nowrap"
-                      title={e.currency_code !== 'INR' ? `≈ ${formatINR(e.stage === 'WON' ? e.order_value_inr : e.expected_value_inr)}` : undefined}>
-                      {formatMoney(e.stage === 'WON' ? e.order_value : e.expected_value, e.currency_code, e.currency?.symbol)}
+                      title={(e.stage === 'WON' ? e.order_value : e.expected_value) != null ? `Entered as ${formatMoney(e.stage === 'WON' ? e.order_value : e.expected_value, e.currency_code, e.currency?.symbol)}` : undefined}>
+                      {money.formatterFor(e.display_currency).format(e.display_value)}
                     </td>
                     <td className="px-3 py-3 text-gray-500 tabular-nums text-center">{e._count?.activities ?? 0}</td>
                   </tr>

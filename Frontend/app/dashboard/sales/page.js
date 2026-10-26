@@ -5,15 +5,16 @@ import Link from 'next/link';
 import useAuth from '@/lib/useAuth';
 import { apiGet } from '@/lib/api';
 import {
-  ENQUIRY_TYPES, MEDIUM_LABEL, STAGE_AGING_DAYS, STAGE_STYLE, formatINR, stageAgeDays,
+  ENQUIRY_TYPES, MEDIUM_LABEL, STAGE_AGING_DAYS, STAGE_STYLE, stageAgeDays,
 } from '@/lib/salesOptions';
 import {
-  Card, Empty, Pulse, Stat, StageChip, compactINR,
+  Card, Empty, Pulse, Stat, StageChip,
 } from '@/components/DashboardKit';
 import useSalesConfig from '@/lib/useSalesConfig';
 import { PRESETS, presetRange } from '@/lib/periods';
 import PeriodPicker from '@/components/PeriodPicker';
 import { formatMoney } from '@/lib/money';
+import { DisplayCurrencyContext, useDisplayCurrency, useMoney, CurrencySelect } from '@/lib/displayCurrency';
 
 /**
  * Sales → Dashboard. How the sales team is doing over a period: headline
@@ -138,6 +139,7 @@ function Legend() {
 /** Won vs Lost per month — grouped columns, counts written above each bar. */
 /** Offered vs Won value per month (₹) — grouped columns, value on hover. */
 function OfferedWonChart({ months }) {
+  const money = useMoney();
   const max = Math.max(1, ...months.flatMap((m) => [m.offered_value, m.won_value]));
   if (!months.some((m) => m.offered_value || m.won_value)) {
     return <Empty>No priced offers sent or orders won in the last 12 months.</Empty>;
@@ -145,14 +147,14 @@ function OfferedWonChart({ months }) {
   return (
     <div className="px-4 pt-3 pb-4">
       <div className="overflow-x-auto">
-        <ul className="grid grid-cols-12 gap-1 min-w-[520px]" aria-label="Value offered and won per month, in rupees">
+        <ul className="grid grid-cols-12 gap-1 min-w-[520px]" aria-label={`Value offered and won per month, in ${money.code}`}>
           {months.map((m) => {
             const [y, mo] = m.key.split('-').map(Number);
             const name = new Date(y, mo - 1, 1).toLocaleDateString('en-IN', { month: 'short' });
             const full = new Date(y, mo - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
             return (
               <li key={m.key} className="rounded-md hover:bg-gray-50 px-0.5 pt-1"
-                title={`${full} — Offered ${formatINR(m.offered_value)}${m.offers ? ` (${m.offers} ${m.offers === 1 ? 'enquiry' : 'enquiries'})` : ''} · Won ${formatINR(m.won_value)}`}>
+                title={`${full} — Offered ${money.format(m.offered_value)}${m.offers ? ` (${m.offers} ${m.offers === 1 ? 'enquiry' : 'enquiries'})` : ''} · Won ${money.format(m.won_value)}`}>
                 <div className="h-36 flex items-end justify-center gap-[2px] border-b border-gray-200">
                   {[{ v: m.offered_value, c: OFFERED_COLOR }, { v: m.won_value, c: WON_COLOR }].map((b, i) => (
                     <div key={i} className="flex flex-col items-center justify-end h-full w-1/3 max-w-4">
@@ -172,6 +174,7 @@ function OfferedWonChart({ months }) {
 }
 
 function MonthlyChart({ months }) {
+  const money = useMoney();
   const max = Math.max(1, ...months.flatMap((m) => [m.won, m.lost]));
   const any = months.some((m) => m.won || m.lost);
   if (!any) return <Empty>No enquiries were won or lost in the last 12 months.</Empty>;
@@ -186,7 +189,7 @@ function MonthlyChart({ months }) {
             const full = new Date(y, mo - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
             return (
               <li key={m.key} className="rounded-md hover:bg-gray-50 px-0.5 pt-1"
-                title={`${full} — Won ${m.won}${m.won_value ? ` (${formatINR(m.won_value)})` : ''} · Lost ${m.lost}`}>
+                title={`${full} — Won ${m.won}${m.won_value ? ` (${money.format(m.won_value)})` : ''} · Lost ${m.lost}`}>
                 <div className="h-36 flex items-end justify-center gap-[2px] border-b border-gray-200">
                   {[{ v: m.won, c: WON_COLOR }, { v: m.lost, c: LOST_COLOR }].map((b, i) => (
                     <div key={i} className="flex flex-col items-center justify-end h-full w-1/3 max-w-4">
@@ -268,6 +271,7 @@ function SalesSkeleton() {
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default function SalesDashboardPage() {
   useAuth();
+  const dc = useDisplayCurrency(); // the currency amounts are shown in (the server converts)
 
   const [preset, setPreset] = useState('fy');
   const [range, setRange]   = useState(() => presetRange('fy'));
@@ -279,6 +283,8 @@ export default function SalesDashboardPage() {
   const [data, setData]         = useState(null);
   const [loadedUrl, setLoadedUrl] = useState(null);
   const [error, setError]       = useState('');
+  // The data's amounts are in the currency it says it is in.
+  const money = dc.formatterFor(data?.currency || 'INR');
 
   const url = useMemo(() => {
     const p = new URLSearchParams();
@@ -287,8 +293,9 @@ export default function SalesDashboardPage() {
     if (ownerId) p.set('owner_id', ownerId);
     if (type) p.set('enquiry_type', type);
     if (appId) p.set('application_id', appId);
+    if (dc.code !== 'INR') p.set('currency', dc.code);
     return `/sales/analytics?${p}`;
-  }, [range, ownerId, type, appId]);
+  }, [range, ownerId, type, appId, dc.code]);
 
   useEffect(() => {
     let cancelled = false;
@@ -313,6 +320,7 @@ export default function SalesDashboardPage() {
   const filtered = Boolean(ownerId || type || appId);
 
   return (
+    <DisplayCurrencyContext.Provider value={money}>
     <div className="space-y-5 p-4 pb-10">
 
       {/* Header + filters */}
@@ -331,6 +339,8 @@ export default function SalesDashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <CurrencySelect money={dc} />
+
           <PeriodPicker presets={PRESETS} preset={preset} range={range}
             onChange={(next) => { setPreset(next.preset); setRange(next.range); }} />
 
@@ -369,16 +379,16 @@ export default function SalesDashboardPage() {
           {/* 1. Headline numbers */}
           <section aria-label="Headline numbers" className="rounded-lg border border-gray-200 overflow-hidden">
             <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-px bg-gray-100">
-              <Stat label="Open pipeline" value={compactINR(h.open_value)} title={formatINR(h.open_value)}
+              <Stat label="Open pipeline" value={money.compact(h.open_value)} title={money.format(h.open_value)}
                 sub={`${h.open_count} open · right now`} />
-              <Stat label="Weighted pipeline" value={compactINR(h.weighted_value)} title={formatINR(h.weighted_value)}
+              <Stat label="Weighted pipeline" value={money.compact(h.weighted_value)} title={money.format(h.weighted_value)}
                 sub="Value × stage probability" />
-              <Stat label="Won" value={h.won} sub={h.won ? compactINR(h.won_value) : 'No orders yet'} title={formatINR(h.won_value)} />
+              <Stat label="Won" value={h.won} sub={h.won ? money.compact(h.won_value) : 'No orders yet'} title={money.format(h.won_value)} />
               <Stat label="Lost" value={h.lost} sub="In the period" />
               <Stat label="Win rate" value={h.win_rate === null ? '—' : `${h.win_rate}%`}
                 sub={h.won + h.lost ? `${h.won} of ${h.won + h.lost} decided` : 'Nothing decided yet'} />
-              <Stat label="Avg deal size" value={h.avg_deal === null ? '—' : compactINR(h.avg_deal)}
-                title={h.avg_deal === null ? undefined : formatINR(h.avg_deal)} />
+              <Stat label="Avg deal size" value={h.avg_deal === null ? '—' : money.compact(h.avg_deal)}
+                title={h.avg_deal === null ? undefined : money.format(h.avg_deal)} />
               <Stat label="Avg days to close" value={h.avg_days_to_close === null ? '—' : h.avg_days_to_close}
                 sub="Raised → won" />
               <Stat label="Stalled now" value={data.watch.stalled.total} tone={data.watch.stalled.total > 0 ? 'warning' : undefined}
@@ -417,9 +427,9 @@ export default function SalesDashboardPage() {
               </div>
             )}>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-gray-100 border-b border-gray-100">
-              <Stat label="Offered in period" value={compactINR(h.offered_value)} title={formatINR(h.offered_value)}
+              <Stat label="Offered in period" value={money.compact(h.offered_value)} title={money.format(h.offered_value)}
                 sub={h.offered_count ? `${h.offered_count} ${h.offered_count === 1 ? 'enquiry' : 'enquiries'} · latest offer each` : 'No priced offers sent'} />
-              <Stat label="Won in period" value={compactINR(h.won_value)} title={formatINR(h.won_value)}
+              <Stat label="Won in period" value={money.compact(h.won_value)} title={money.format(h.won_value)}
                 sub={h.offered_value ? `${Math.round((h.won_value / h.offered_value) * 100)}% of offered value` : undefined} />
               <Stat label="Avg discount" value={h.avg_discount_pct === null ? '—' : `${h.avg_discount_pct}%`}
                 sub={h.discount_samples ? `Final offer → order · ${h.discount_samples} won` : 'Final offer → order'} />
@@ -462,9 +472,9 @@ export default function SalesDashboardPage() {
                         </td>
                         <td className="px-3 py-2">{t.raised}</td>
                         <td className="px-3 py-2">{t.open}</td>
-                        <td className="px-3 py-2" title={formatINR(t.open_value)}>{t.open_value ? compactINR(t.open_value) : '—'}</td>
+                        <td className="px-3 py-2" title={money.format(t.open_value)}>{t.open_value ? money.compact(t.open_value) : '—'}</td>
                         <td className="px-3 py-2">{t.won}</td>
-                        <td className="px-3 py-2" title={formatINR(t.won_value)}>{t.won_value ? compactINR(t.won_value) : '—'}</td>
+                        <td className="px-3 py-2" title={money.format(t.won_value)}>{t.won_value ? money.compact(t.won_value) : '—'}</td>
                         <td className="px-3 py-2">{t.lost}</td>
                         <td className="px-4 py-2 font-medium text-gray-900">{t.win_rate === null ? '—' : `${t.win_rate}%`}</td>
                       </tr>
@@ -495,9 +505,8 @@ export default function SalesDashboardPage() {
                     sub={`${e.customer?.name || '—'} · ${e.owner?.name || '—'}`}
                     right={<><StageChip stage={e.stage} />
                       <p className="text-xs text-gray-700 tabular-nums mt-1"
-                        title={e.expected_value_inr != null ? `≈ ${formatINR(e.expected_value_inr)}` : undefined}>
-                        {e.expected_value == null ? '—'
-                          : e.currency_code && e.currency_code !== 'INR' ? formatMoney(e.expected_value, e.currency_code) : compactINR(e.expected_value)}
+                        title={e.expected_value != null ? `Entered as ${formatMoney(e.expected_value, e.currency_code || 'INR')}` : undefined}>
+                        {e.expected_value == null ? '—' : money.compact(e.expected_value_display ?? e.expected_value_inr)}
                       </p></>} />
                 )} />
               <WatchList title="Overdue follow-ups" data={data.watch.overdue} empty="No follow-ups are overdue."
@@ -515,5 +524,6 @@ export default function SalesDashboardPage() {
         </div>
       )}
     </div>
+    </DisplayCurrencyContext.Provider>
   );
 }

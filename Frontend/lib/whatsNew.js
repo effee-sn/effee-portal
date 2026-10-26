@@ -12,6 +12,30 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.6.0',
+    date: '2026-10-27',
+    items: [
+      {
+        icon: 'grid',
+        title: 'Show Sales amounts in any currency',
+        text: 'Pick a currency at the top of Sales → Dashboard or Enquiries to see every amount in it. Open enquiries use today’s rate; won orders and sent offers keep the rate of their day. Hover a value to see it as entered.',
+        perm: 'SALES_VIEW',
+      },
+      {
+        icon: 'spark',
+        title: 'Sort the enquiry list',
+        text: 'Click a column header — Ref, Title, Customer, Stage, Owner or Value — to sort the enquiry list; click again to reverse. The headers now stay on top while you scroll.',
+        perm: 'SALES_VIEW',
+      },
+      {
+        icon: 'spark',
+        title: '“Offer Released” is now “Offer”',
+        text: 'The stage where the offer is prepared is now called Offer. The offer is released when you mark it sent — that moves the enquiry on to Follow-up.',
+        perm: 'SALES_VIEW',
+      },
+    ],
+  },
+  {
     version: '1.5.1',
     date: '2026-10-27',
     items: [

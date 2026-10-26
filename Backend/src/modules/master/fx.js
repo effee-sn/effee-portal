@@ -40,4 +40,41 @@ function toInr(amount, code, rates, lockedRate) {
 /** Rounds rupees to paise. */
 const paise = (n) => Math.round(n * 100) / 100;
 
-module.exports = { loadRates, toInr, paise };
+/**
+ * Shows rupee amounts in another currency (the Sales "show amounts in"
+ * choice): rupees ÷ that currency's rate — **today's** rate for a live amount
+ * (an open enquiry), and **the rate in force on the day** for a closed one (an
+ * order on the day it was won, an offer on the day it was sent), taken from
+ * the currency's rate history. So a past order keeps the value it had then.
+ *
+ * @param {string} [code]  the display currency (INR or unknown: no conversion)
+ * @param {import('@prisma/client').PrismaClient} [db]
+ * @returns {Promise<{ code: string, fromInr: (inr: number|null, onDate?: Date|null) => number|null }>}
+ */
+async function displayConverter(code, db = prisma) {
+  const none = { code: 'INR', fromInr: (inr) => (inr === null || inr === undefined ? null : Number(inr)) };
+  if (!code || code === 'INR') return none;
+  const cur = await db.currency.findUnique({
+    where: { code },
+    select: { code: true, rate: true, rates: { select: { rate: true, effective_from: true }, orderBy: { effective_from: 'asc' } } },
+  });
+  if (!cur || !Number(cur.rate)) return none;
+  const today = Number(cur.rate);
+  const history = cur.rates.map((r) => ({ from: r.effective_from.getTime(), rate: Number(r.rate) })).filter((r) => r.rate > 0);
+  /** The rate in force on a day: the latest entry effective on or before it (the earliest, for a day before any). */
+  const rateOn = (date) => {
+    const t = new Date(date).getTime();
+    let found = null;
+    for (const h of history) { if (h.from <= t) found = h.rate; else break; }
+    return found ?? history[0]?.rate ?? today;
+  };
+  return {
+    code: cur.code,
+    fromInr: (inr, onDate) => {
+      if (inr === null || inr === undefined) return null;
+      return Number(inr) / (onDate ? rateOn(onDate) : today);
+    },
+  };
+}
+
+module.exports = { loadRates, toInr, paise, displayConverter };

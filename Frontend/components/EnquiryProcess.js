@@ -29,9 +29,9 @@ export default function EnquiryProcess({ enquiry, canManage, busy, onPick, block
   const age = stageAgeDays(enquiry.stage_since);
   const aging = !closed && isAging(enquiry.stage, enquiry.stage_since);
   const nextMissing = next ? (blocked[next.value] || []) : [];
-  // Manual "move to next" only applies up to Offer Released; from there the
+  // Manual "move to next" only applies up to Offer; from there the
   // deal advances on its own (send the offer, flag a follow-up for negotiation),
-  // so no step button is shown for Offer Released / Follow-up / Negotiation.
+  // so no step button is shown for Offer / Follow-up / Negotiation.
   const manual = STAGE_RANK[enquiry.stage] < STAGE_RANK.OFFER_RELEASED;
 
   return (
@@ -42,7 +42,7 @@ export default function EnquiryProcess({ enquiry, canManage, busy, onPick, block
           const state = closed || i < curIdx ? 'done' : i === curIdx ? 'current' : 'upcoming';
           const gated = (blocked[s.value] || []).length > 0;
           // One step forward only, and only while the flow is still manual
-          // (up to Offer Released): just the immediate next stage is clickable.
+          // (up to Offer): just the immediate next stage is clickable.
           const clickable = canManage && !closed && manual && i === curIdx + 1 && !gated;
           return (
             <div key={s.value} className="flex items-center shrink-0">

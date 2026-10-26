@@ -1,6 +1,6 @@
 const { analyticsRepository } = require('./analytics.repository');
 const { salesConfigService } = require('./config.service');
-const { loadRates, toInr, paise } = require('../master/fx');
+const { loadRates, toInr, paise, displayConverter } = require('../master/fx');
 
 /**
  * Sales dashboard business logic: turns the repository's rows into the
@@ -26,7 +26,7 @@ function createAnalyticsService(repository, config = salesConfigService) {
     { key: 'REVIEW', label: 'Review', rank: RANK.REVIEW },
     { key: 'CONCEPT', label: 'Concept', rank: RANK.CONCEPT },
     { key: 'COSTING', label: 'Costing', rank: RANK.COSTING },
-    { key: 'OFFER_RELEASED', label: 'Offer released', rank: RANK.OFFER_RELEASED },
+    { key: 'OFFER_RELEASED', label: 'Offer', rank: RANK.OFFER_RELEASED },
     { key: 'WON', label: 'Won', rank: RANK.WON },
   ];
 
@@ -91,7 +91,8 @@ function createAnalyticsService(repository, config = salesConfigService) {
   }
 
   /** Last 12 calendar months up to the month of the period's end. */
-  function monthly(closed, offers, f, rates) {
+  /** @param {{ fromInr: (inr: number, onDate?: Date) => number }} conv  the display currency */
+  function monthly(closed, offers, f, rates, conv) {
     const last = new Date(f.to.getTime() - 1);
     const months = [];
     for (let i = 11; i >= 0; i -= 1) {
@@ -104,7 +105,7 @@ function createAnalyticsService(repository, config = salesConfigService) {
       if (!at) continue;
       const m = byKey[`${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}`];
       if (!m) continue;
-      if (e.stage === 'WON') { m.won += 1; m.won_value += toInr(e.order_value, e.currency_code, rates, e.order_fx_rate); } else m.lost += 1;
+      if (e.stage === 'WON') { m.won += 1; m.won_value += conv.fromInr(toInr(e.order_value, e.currency_code, rates, e.order_fx_rate), e.won_at); } else m.lost += 1;
     }
     // Offered: per enquiry, only the last offer it was sent in each month, so
     // a revision sent the same month replaces (not adds to) the earlier one.
@@ -114,7 +115,7 @@ function createAnalyticsService(repository, config = salesConfigService) {
       if (byKey[key]) lastPerMonth.set(`${key}|${o.enquiry_id}`, { key, o }); // offers arrive oldest first
     }
     for (const { key, o } of lastPerMonth.values()) {
-      byKey[key].offered_value += toInr(o.offer_value, o.enquiry.currency_code, rates, o.offer_fx_rate);
+      byKey[key].offered_value += conv.fromInr(toInr(o.offer_value, o.enquiry.currency_code, rates, o.offer_fx_rate), o.sent_at);
       byKey[key].offers += 1;
     }
     for (const m of months) { m.won_value = Math.round(m.won_value); m.offered_value = Math.round(m.offered_value); }
@@ -123,15 +124,19 @@ function createAnalyticsService(repository, config = salesConfigService) {
 
   return {
     /**
-     * @param {{ from?: Date, to?: Date, owner_id?: number, enquiry_type?: string }} query
+     * @param {{ from?: Date, to?: Date, owner_id?: number, enquiry_type?: string, currency?: string }} query
+     *   currency: show the money in it (open amounts at today's rate, won orders and sent offers at their day's rate)
      */
     async overview(query) {
+      const conv = await displayConverter(query.currency);
       const f = toFilter(query);
       const lastDay = new Date(f.to.getTime() - 1);
       const trendFrom = new Date(lastDay.getFullYear(), lastDay.getMonth() - 11, 1);
 
-      // Every money figure below is in INR: open amounts at today's rate, won
-      // orders at the rate locked when they were won.
+      // Every money figure below is first in INR — open amounts at today's rate,
+      // won orders at the rate locked when they were won — then shown in the
+      // chosen currency (conv): open ones at its rate today, won orders and sent
+      // offers at its rate on their day.
       const [rates, openRows, stageRows, probability, won, lost, raised, exits, closed, offers, stalled, hot, overdue, owners] = await Promise.all([
         loadRates(),
         repository.openByOwner(f),
@@ -149,8 +154,8 @@ function createAnalyticsService(repository, config = salesConfigService) {
         repository.owners(),
       ]);
 
-      const orderInr = (e) => toInr(e.order_value, e.currency_code, rates, e.order_fx_rate);
-      const openInr = (r) => toInr(r._sum.expected_value, r.currency_code, rates);
+      const orderInr = (e) => conv.fromInr(toInr(e.order_value, e.currency_code, rates, e.order_fx_rate), e.won_at);
+      const openInr = (r) => conv.fromInr(toInr(r._sum.expected_value, r.currency_code, rates));
       const wonValue = Math.round(won.reduce((n, e) => n + orderInr(e), 0));
       const daysToClose = won.map((e) => (e.won_at.getTime() - e.created_at.getTime()) / DAY_MS);
 
@@ -167,7 +172,7 @@ function createAnalyticsService(repository, config = salesConfigService) {
       const offeredInPeriod = new Map();
       for (const o of offers) if (o.sent_at >= f.from) offeredInPeriod.set(o.enquiry_id, o);
       const offeredValue = Math.round([...offeredInPeriod.values()]
-        .reduce((n, o) => n + toInr(o.offer_value, o.enquiry.currency_code, rates, o.offer_fx_rate), 0));
+        .reduce((n, o) => n + conv.fromInr(toInr(o.offer_value, o.enquiry.currency_code, rates, o.offer_fx_rate), o.sent_at), 0));
 
       // ── Team performance: one row per field initiator seen in any block ──
       const team = new Map();
@@ -184,6 +189,8 @@ function createAnalyticsService(repository, config = salesConfigService) {
       );
 
       return {
+        // The currency every money figure is in.
+        currency: conv.code,
         period: { from: f.from, to: lastDay },
         owners,
         headline: {
@@ -210,7 +217,7 @@ function createAnalyticsService(repository, config = salesConfigService) {
         },
         funnel: funnel(raised),
         time_in_stage: timeInStage(exits, f),
-        monthly: monthly(closed, offers, f, rates),
+        monthly: monthly(closed, offers, f, rates, conv),
         lost: {
           total: lost.length,
           reasons: tally(lost.map((e) => e.lost_reason), 'No reason given').slice(0, 8),
@@ -232,6 +239,7 @@ function createAnalyticsService(repository, config = salesConfigService) {
                 ...e,
                 expected_value: e.expected_value === null ? null : num(e.expected_value),
                 expected_value_inr: e.expected_value === null ? null : paise(toInr(e.expected_value, e.currency_code, rates)),
+                expected_value_display: e.expected_value === null ? null : paise(conv.fromInr(toInr(e.expected_value, e.currency_code, rates))),
               }))
               .sort((a, b) => (b.expected_value_inr ?? -1) - (a.expected_value_inr ?? -1))
               .slice(0, 15),

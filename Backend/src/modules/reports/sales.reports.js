@@ -21,7 +21,7 @@ function createSalesReports(repository, config = salesConfigService) {
 
   const STAGE = {
     NEW: 'New', CONTACTED: 'Contacted', REVIEW: 'Review', CONCEPT: 'Concept', COSTING: 'Costing',
-    COSTING_REVIEW: 'Costing Review', OFFER_RELEASED: 'Offer Released', FOLLOW_UP: 'Follow-up',
+    COSTING_REVIEW: 'Costing Review', OFFER_RELEASED: 'Offer', FOLLOW_UP: 'Follow-up',
     NEGOTIATION: 'Negotiation', NEGOTIATION_FOLLOW_UP: 'Negotiation Follow-up', WON: 'Won', LOST: 'Lost',
   };
   const TYPE = { GENERATED: 'Generated', INCOMING: 'Incoming' };

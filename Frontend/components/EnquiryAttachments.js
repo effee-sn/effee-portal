@@ -175,7 +175,7 @@ export default function EnquiryAttachments({
 
   const toggleSent = async (a) => {
     setBusy(true); setError('');
-    // Sending an offer can advance the stage (Offer Released / Negotiation →
+    // Sending an offer can advance the stage (Offer / Negotiation →
     // Follow-up), so refresh the parent enquiry too, not just the file list.
     try { await apiPost(`/sales/attachments/${a.id}/sent`, { sent: !a.sent_at }); await reload(); }
     catch (err) { setError(err.message); }

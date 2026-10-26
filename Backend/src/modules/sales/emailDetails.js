@@ -6,7 +6,7 @@
 
 const STAGE = Object.freeze({
   NEW: 'New', CONTACTED: 'Contacted', REVIEW: 'Review', CONCEPT: 'Concept', COSTING: 'Costing',
-  COSTING_REVIEW: 'Costing Review', OFFER_RELEASED: 'Offer Released', FOLLOW_UP: 'Follow-up',
+  COSTING_REVIEW: 'Costing Review', OFFER_RELEASED: 'Offer', FOLLOW_UP: 'Follow-up',
   NEGOTIATION: 'Negotiation', NEGOTIATION_FOLLOW_UP: 'Negotiation Follow-up', WON: 'Won', LOST: 'Lost',
 });
 

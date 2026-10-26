@@ -16,13 +16,18 @@ import { formatMoney } from '@/lib/money';
 
 const PAGE = 20;
 
-/** @param {{ search: string, appId: string, onOpen: (id: number) => void, version?: number }} props */
-export default function EnquiryKanban({ search, appId, onOpen, version = 0 }) {
+/**
+ * @param {{ search: string, appId: string, onOpen: (id: number) => void, version?: number,
+ *   money?: { formatterFor: (code: string) => { format: (v: unknown) => string } }, displayCurrency?: string }} props
+ *   money / displayCurrency: show values in that currency (converted by the server)
+ */
+export default function EnquiryKanban({ search, appId, onOpen, version = 0, money, displayCurrency = 'INR' }) {
   const [cols, setCols] = useState(null); // stage → { items, total, busy }
 
   const query = (stage, page) => {
     const q = new URLSearchParams({ page: String(page), limit: String(PAGE), search, stage }); // newest first, like the list
     if (appId) q.set('application_id', appId);
+    if (displayCurrency !== 'INR') q.set('display_currency', displayCurrency);
     return `/sales/enquiries?${q.toString()}`;
   };
 
@@ -39,7 +44,7 @@ export default function EnquiryKanban({ search, appId, onOpen, version = 0 }) {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, appId, version]);
+  }, [search, appId, version, displayCurrency]);
 
   const more = async (stage) => {
     const c = cols[stage];
@@ -93,8 +98,10 @@ export default function EnquiryKanban({ search, appId, onOpen, version = 0 }) {
                     <p className="text-xs text-gray-500 mt-0.5 truncate">{e.customer?.name || '—'}{e.is_refurbishment ? ' · Refurbishment' : ''}</p>
                     <div className="flex items-center gap-2 mt-1.5 text-xs">
                       <span className="text-gray-500 truncate">{e.handler?.name || e.owner?.name || '—'}</span>
-                      <span className="ml-auto tabular-nums text-gray-700 whitespace-nowrap">
-                        {formatMoney(e.stage === 'WON' ? e.order_value : e.expected_value, e.currency_code, e.currency?.symbol)}
+                      <span className="ml-auto tabular-nums text-gray-700 whitespace-nowrap"
+                        title={money ? `Entered as ${formatMoney(e.stage === 'WON' ? e.order_value : e.expected_value, e.currency_code, e.currency?.symbol)}` : undefined}>
+                        {money ? money.formatterFor(e.display_currency).format(e.display_value)
+                          : formatMoney(e.stage === 'WON' ? e.order_value : e.expected_value, e.currency_code, e.currency?.symbol)}
                       </span>
                     </div>
                   </button>

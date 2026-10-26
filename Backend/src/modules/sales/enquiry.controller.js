@@ -12,7 +12,7 @@ const getEnquiries = async (req, res) => {
     defaultOrder: 'desc',
     filterable: enquiryService.FILTERABLE,
   });
-  const { items, total } = await enquiryService.list(query, requestContext(req));
+  const { items, total } = await enquiryService.list({ ...query, display_currency: req.query.display_currency }, requestContext(req));
   ApiResponse.paginated(res, items, { page: query.page, limit: query.limit, total });
 };
 

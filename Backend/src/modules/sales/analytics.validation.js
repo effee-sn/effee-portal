@@ -21,6 +21,9 @@ const analyticsQuery = z.object({
   ),
   enquiry_type: z.enum(['GENERATED', 'INCOMING']).optional()
     .or(z.literal('').transform(() => undefined)),
+  // Show the money in this currency (default INR).
+  currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/, 'A 3-letter currency code').optional()
+    .or(z.literal('').transform(() => undefined)),
 }).refine((q) => !q.from || !q.to || q.from <= q.to, {
   message: '"From" must be on or before "To"',
   path: ['from'],

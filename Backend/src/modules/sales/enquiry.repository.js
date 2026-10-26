@@ -29,6 +29,7 @@ function createEnquiryRepository(db) {
     owner: { select: { id: true, name: true } },
     handler_id: true,
     handler: { select: { id: true, name: true } },
+    won_at: true,
     created_at: true,
     _count: {
       select: {
