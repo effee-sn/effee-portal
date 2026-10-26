@@ -88,6 +88,8 @@ export default function DashboardLayout({ children }) {
     // any permission code.
     if (item.system) return !!me?.is_system;
     if (item.flag) return !!(me?.is_system || me?.[item.flag]);
+    // Any one of several permissions (e.g. all enquiries, or only one's own).
+    if (item.anyPerm) return !!(me?.is_system || item.anyPerm.some((p) => can(p)));
     if (!item.perm) return true;
     if (me?.is_system) return true;
     return can(item.perm);

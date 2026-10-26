@@ -6,7 +6,7 @@ const { requestContext } = require('../../core/http/requestContext');
 
 /** `GET /sales/enquiries/:enquiryId/attachments` */
 const listAttachments = async (req, res) => {
-  ApiResponse.ok(res, await attachmentService.listForEnquiry(req.params.enquiryId));
+  ApiResponse.ok(res, await attachmentService.listForEnquiry(req.params.enquiryId, requestContext(req)));
 };
 
 /** `POST /sales/enquiries/:enquiryId/attachments` (multipart; multer ran first) */
@@ -17,7 +17,7 @@ const uploadAttachment = async (req, res) => {
 
 /** `GET /sales/attachments/:id/download` — streams the file as an attachment. */
 const downloadAttachment = async (req, res) => {
-  const { absPath, file_name } = await attachmentService.fileFor(req.params.id);
+  const { absPath, file_name } = await attachmentService.fileFor(req.params.id, requestContext(req));
   res.download(absPath, file_name);
 };
 

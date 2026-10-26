@@ -35,10 +35,14 @@ const { getAnalytics } = require('./analytics.controller');
 
 const router = Router();
 
+// Seeing enquiries: all of them (Sales → View) or only your own (Sales own →
+// View); which ones is decided in the services (access.js → enquiryScope).
+const SEE = ['SALES_VIEW', 'SALES_VIEW_OWN'];
+
 router.use(authenticate);
 
 // ── Sales workflow config (the selected Internal Sales handler) ───────────────
-router.get('/workflow', authorize('SALES_VIEW'), asyncHandler(getWorkflow));
+router.get('/workflow', authorize(...SEE), asyncHandler(getWorkflow));
 router.put(
   '/workflow',
   authorize('SALES_EDIT'),
@@ -49,7 +53,7 @@ router.put(
 // ── Sales configuration (applications, stage probabilities, reminders) ───────
 // Reading is open to every sales user (the enquiry form's dropdown, the
 // probability shown on an enquiry); changing needs SALES_CONFIG_* rights.
-router.get('/applications', authorize('SALES_VIEW'), asyncHandler(configController.listApplications));
+router.get('/applications', authorize(...SEE), asyncHandler(configController.listApplications));
 router.post(
   '/applications',
   authorize('SALES_CONFIG_CREATE'),
@@ -69,7 +73,7 @@ router.delete(
   asyncHandler(configController.deleteApplication)
 );
 
-router.get('/stage-probabilities', authorize('SALES_VIEW'), asyncHandler(configController.listProbabilities));
+router.get('/stage-probabilities', authorize(...SEE), asyncHandler(configController.listProbabilities));
 router.put(
   '/stage-probabilities',
   authorize('SALES_CONFIG_EDIT'),
@@ -77,7 +81,7 @@ router.put(
   asyncHandler(configController.saveProbabilities)
 );
 
-router.get('/reminder-schedules', authorize('SALES_VIEW'), asyncHandler(configController.listReminderSchedules));
+router.get('/reminder-schedules', authorize(...SEE), asyncHandler(configController.listReminderSchedules));
 router.put(
   '/reminder-schedules',
   authorize('SALES_CONFIG_EDIT'),
@@ -98,7 +102,7 @@ router.get(
 // ── Enquiries (the pipeline) ──────────────────────────────────────────────────
 router.get(
   '/enquiries',
-  authorize('SALES_VIEW'),
+  authorize(...SEE),
   validate({ query: listEnquiriesQuery }),
   asyncHandler(getEnquiries)
 );
@@ -112,14 +116,14 @@ router.post(
 
 router.get(
   '/enquiries/:id',
-  authorize('SALES_VIEW'),
+  authorize(...SEE),
   validate({ params: enquiryIdParam }),
   asyncHandler(getEnquiryById)
 );
 
 router.get(
   '/enquiries/:id/readiness',
-  authorize('SALES_VIEW'),
+  authorize(...SEE),
   validate({ params: enquiryIdParam }),
   asyncHandler(getEnquiryReadiness)
 );
@@ -127,21 +131,21 @@ router.get(
 // Stage moves: whoever holds it (the flow); details: Sales → Edit (checked in the service).
 router.put(
   '/enquiries/:id',
-  authorize('SALES_VIEW'),
+  authorize(...SEE),
   validate({ params: enquiryIdParam, body: updateEnquiryBody }),
   asyncHandler(updateEnquiry)
 );
 
 router.post(
   '/enquiries/:id/win',
-  authorize('SALES_VIEW'),
+  authorize(...SEE),
   validate({ params: enquiryIdParam, body: winEnquiryBody }),
   asyncHandler(winEnquiry)
 );
 
 router.post(
   '/enquiries/:id/lose',
-  authorize('SALES_VIEW'),
+  authorize(...SEE),
   validate({ params: enquiryIdParam, body: loseEnquiryBody }),
   asyncHandler(loseEnquiry)
 );
@@ -171,23 +175,24 @@ router.delete(
 // ── Enquiry activities (interactions + follow-ups) ────────────────────────────
 router.get(
   '/enquiries/:enquiryId/activities',
-  authorize('SALES_VIEW'),
+  authorize(...SEE),
   validate({ params: activityValidation.enquiryIdParam }),
   asyncHandler(listActivities)
 );
 
-// Activities & reviews, at any stage: log = Sales → View + Create, edit = Edit,
-// delete = Delete (own entries; checked in the service).
+// Activities & reviews (checked in the service, access.js): log until Won / Lost
+// with View + Create, or View while it is with you; edit your own with Sales
+// activity → Edit within its stage; delete your own with Sales → Delete.
 router.post(
   '/enquiries/:enquiryId/activities',
-  authorize('SALES_CREATE'),
+  authorize(...SEE),
   validate({ params: activityValidation.enquiryIdParam, body: activityValidation.createActivityBody }),
   asyncHandler(createActivity)
 );
 
 router.put(
   '/activities/:id',
-  authorize('SALES_EDIT'),
+  authorize('SALES_ACTIVITY_EDIT'),
   validate({ params: activityValidation.activityIdParam, body: activityValidation.updateActivityBody }),
   asyncHandler(updateActivity)
 );
@@ -202,7 +207,7 @@ router.delete(
 // ── Enquiry attachments (documents & offers) ──────────────────────────────────
 router.get(
   '/enquiries/:enquiryId/attachments',
-  authorize('SALES_VIEW'),
+  authorize(...SEE),
   validate({ params: attachmentValidation.enquiryIdParam }),
   asyncHandler(listAttachments)
 );
@@ -211,7 +216,7 @@ router.get(
 // Upload / replace: whoever holds the enquiry (the flow; checked in the service).
 router.post(
   '/enquiries/:enquiryId/attachments',
-  authorize('SALES_VIEW'),
+  authorize(...SEE),
   handleUploadErrors(docUpload.single('file')),
   validate({ params: attachmentValidation.enquiryIdParam, body: attachmentValidation.uploadBody }),
   asyncHandler(uploadAttachment)
@@ -219,21 +224,21 @@ router.post(
 
 router.get(
   '/attachments/:id/download',
-  authorize('SALES_VIEW'),
+  authorize(...SEE),
   validate({ params: attachmentValidation.attachmentIdParam }),
   asyncHandler(downloadAttachment)
 );
 
 router.post(
   '/attachments/:id/sent',
-  authorize('SALES_VIEW'),
+  authorize(...SEE),
   validate({ params: attachmentValidation.attachmentIdParam, body: attachmentValidation.sentBody }),
   asyncHandler(markSent)
 );
 
 router.put(
   '/attachments/:id/offer-value',
-  authorize('SALES_VIEW'),
+  authorize(...SEE),
   validate({ params: attachmentValidation.attachmentIdParam, body: attachmentValidation.offerValueBody }),
   asyncHandler(setOfferValue)
 );

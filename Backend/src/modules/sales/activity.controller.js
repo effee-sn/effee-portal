@@ -8,7 +8,7 @@ const { requestContext } = require('../../core/http/requestContext');
 const listActivities = async (req, res) => {
   const { review } = req.query;
   const isReview = review === undefined ? undefined : review === 'true';
-  ApiResponse.ok(res, await activityService.listForEnquiry(req.params.enquiryId, isReview));
+  ApiResponse.ok(res, await activityService.listForEnquiry(req.params.enquiryId, isReview, requestContext(req)));
 };
 
 /** `POST /sales/enquiries/:enquiryId/activities` */

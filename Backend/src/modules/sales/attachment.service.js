@@ -9,7 +9,7 @@ const { notificationService } = require('../notification/notification.service');
 const { loadRates } = require('../master/fx');
 const { money } = require('./emailDetails');
 const { NotFoundError, BadRequestError, ConflictError, ValidationError } = require('../../core');
-const { assertFullEdit, assertFlowWork, assertOwnItem } = require('./access');
+const { assertFullEdit, assertFlowWork, assertOwnItem, assertCanSeeEnquiry } = require('./access');
 
 // Kinds that hold a single *current* document. Re-uploading creates the next
 // version and keeps the old one as superseded history. OFFER is the exception —
@@ -24,9 +24,11 @@ const SINGLE_KINDS = new Set(['FORMAT_PDF', 'FORMAT_EXCEL', 'CONCEPT', 'POWER_CA
  * @param {ReturnType<typeof import('./attachment.repository').createAttachmentRepository>} repository
  */
 function createAttachmentService(repository) {
-  async function loadEnquiry(enquiryId) {
+  /** The enquiry — not found to someone who may see only their own and it isn't. */
+  async function loadEnquiry(enquiryId, actor) {
     const enquiry = await repository.findEnquiry(enquiryId);
     if (!enquiry) throw new NotFoundError('Enquiry');
+    assertCanSeeEnquiry(enquiry, actor);
     return enquiry;
   }
 
@@ -37,9 +39,9 @@ function createAttachmentService(repository) {
   }
 
   return {
-    /** @param {number} enquiryId */
-    async listForEnquiry(enquiryId) {
-      await loadEnquiry(enquiryId);
+    /** @param {number} enquiryId @param {object} [actor] */
+    async listForEnquiry(enquiryId, actor) {
+      await loadEnquiry(enquiryId, actor);
       return repository.findByEnquiry(enquiryId);
     },
 
@@ -54,7 +56,7 @@ function createAttachmentService(repository) {
       if (!file) throw new BadRequestError('No file uploaded');
       let enquiry;
       try {
-        enquiry = await loadEnquiry(enquiryId);
+        enquiry = await loadEnquiry(enquiryId, actor);
         // Upload / replace: the creator may too, while the enquiry is at New/Contacted.
         assertFlowWork(enquiry, actor, 'upload documents on it');
       } catch (err) {
@@ -116,9 +118,10 @@ function createAttachmentService(repository) {
      * @param {number} id
      * @returns {Promise<{ absPath: string, file_name: string, mime_type: string }>}
      */
-    async fileFor(id) {
+    async fileFor(id, actor) {
       const row = await repository.findByIdWithFile(id);
       if (!row) throw new NotFoundError('Attachment');
+      if (row.enquiry_id) await loadEnquiry(row.enquiry_id, actor);
       // stored_name is a server-generated random name; still guard against any
       // separator before joining, so a bad row can never escape the store.
       if (/[\\/]/.test(row.stored_name)) throw new NotFoundError('Attachment');
@@ -138,7 +141,7 @@ function createAttachmentService(repository) {
       if (!before) throw new NotFoundError('Attachment');
       if (before.kind !== 'OFFER') throw new ConflictError('Only offer documents can be marked as sent');
       if (before.superseded_at) throw new ConflictError('An older version cannot be marked as sent');
-      const enquiry = await loadEnquiry(before.enquiry_id);
+      const enquiry = await loadEnquiry(before.enquiry_id, actor);
       assertFlowWork(enquiry, actor, 'mark offers as sent');
       if (sent && before.offer_value === null) {
         throw new ConflictError('Add the offer price before marking this offer as sent');
@@ -210,7 +213,7 @@ function createAttachmentService(repository) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Attachment');
       if (before.kind !== 'OFFER') throw new ConflictError('Only offers have a price');
-      const enquiry = await loadEnquiry(before.enquiry_id);
+      const enquiry = await loadEnquiry(before.enquiry_id, actor);
       assertFlowWork(enquiry, actor, 'change an offer price');
       if (before.sent_at && before.offer_value !== null) {
         throw new ConflictError('The price of a sent offer is fixed — upload a revised offer instead');
@@ -239,7 +242,7 @@ function createAttachmentService(repository) {
     async remove(id, actor) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Attachment');
-      const enquiry = await loadEnquiry(before.enquiry_id);
+      const enquiry = await loadEnquiry(before.enquiry_id, actor);
       assertFullEdit(enquiry, actor, 'delete documents');
       assertOwnItem(before, actor, 'delete this document');
       // History is the record of what was shared and when — previous versions

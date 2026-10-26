@@ -1,4 +1,4 @@
-const { ForbiddenError } = require('../../core');
+const { ForbiddenError, NotFoundError } = require('../../core');
 
 /**
  * Who may change an enquiry — one rule set for enquiries, documents and
@@ -23,6 +23,9 @@ const { ForbiddenError } = require('../../core');
  *     deleting them Sales → Delete.
  *   - **Sales → Reassign** (SALES_REASSIGN): reassign, change the owner,
  *     reopen a closed enquiry.
+ *   - **Seeing enquiries:** Sales → View shows all of them. Sales own → View
+ *     (SALES_VIEW_OWN) shows only your own — ones you raised, own, or that
+ *     are with you now in the flow; others read as not found.
  *   - System users (Super Admin): anything, any time — they fix mistakes.
  */
 
@@ -97,6 +100,32 @@ function assertCanLose(enquiry, actor) {
   assertFlowWork(enquiry, actor, 'mark it lost');
 }
 
+/**
+ * Which enquiries this person may see, as a Prisma `where` to add — null for
+ * all (Sales → View), their own for Sales own → View, none otherwise. Without
+ * an actor (the system itself — jobs, emails, other services) nothing is limited.
+ * @param {object} [actor]
+ */
+function enquiryScope(actor) {
+  if (!actor || actor.is_system || actor?.permissions?.includes('SALES_VIEW')) return null;
+  if (actor?.id && actor.permissions?.includes('SALES_VIEW_OWN')) {
+    return { OR: [{ created_by: actor.id }, { owner_id: actor.id }, { handler_id: actor.id }] };
+  }
+  return { id: -1 };
+}
+
+/** May see this enquiry: Sales → View, or Sales own → View and it is theirs (raised, owned or with them). */
+function canSeeEnquiry(enquiry, actor) {
+  if (!actor || actor.is_system || actor?.permissions?.includes('SALES_VIEW')) return true;
+  return Boolean(actor?.id && actor.permissions?.includes('SALES_VIEW_OWN')
+    && [enquiry.created_by, enquiry.owner_id, enquiry.handler_id].includes(actor.id));
+}
+
+/** Someone else's enquiry reads as not found to those who may see only their own. @throws {NotFoundError} */
+function assertCanSeeEnquiry(enquiry, actor) {
+  if (!canSeeEnquiry(enquiry, actor)) throw new NotFoundError('Enquiry');
+}
+
 /** Closed: no new activities or reviews until it is reopened. */
 const CLOSED_STAGES = Object.freeze(['WON', 'LOST']);
 
@@ -125,7 +154,7 @@ function assertActivityAccess(action, actor, item = null, enquiry = null) {
     if (enquiry && CLOSED_STAGES.includes(enquiry.stage)) {
       throw new ForbiddenError(`This enquiry is ${enquiry.stage === 'WON' ? 'won' : 'lost'} — no new activities or reviews (reopen it first)`);
     }
-    if (!hasPerm(actor, 'SALES_VIEW')) {
+    if (!enquiry || !canSeeEnquiry(enquiry, actor)) {
       throw new ForbiddenError('You need Sales view access to log activities and reviews');
     }
     if (hasPerm(actor, 'SALES_CREATE') || (enquiry && isHandler(enquiry, actor))) return;
@@ -147,7 +176,7 @@ function assertActivityAccess(action, actor, item = null, enquiry = null) {
 const stageName = (s) => s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' ');
 
 module.exports = {
-  assertActivityAccess,
+  assertActivityAccess, enquiryScope, canSeeEnquiry, assertCanSeeEnquiry,
   hasEdit, isHandler, isCreator, canReassign,
   assertFlowWork, assertFullEdit, assertDetailsEdit, assertOwnItem, assertCanWin, assertCanLose,
   // Earlier name for the flow check, still used by callers.

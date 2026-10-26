@@ -12,18 +12,18 @@ const getEnquiries = async (req, res) => {
     defaultOrder: 'desc',
     filterable: enquiryService.FILTERABLE,
   });
-  const { items, total } = await enquiryService.list(query);
+  const { items, total } = await enquiryService.list(query, requestContext(req));
   ApiResponse.paginated(res, items, { page: query.page, limit: query.limit, total });
 };
 
 /** `GET /sales/enquiries/:id` */
 const getEnquiryById = async (req, res) => {
-  ApiResponse.ok(res, await enquiryService.getById(req.params.id));
+  ApiResponse.ok(res, await enquiryService.getById(req.params.id, requestContext(req)));
 };
 
 /** `GET /sales/enquiries/:id/readiness` — prerequisite gate status for the UI. */
 const getEnquiryReadiness = async (req, res) => {
-  ApiResponse.ok(res, await enquiryService.readiness(req.params.id));
+  ApiResponse.ok(res, await enquiryService.readiness(req.params.id, requestContext(req)));
 };
 
 /** `POST /sales/enquiries` */

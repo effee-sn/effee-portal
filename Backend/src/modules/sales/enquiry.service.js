@@ -8,7 +8,7 @@ const { loadRates, toInr, paise } = require('../master/fx');
 const { NEXT_STEP, enquiryRows, money, sentence, stageName } = require('./emailDetails');
 const { NotFoundError, ConflictError, ValidationError, ForbiddenError, buildSearchClause } = require('../../core');
 const {
-  canReassign, assertFlowWork, assertDetailsEdit, assertCanWin, assertCanLose,
+  canReassign, assertFlowWork, assertDetailsEdit, assertCanWin, assertCanLose, enquiryScope, assertCanSeeEnquiry,
 } = require('./access');
 
 /** Human label for a stage enum, for notification text (`FOLLOW_UP` → `Follow up`). */
@@ -263,19 +263,25 @@ function createEnquiryService(repository) {
     SORTABLE_FIELDS,
     FILTERABLE,
 
-    /** @param {import('../../core/http/queryOptions').ListQuery} query */
-    async list(query) {
+    /**
+     * @param {import('../../core/http/queryOptions').ListQuery} query
+     * @param {object} [actor]  limits the list to their own enquiries when that is all they may see
+     */
+    async list(query, actor) {
       const search = buildSearchClause(query.search, [...SEARCHABLE_FIELDS]);
-      const where = { ...query.filters, ...(search || {}) };
+      const scope = enquiryScope(actor);
+      const base = { ...query.filters, ...(search || {}) };
+      const where = scope ? { AND: [base, scope] } : base;
       const page = await repository.findPage({ where, orderBy: query.orderBy, skip: query.skip, take: query.take });
       const rates = await loadRates();
       return { ...page, items: page.items.map((e) => withInr(e, rates)) };
     },
 
-    /** @param {number} id @throws {NotFoundError} */
-    async getById(id) {
+    /** @param {number} id @param {object} [actor] @throws {NotFoundError} */
+    async getById(id, actor) {
       const enquiry = await repository.findById(id);
       if (!enquiry) throw new NotFoundError('Enquiry');
+      assertCanSeeEnquiry(enquiry, actor);
       return withMoney(enquiry);
     },
 
@@ -284,9 +290,10 @@ function createEnquiryService(repository) {
      * move needs before it's attempted.
      * @param {number} id
      */
-    async readiness(id) {
+    async readiness(id, actor) {
       const enquiry = await repository.findById(id);
       if (!enquiry) throw new NotFoundError('Enquiry');
+      assertCanSeeEnquiry(enquiry, actor);
       const flags = await repository.docFlags(id);
       /** @type {Record<string, string[]>} */
       const blocked = {};
@@ -352,6 +359,7 @@ function createEnquiryService(repository) {
     async update(id, dto, actor) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Enquiry');
+      assertCanSeeEnquiry(before, actor);
       assertCanUpdate(before, dto, actor);
       // The type picks the flow (Generated skips Contacted), so it's fixed once
       // the enquiry leaves NEW — switching mid-flow could strand it on a stage
@@ -489,6 +497,7 @@ function createEnquiryService(repository) {
     async win(id, dto, actor) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Enquiry');
+      assertCanSeeEnquiry(before, actor);
       assertCanWin(before, actor);
       if (before.stage === 'WON') throw new ConflictError('Enquiry is already marked won');
       await assertStageGate(id, 'WON');
@@ -545,6 +554,7 @@ function createEnquiryService(repository) {
     async lose(id, dto, actor) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Enquiry');
+      assertCanSeeEnquiry(before, actor);
       assertCanLose(before, actor);
       if (before.stage === 'LOST') throw new ConflictError('Enquiry is already marked lost');
 

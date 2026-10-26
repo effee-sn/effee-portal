@@ -184,7 +184,7 @@ export default function EnquiriesPage() {
 
   const [limit, setLimit, limitRef] = usePageSize('sales-enquiries', 10);
 
-  const canView   = me?.is_system || can('SALES_VIEW');
+  const canView   = me?.is_system || can('SALES_VIEW') || can('SALES_VIEW_OWN'); // all, or only their own (the API decides which)
   const canCreate = me?.is_system || can('SALES_CREATE');
   const config    = useSalesConfig();
 

@@ -13,6 +13,21 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.5.1] — 2026-10-27
+
+### Added — Sales: see only your own enquiries
+
+- New permission **Sales own → View** (`SALES_VIEW_OWN`): see only your own enquiries — ones **you raised, you own, or that are with you now** in the flow (so Internal Sales still see what is handed to them at Review). **Sales → View** still shows all of them. It applies to the list, the Kanban, the enquiry page, its activities, reviews and documents; anyone else's enquiry reads as not found.
+- The **Sales dashboard** and **MIS reports** show company-wide figures, so they stay with Sales → View.
+- It is given to no role on upgrade: in **Roles**, give a role *Sales own → View* (and take away *Sales → View*) to limit it. A database migration adds it.
+
+### Fixed — Sales: activity rules now apply as intended
+
+- Logging an activity or review was still blocked for anyone without **Sales → Create**, and editing your own for anyone without **Sales → Edit** — the route checked those before the rules of 1.4.1 and 1.4.3 could apply. Now the person an enquiry is with logs with View alone, and **Sales activity → Edit** is what editing your own entry needs.
+- Roles shows module names with spaces ("Sales activity", not "Sales_activity").
+
+---
+
 ## [1.5.0] — 2026-10-27
 
 ### Added — Sales: Kanban view of the enquiries

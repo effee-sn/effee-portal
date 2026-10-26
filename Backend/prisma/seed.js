@@ -51,6 +51,7 @@ const MODULES = [
   { name: 'SERVICE',    slug: 'service',    description: 'Service desk tickets' },
   { name: 'SALES',      slug: 'sales',      description: 'Sales — enquiries, quotations, customers' },
   { name: 'SALES_ACTIVITY', slug: 'sales-activity', description: 'Sales — edit the activities and reviews you logged' },
+  { name: 'SALES_OWN', slug: 'sales-own', description: 'Sales — see only your own enquiries' },
   { name: 'FLOW',       slug: 'flow',       description: 'Workflow / flow builder' },
   { name: 'DEPARTMENT', slug: 'department', description: 'Departments' },
   { name: 'PROJECT',    slug: 'project',    description: 'Projects' },
@@ -100,6 +101,7 @@ const PERMISSIONS = [
   { module: 'sales', action: 'DELETE', code: 'SALES_DELETE' },
   { module: 'sales', action: 'REASSIGN', code: 'SALES_REASSIGN' },
   { module: 'sales-activity', action: 'EDIT', code: 'SALES_ACTIVITY_EDIT' },
+  { module: 'sales-own', action: 'VIEW', code: 'SALES_VIEW_OWN' },
 
   // Flow builder — administrator tool for defining workflows.
   { module: 'flow', action: 'VIEW',   code: 'FLOW_VIEW' },

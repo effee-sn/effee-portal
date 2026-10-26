@@ -5,7 +5,7 @@ const { notificationService } = require('../notification/notification.service');
 const config = require('../../config/env');
 const { zonedTime } = require('../../lib/timezone');
 const { NotFoundError, ForbiddenError } = require('../../core');
-const { assertActivityAccess, isHandler } = require('./access');
+const { assertActivityAccess, isHandler, assertCanSeeEnquiry } = require('./access');
 const { stageName } = require('./emailDetails');
 
 const MEDIUM = Object.freeze({ CALL: 'Call', MEETING: 'Meeting', TEAMS: 'Teams', SITE_VISIT: 'Site visit', EMAIL: 'Email' });
@@ -93,8 +93,8 @@ function createActivityService(repository) {
      * it was corrected later — who last edited it and when.
      * @param {number} enquiryId @param {boolean} [isReview]
      */
-    async listForEnquiry(enquiryId, isReview) {
-      await loadEnquiry(enquiryId);
+    async listForEnquiry(enquiryId, isReview, actor) {
+      assertCanSeeEnquiry(await loadEnquiry(enquiryId), actor);
       const rows = await repository.findByEnquiry(enquiryId, isReview);
       const edits = await repository.lastEdits(rows.map((r) => r.id));
       const names = await repository.userNames([...rows.map((r) => r.created_by), ...[...edits.values()].map((e) => e.actor_id)]);
@@ -196,6 +196,7 @@ function createActivityService(repository) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Activity');
       const enquiry = await loadEnquiry(before.enquiry_id);
+      assertCanSeeEnquiry(enquiry, actor);
       assertActivityAccess('edit', actor, before, enquiry); // own entry, still in its stage
       assertMayFlagNegotiation(enquiry, dto, actor);
 

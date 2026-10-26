@@ -12,6 +12,18 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.5.1',
+    date: '2026-10-27',
+    items: [
+      {
+        icon: 'spark',
+        title: 'Sales: “see only your own enquiries”, set per role',
+        text: 'A new permission, Sales own → View, shows a person only the enquiries they raised, own, or that are with them now. Sales → View still shows all. Set it in Roles.',
+        perm: 'ROLE_EDIT',
+      },
+    ],
+  },
+  {
     version: '1.5.0',
     date: '2026-10-27',
     items: [

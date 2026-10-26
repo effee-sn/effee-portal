@@ -441,6 +441,46 @@ describe('Sales rules: activities and reviews are open at every stage until Won 
   });
 });
 
+describe('Sales rules: Sales own → View shows only your own enquiries', () => {
+  const listQuery = { filters: {}, search: '', orderBy: { created_at: 'desc' }, skip: 0, take: 100 };
+  const ownOnly = (u) => actor(u, ['SALES_VIEW_OWN', 'SALES_CREATE', 'SALES_ACTIVITY_EDIT']);
+
+  it('the list holds only enquiries you raised, own or hold; Sales → View holds all', async () => {
+    const mine = await newEnquiry('INCOMING', fx.field2);
+    const theirs = await newEnquiry('INCOMING', fx.field);
+    const own = (await enquiryService.list(listQuery, ownOnly(fx.field2))).items.map((e) => e.id);
+    assert.ok(own.includes(mine.id), 'mine');
+    assert.ok(!own.includes(theirs.id), 'not theirs');
+    const all = (await enquiryService.list(listQuery, actor(fx.field2, ['SALES_VIEW']))).items.map((e) => e.id);
+    assert.ok(all.includes(mine.id) && all.includes(theirs.id), 'Sales → View: all');
+    const none = (await enquiryService.list(listQuery, actor(fx.field2, []))).items;
+    assert.equal(none.length, 0, 'neither: none');
+  });
+
+  it('someone else\'s enquiry — and its activities and documents — read as not found', async () => {
+    const theirs = await newEnquiry('INCOMING', fx.field);
+    await log(theirs.id, fx.field, { subject: 'their call' });
+    const me = ownOnly(fx.field2);
+    await assert.rejects(enquiryService.getById(theirs.id, me), { name: 'NotFoundError' });
+    await assert.rejects(enquiryService.readiness(theirs.id, me), { name: 'NotFoundError' });
+    await assert.rejects(activityService.listForEnquiry(theirs.id, false, me), { name: 'NotFoundError' });
+    await assert.rejects(attachmentService.listForEnquiry(theirs.id, me), { name: 'NotFoundError' });
+    await assert.rejects(activityService.create(theirs.id, { type: 'CALL', activity_at: new Date(), subject: 'x' }, me), { name: 'ForbiddenError' });
+    const mine = await newEnquiry('INCOMING', fx.field2);
+    assert.equal((await enquiryService.getById(mine.id, me)).id, mine.id, 'mine: fine');
+  });
+
+  it('an enquiry handed to you in the flow is yours to see while it is with you', async () => {
+    const e = await newEnquiry('GENERATED');
+    await upload(e.id, 'FORMAT_PDF', fx.field);
+    await move(e.id, 'REVIEW', fx.field); // → Internal holds it
+    const internal = ownOnly(fx.internal);
+    assert.equal((await enquiryService.getById(e.id, internal)).id, e.id);
+    assert.ok((await enquiryService.list(listQuery, internal)).items.some((x) => x.id === e.id));
+    await activityService.create(e.id, { type: 'MEETING', activity_at: new Date(), subject: 'review', is_review: true }, actor(fx.internal, ['SALES_VIEW_OWN']));
+  });
+});
+
 describe('Sales rules: each person changes only their own data', () => {
   it('only the person who raised it edits the details — Internal cannot, even while holding it', async () => {
     const e = await newEnquiry('GENERATED');

@@ -482,7 +482,7 @@ export default function EnquiryDetailPage() {
   // Activities & reviews: open at every stage until Won / Lost — log with
   // Sales → View + Create, or View while it is with you (the flow gives access);
   // your own entries: edit with Sales activity → Edit while still in their stage, delete with Sales → Delete.
-  const canLogActivity = me?.is_system || (!isClosed && can('SALES_VIEW') && (can('SALES_CREATE') || isHolder));
+  const canLogActivity = me?.is_system || (!isClosed && (can('SALES_VIEW') || can('SALES_VIEW_OWN')) && (can('SALES_CREATE') || isHolder));
   const canEditActivity = me?.is_system || can('SALES_ACTIVITY_EDIT');
   const canDeleteActivity = me?.is_system || can('SALES_DELETE');
   const owns = (item) => Boolean(me?.is_system || (me?.id != null && item?.created_by === me.id));
