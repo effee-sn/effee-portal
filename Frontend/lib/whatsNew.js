@@ -12,6 +12,18 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.4.2',
+    date: '2026-10-27',
+    items: [
+      {
+        icon: 'spark',
+        title: 'Correct your own activities and reviews',
+        text: 'You can now edit any activity or review you logged, to fix a mistake — no extra permission needed. Only the person who logged an entry can edit it.',
+        perm: 'SALES_VIEW',
+      },
+    ],
+  },
+  {
     version: '1.4.1',
     date: '2026-10-26',
     items: [

@@ -383,13 +383,13 @@ describe('Sales rules: activities and reviews are open at every stage until Won 
       { name: 'ForbiddenError' });
   });
 
-  it('edit needs Sales Edit, delete needs Sales Delete — own entries only', async () => {
+  it('whoever logged an entry can always edit it; nobody else can; delete needs Sales Delete — own entries only', async () => {
     const id = (await newEnquiry('INCOMING')).id;
     const a = await activityService.create(id, { type: 'CALL', activity_at: new Date(), subject: 'mine' }, actor(fx.field));
-    await assert.rejects(activityService.update(a.id, { subject: 'x' }, actor(fx.field, ['SALES_VIEW', 'SALES_CREATE'])), { name: 'ForbiddenError' });
-    await activityService.update(a.id, { subject: 'edited' }, actor(fx.field, ['SALES_VIEW', 'SALES_EDIT']));
+    await activityService.update(a.id, { subject: 'corrected' }, actor(fx.field, ['SALES_VIEW'])); // their own: no other permission needed
+    await assert.rejects(activityService.update(a.id, { subject: 'x' }, actor(fx.field, [])), { name: 'ForbiddenError' }, 'still needs View');
     await assert.rejects(activityService.update(a.id, { subject: 'x' }, actor(fx.internal, [...FULL, 'SALES_DELETE'])),
-      { name: 'ForbiddenError' }, 'not their entry');
+      { name: 'ForbiddenError' }, 'not their entry — even with Edit');
     await assert.rejects(activityService.remove(a.id, actor(fx.field, FULL)), { name: 'ForbiddenError' }, 'delete needs Sales Delete');
     await activityService.remove(a.id, actor(fx.field, ['SALES_VIEW', 'SALES_DELETE']));
   });

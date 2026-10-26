@@ -481,9 +481,9 @@ export default function EnquiryDetailPage() {
   const canReopen = me?.is_system || can('SALES_REASSIGN');
   // Activities & reviews: open at every stage until Won / Lost — log with
   // Sales → View + Create, or View while it is with you (the flow gives access);
-  // edit with Edit, delete with Delete (own entries).
+  // your own entries you can always edit (to correct them); deleting them needs Delete.
   const canLogActivity = me?.is_system || (!isClosed && can('SALES_VIEW') && (can('SALES_CREATE') || isHolder));
-  const canEditActivity = me?.is_system || can('SALES_EDIT');
+  const canEditActivity = me?.is_system || can('SALES_VIEW');
   const canDeleteActivity = me?.is_system || can('SALES_DELETE');
   const owns = (item) => Boolean(me?.is_system || (me?.id != null && item?.created_by === me.id));
   const wonBlocked = readiness?.blocked?.WON || [];

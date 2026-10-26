@@ -16,9 +16,11 @@ const { ForbiddenError } = require('../../core');
  *     feasible).
  *   - **Sales → Edit** (SALES_EDIT) adds, while holding it: editing the
  *     enquiry's details (only the person who raised it) and deleting their
- *     own documents, activities and reviews.
+ *     own documents.
  *   - **Your own data only:** a document is replaced or deleted, and an
- *     activity or review edited or deleted, only by whoever added it.
+ *     activity or review edited or deleted, only by whoever added it. Your
+ *     own activities and reviews you can always edit; deleting them needs
+ *     Sales → Delete.
  *   - **Sales → Reassign** (SALES_REASSIGN): reassign, change the owner,
  *     reopen a closed enquiry.
  *   - System users (Super Admin): anything, any time — they fix mistakes.
@@ -105,9 +107,10 @@ const hasPerm = (actor, code) => Boolean(actor?.is_system || actor?.permissions?
  * Activities and reviews are open at every stage until the enquiry is Won or
  * Lost, not only to the holder: logging needs Sales → View, plus either
  * Sales → Create or the enquiry being with you (the flow gives the holder —
- * e.g. Internal Sales at Review — access with View alone). Editing an entry
- * needs Sales → Edit and deleting it Sales → Delete — both on your own
- * entries only (system users: any). The stage-moving side effect (needs
+ * e.g. Internal Sales at Review — access with View alone). An entry is
+ * edited only by the person who logged it — no other permission, so they can
+ * always correct their own mistakes — and deleted with Sales → Delete, also
+ * own entries only (system users: any). The stage-moving side effect (needs
  * negotiation) stays the holder's.
  * @param {'log'|'edit'|'delete'} action
  * @param {{ created_by?: number|null }|null} item  the entry, for edit / delete
@@ -126,11 +129,16 @@ function assertActivityAccess(action, actor, item = null, enquiry = null) {
     if (hasPerm(actor, 'SALES_CREATE') || (enquiry && isHandler(enquiry, actor))) return;
     throw new ForbiddenError('You need Sales create access to log activities and reviews on an enquiry that is not with you');
   }
-  const code = action === 'edit' ? 'SALES_EDIT' : 'SALES_DELETE';
-  if (!hasPerm(actor, code)) {
-    throw new ForbiddenError(`You need Sales ${action} access to ${action} activities and reviews`);
+  if (action === 'edit') {
+    // Your own entry: you can always correct it (seeing the enquiry is enough).
+    if (!hasPerm(actor, 'SALES_VIEW')) throw new ForbiddenError('You need Sales view access to edit activities and reviews');
+    assertOwnItem(item, actor, 'edit this entry');
+    return;
   }
-  assertOwnItem(item, actor, `${action} this entry`);
+  if (!hasPerm(actor, 'SALES_DELETE')) {
+    throw new ForbiddenError('You need Sales delete access to delete activities and reviews');
+  }
+  assertOwnItem(item, actor, 'delete this entry');
 }
 
 module.exports = {

@@ -13,6 +13,15 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.4.2] — 2026-10-27
+
+### Changed — Sales: your own activities and reviews you can always correct
+
+- **Editing an activity or review** is now for **the person who logged it** — no Sales → Edit needed, so mistakes can always be put right by whoever made them. **Nobody else** can edit it (Super Admin still can, to fix anything).
+- Deleting is unchanged: **Sales → Delete**, own entries only.
+
+---
+
 ## [1.4.1] — 2026-10-26
 
 ### Fixed — Sales: who can log activities and reviews
