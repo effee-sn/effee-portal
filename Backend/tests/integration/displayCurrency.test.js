@@ -48,7 +48,10 @@ before(async () => {
   });
   made.open = await mk({ stage: 'NEW', expected_value: 1000 });
   made.won = await mk({ stage: 'WON', expected_value: 1000, order_value: 1000, order_fx_rate: 1, won_at: lastMonth });
-  made.enquiries.push(made.open.id, made.won.id);
+  // Entered in the test euro itself; the order locked at 105 (not the history's 100) on a day 70 days back.
+  made.eurOpen = await mk({ stage: 'NEW', expected_value: 10000, currency_code: CODE });
+  made.eurWon = await mk({ stage: 'WON', expected_value: 10000, order_value: 10000, order_fx_rate: 105, won_at: new Date(Date.now() - 70 * DAY), currency_code: CODE });
+  made.enquiries.push(made.open.id, made.won.id, made.eurOpen.id, made.eurWon.id);
 });
 
 after(async () => {
@@ -82,6 +85,18 @@ describe('Showing amounts in another currency', () => {
     assert.equal(byId.get(made.won.id).display_currency, CODE);
     const inr = await enquiries.list({ ...q, display_currency: undefined }, sys);
     assert.equal(inr.items.find((e) => e.id === made.won.id).display_value, 1000, 'INR view: ₹1,000');
+  });
+
+  it('an amount entered in the chosen currency shows exactly as entered: €10,000 stays €10,000', async () => {
+    const q = { filters: { customer_id: made.customer }, search: '', orderBy: { created_at: 'desc' }, skip: 0, take: 10, display_currency: CODE };
+    const byId = new Map((await enquiries.list(q, sys)).items.map((e) => [e.id, e]));
+    assert.equal(byId.get(made.eurOpen.id).display_value, 10000, 'open');
+    assert.equal(byId.get(made.eurWon.id).display_value, 10000, 'won — no round trip through the locked rate and the history');
+    const page = await enquiries.getById(made.eurWon.id, sys, CODE);
+    assert.equal(page.expected_value_display, 10000);
+    assert.equal(page.order_value_display, 10000);
+    // Viewed in INR it is still its rupee value at the locked rate.
+    assert.equal((await enquiries.getById(made.eurWon.id, sys)).order_value_display, 1050000);
   });
 
   it('the dashboard adds each order at its own day\'s rate', async () => {

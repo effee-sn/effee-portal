@@ -9,7 +9,7 @@ import { ALL_STAGES, STAGE_STYLE, TYPE_LABEL, TEMPERATURE_STYLE, isAging, stageA
 import EnquiryCustomerContact from '@/components/EnquiryCustomerContact';
 import useNav from '@/lib/useNav';
 import useSalesConfig from '@/lib/useSalesConfig';
-import useCurrencies, { formatMoney } from '@/lib/money';
+import { formatMoney } from '@/lib/money';
 import usePageSize from '@/lib/usePageSize';
 import PageSizeSelect from '@/components/PageSizeSelect';
 import EnquiryKanban from '@/components/sales/EnquiryKanban';
@@ -45,13 +45,14 @@ function EnquiryModal({ onClose, onSaved }) {
   const config = useSalesConfig();
   const activeApps = (config?.applications || []).filter((a) => a.is_active);
   const [type, setType] = useState(null); // null = pick origin; else show the form
-  const currencies = useCurrencies();
+  // A new enquiry is in the navbar's currency, so what is entered matches what is shown.
+  const money = useDisplayCurrency();
+  const currencyCode = money.code;
+  const currencyName = money.list.find((c) => c.code === currencyCode)?.name;
   const [form, setForm] = useState({
-    title: '', customer_id: '', contact_id: '', application_id: '', currency_code: '', expected_value: '', description: '',
+    title: '', customer_id: '', contact_id: '', application_id: '', expected_value: '', description: '',
     is_refurbishment: false,
   });
-  // Until the user picks one, the form follows the default currency (Master Data → Currencies).
-  const currencyCode = form.currency_code || currencies?.defaultCode || 'INR';
   const [error, setError]   = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -132,11 +133,10 @@ function EnquiryModal({ onClose, onSaved }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={label}>Currency</label>
-                <select name="currency_code" value={currencyCode} onChange={change} disabled={!currencies} className="ams-input">
-                  {(currencies?.list || [{ code: 'INR', name: 'Indian Rupee' }]).map((c) => (
-                    <option key={c.code} value={c.code}>{c.code} · {c.name}</option>
-                  ))}
-                </select>
+                <div className="ams-input bg-gray-50 text-gray-700 cursor-default" aria-readonly="true">
+                  {currencyCode}{currencyName ? ` · ${currencyName}` : ''}
+                </div>
+                <p className="text-xs text-gray-400 mt-1">Change it with the currency switch in the top bar.</p>
               </div>
               <div>
                 <label className={label}>Expected Value ({currencyCode})</label>

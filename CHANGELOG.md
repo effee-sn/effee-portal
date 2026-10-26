@@ -13,6 +13,18 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.6.1] — 2026-10-27
+
+### Changed — Sales: amounts in their own currency show exactly as entered
+
+- With the top-bar currency set to an enquiry's own currency, its amount shows **exactly as entered** — a €10,000 enquiry viewed in EUR is €10,000, open or won. Before, every amount went through rupees and back, so a won order could drift (e.g. €9,523.81) when its locked rate and the currency's rate history disagreed (a back-dated rate, or a currency with no history). Amounts in other currencies convert as before: open at today's rate, won orders and sent offers at the rate of their day. Applies to the enquiry list and Kanban, the enquiry page, the Sales dashboard and the home dashboard. MIS reports stay in ₹.
+
+### Changed — Sales: a new enquiry takes the top-bar currency
+
+- The **New enquiry** form no longer has its own currency dropdown: the enquiry is raised in the currency chosen in the top bar (shown on the form, read-only), so what is entered matches what is shown. An existing enquiry's currency can still be corrected on its Edit form until it is Won or Lost.
+
+---
+
 ## [1.6.0] — 2026-10-27
 
 ### Added — Show money in any currency, from the top bar

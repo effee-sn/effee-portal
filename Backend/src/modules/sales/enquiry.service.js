@@ -279,14 +279,16 @@ function createEnquiryService(repository) {
       const page = await repository.findPage({ where, orderBy, skip: query.skip, take: query.take });
       const [rates, conv] = await Promise.all([loadRates(), displayConverter(query.display_currency)]);
       // display_value: the value shown (order once won, else expected) in the chosen
-      // currency — a won order at the rate on the day it was won, else today's.
+      // currency — as stored when that is its own currency; else a won order at the
+      // rate on the day it was won, and an open one at today's.
       return {
         ...page,
         items: page.items.map((e) => {
           const r = withInr(e, rates);
           const won = e.stage === 'WON';
-          const inr = won ? r.order_value_inr : r.expected_value_inr;
-          return { ...r, display_currency: conv.code, display_value: inr === null ? null : paise(conv.fromInr(inr, won ? e.won_at : null)) };
+          const amount = won ? e.order_value : e.expected_value;
+          const shown = amount === null ? null : paise(conv.convert(amount, e.currency_code, rates, won ? e.order_fx_rate : null, won ? e.won_at : null));
+          return { ...r, display_currency: conv.code, display_value: shown };
         }),
       };
     },
@@ -302,12 +304,12 @@ function createEnquiryService(repository) {
       if (!enquiry) throw new NotFoundError('Enquiry');
       assertCanSeeEnquiry(enquiry, actor);
       const e = await withMoney(enquiry);
-      const conv = await displayConverter(displayCurrency);
+      const [rates, conv] = await Promise.all([loadRates(), displayConverter(displayCurrency)]);
       return {
         ...e,
         display_currency: conv.code,
-        expected_value_display: e.expected_value_inr === null ? null : paise(conv.fromInr(e.expected_value_inr)),
-        order_value_display: e.order_value_inr === null ? null : paise(conv.fromInr(e.order_value_inr, e.won_at)),
+        expected_value_display: enquiry.expected_value === null ? null : paise(conv.convert(enquiry.expected_value, enquiry.currency_code, rates)),
+        order_value_display: enquiry.order_value === null ? null : paise(conv.convert(enquiry.order_value, enquiry.currency_code, rates, enquiry.order_fx_rate, enquiry.won_at)),
       };
     },
 

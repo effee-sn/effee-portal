@@ -12,6 +12,18 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.6.1',
+    date: '2026-10-27',
+    items: [
+      {
+        icon: 'spark',
+        title: 'New enquiries use the top-bar currency',
+        text: 'A new enquiry is raised in the currency chosen in the top bar — pick it there before you start. Amounts viewed in their own currency now show exactly as entered (€10,000 stays €10,000).',
+        perm: 'SALES_VIEW',
+      },
+    ],
+  },
+  {
     version: '1.6.0',
     date: '2026-10-27',
     items: [

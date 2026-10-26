@@ -47,12 +47,26 @@ const paise = (n) => Math.round(n * 100) / 100;
  * order on the day it was won, an offer on the day it was sent), taken from
  * the currency's rate history. So a past order keeps the value it had then.
  *
+ *
+ * `convert` takes an amount in its own currency: one already in the display
+ * currency is shown exactly as stored (a €10,000 enquiry viewed in EUR is
+ * €10,000 — no round trip through rupees); any other goes via INR as above.
+ *
  * @param {string} [code]  the display currency (INR or unknown: no conversion)
  * @param {import('@prisma/client').PrismaClient} [db]
- * @returns {Promise<{ code: string, fromInr: (inr: number|null, onDate?: Date|null) => number|null }>}
+ * @returns {Promise<{ code: string, fromInr: (inr: number|null, onDate?: Date|null) => number|null,
+ *   convert: (amount: unknown, currency: string|undefined, rates: Record<string, number>, lockedRate?: unknown, onDate?: Date|null) => number }>}
  */
 async function displayConverter(code, db = prisma) {
-  const none = { code: 'INR', fromInr: (inr) => (inr === null || inr === undefined ? null : Number(inr)) };
+  const withConvert = (conv) => ({
+    ...conv,
+    convert: (amount, currency, rates, lockedRate, onDate) => {
+      if (amount === null || amount === undefined) return 0;
+      if ((currency || 'INR') === conv.code) return Number(amount);
+      return conv.fromInr(toInr(amount, currency, rates, lockedRate), onDate);
+    },
+  });
+  const none = withConvert({ code: 'INR', fromInr: (inr) => (inr === null || inr === undefined ? null : Number(inr)) });
   if (!code || code === 'INR' || !/^[A-Z]{3}$/.test(String(code))) return none;
   const cur = await db.currency.findUnique({
     where: { code },
@@ -68,13 +82,13 @@ async function displayConverter(code, db = prisma) {
     for (const h of history) { if (h.from <= t) found = h.rate; else break; }
     return found ?? history[0]?.rate ?? today;
   };
-  return {
+  return withConvert({
     code: cur.code,
     fromInr: (inr, onDate) => {
       if (inr === null || inr === undefined) return null;
       return Number(inr) / (onDate ? rateOn(onDate) : today);
     },
-  };
+  });
 }
 
 module.exports = { loadRates, toInr, paise, displayConverter };

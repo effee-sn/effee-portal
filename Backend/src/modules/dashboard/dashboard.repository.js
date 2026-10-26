@@ -141,7 +141,7 @@ function createDashboardRepository(db) {
       for (const row of byStage) {
         const p = perStage.get(row.stage) || { stage: row.stage, count: 0, value: 0 };
         p.count += row._count._all;
-        p.value += conv.fromInr(toInr(row._sum.expected_value, row.currency_code, rates));
+        p.value += conv.convert(row._sum.expected_value, row.currency_code, rates);
         perStage.set(row.stage, p);
       }
       const pipeline = [...perStage.values()].map((p) => ({ ...p, value: Math.round(p.value) }));
@@ -153,7 +153,7 @@ function createDashboardRepository(db) {
         open_value: pipeline.reduce((n, r) => n + r.value, 0),
         won_this_month: {
           count: wonMonth.length,
-          value: Math.round(wonMonth.reduce((n, e) => n + conv.fromInr(toInr(e.order_value, e.currency_code, rates, e.order_fx_rate), e.won_at), 0)),
+          value: Math.round(wonMonth.reduce((n, e) => n + conv.convert(e.order_value, e.currency_code, rates, e.order_fx_rate, e.won_at), 0)),
         },
         lost_this_month: lostMonth,
         win_rate_90d: won90 + lost90 > 0 ? Math.round((won90 / (won90 + lost90)) * 100) : null,
