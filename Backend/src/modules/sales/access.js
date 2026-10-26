@@ -95,25 +95,36 @@ function assertCanLose(enquiry, actor) {
   assertFlowWork(enquiry, actor, 'mark it lost');
 }
 
+/** Closed: no new activities or reviews until it is reopened. */
+const CLOSED_STAGES = Object.freeze(['WON', 'LOST']);
+
 /** Holds a permission (system users hold all). */
 const hasPerm = (actor, code) => Boolean(actor?.is_system || actor?.permissions?.includes(code));
 
 /**
- * Activities and reviews are open at every stage, not only to the holder:
- * logging needs Sales → View + Create; editing an entry Sales → Edit and
- * deleting it Sales → Delete — both on your own entries only (system users:
- * any). The stage-moving side effect (needs negotiation) stays the holder's.
+ * Activities and reviews are open at every stage until the enquiry is Won or
+ * Lost, not only to the holder: logging needs Sales → View, plus either
+ * Sales → Create or the enquiry being with you (the flow gives the holder —
+ * e.g. Internal Sales at Review — access with View alone). Editing an entry
+ * needs Sales → Edit and deleting it Sales → Delete — both on your own
+ * entries only (system users: any). The stage-moving side effect (needs
+ * negotiation) stays the holder's.
  * @param {'log'|'edit'|'delete'} action
  * @param {{ created_by?: number|null }|null} item  the entry, for edit / delete
+ * @param {{ stage: string, handler_id?: number|null, owner_id?: number|null }|null} enquiry  for log
  * @throws {ForbiddenError}
  */
-function assertActivityAccess(action, actor, item = null) {
+function assertActivityAccess(action, actor, item = null, enquiry = null) {
   if (actor?.is_system) return;
   if (action === 'log') {
-    if (!hasPerm(actor, 'SALES_VIEW') || !hasPerm(actor, 'SALES_CREATE')) {
-      throw new ForbiddenError('You need Sales view and create access to log activities and reviews');
+    if (enquiry && CLOSED_STAGES.includes(enquiry.stage)) {
+      throw new ForbiddenError(`This enquiry is ${enquiry.stage === 'WON' ? 'won' : 'lost'} — no new activities or reviews (reopen it first)`);
     }
-    return;
+    if (!hasPerm(actor, 'SALES_VIEW')) {
+      throw new ForbiddenError('You need Sales view access to log activities and reviews');
+    }
+    if (hasPerm(actor, 'SALES_CREATE') || (enquiry && isHandler(enquiry, actor))) return;
+    throw new ForbiddenError('You need Sales create access to log activities and reviews on an enquiry that is not with you');
   }
   const code = action === 'edit' ? 'SALES_EDIT' : 'SALES_DELETE';
   if (!hasPerm(actor, code)) {

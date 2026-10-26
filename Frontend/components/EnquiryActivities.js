@@ -233,7 +233,7 @@ function ActivityModal({ enquiryId, activity, users, stage, onClose, onSaved }) 
 }
 
 // ── Timeline ──────────────────────────────────────────────────────────────────
-// canCreate: log (Sales → View + Create, any stage). canEdit / canDelete: Sales →
+// canCreate: log (until Won / Lost: View + Create, or View while holding it). canEdit / canDelete: Sales →
 // Edit / Delete. owns(activity): only whoever logged it may edit or delete it.
 export default function EnquiryActivities({ enquiryId, canCreate, canEdit = canCreate, canDelete = canEdit, owns = () => true, users = [], stage, onChanged }) {
   const [items, setItems]     = useState([]);

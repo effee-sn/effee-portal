@@ -13,6 +13,15 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.4.1] — 2026-10-26
+
+### Fixed — Sales: who can log activities and reviews
+
+- **The person an enquiry is with can always log** activities and reviews on it with **Sales → View** alone — the flow gives access (e.g. Internal Sales at Review, who often has no Sales → Create). 1.4.0 had required View + Create from everyone. Anyone else still needs **Sales → View + Create**.
+- **Closed at Won / Lost**: no new activities or reviews once an enquiry is won or lost (reopen it first). Editing and deleting your own existing entries is unchanged.
+
+---
+
 ## [1.4.0] — 2026-10-25
 
 ### Changed — Sales: activities and reviews open at every stage

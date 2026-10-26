@@ -348,15 +348,39 @@ describe('Sales rules: the flow gives access (no Sales edit needed)', () => {
   });
 });
 
-describe('Sales rules: activities and reviews are open at every stage', () => {
+describe('Sales rules: activities and reviews are open at every stage until Won / Lost', () => {
   it('logging needs Sales View + Create — at any stage, whoever holds the enquiry', async () => {
     const id = (await toOfferReleased()).id; // Internal holds it
     await activityService.create(id, { type: 'CALL', activity_at: new Date(), subject: 'field call' }, actor(fx.field, ['SALES_VIEW', 'SALES_CREATE']));
     await activityService.create(id, { type: 'MEETING', activity_at: new Date(), subject: 'extra review', is_review: true }, actor(fx.field, ['SALES_VIEW', 'SALES_CREATE']));
     await assert.rejects(
       activityService.create(id, { type: 'CALL', activity_at: new Date(), subject: 'x' }, actor(fx.field, ['SALES_VIEW'])),
-      { name: 'ForbiddenError', message: /view and create/ },
+      { name: 'ForbiddenError', message: /create access/ }, 'View only, and not with them',
     );
+    await assert.rejects(
+      activityService.create(id, { type: 'CALL', activity_at: new Date(), subject: 'x' }, actor(fx.field, ['SALES_CREATE'])),
+      { name: 'ForbiddenError', message: /view access/ },
+    );
+  });
+
+  it('the person it is with logs with View alone — Internal Sales at Review', async () => {
+    const e = await newEnquiry('GENERATED');
+    await upload(e.id, 'FORMAT_PDF', fx.field);
+    await move(e.id, 'REVIEW', fx.field); // → Internal holds it
+    const viewOnly = actor(fx.internal, ['SALES_VIEW']);
+    await activityService.create(e.id, { type: 'MEETING', activity_at: new Date(), subject: 'review', is_review: true }, viewOnly);
+    await activityService.create(e.id, { type: 'CALL', activity_at: new Date(), subject: 'call' }, viewOnly);
+    await assert.rejects(activityService.create(e.id, { type: 'CALL', activity_at: new Date(), subject: 'x' }, actor(fx.internal, [])),
+      { name: 'ForbiddenError', message: /view access/ }, 'still needs View');
+  });
+
+  it('closed at Won / Lost: no new activities or reviews', async () => {
+    const id = (await newEnquiry('INCOMING')).id;
+    await log(id, fx.field);
+    await enquiryService.lose(id, { lost_reason: 'Not feasible' }, actor(fx.field));
+    await assert.rejects(log(id, fx.field), { name: 'ForbiddenError', message: /lost/ });
+    await assert.rejects(activityService.create(id, { type: 'MEETING', activity_at: new Date(), subject: 'r', is_review: true }, actor(fx.internal, [...FULL, 'SALES_DELETE'])),
+      { name: 'ForbiddenError' });
   });
 
   it('edit needs Sales Edit, delete needs Sales Delete — own entries only', async () => {
@@ -1135,11 +1159,11 @@ describe('Sales MIS reports', () => {
     wonId = w.id;
 
     const l = await newEnquiry('GENERATED', owner, { expected_value: 40000 });
+    await log(l.id, owner); // a follow-up logged by the owner (before it was lost — closed ones take none)
     await enquiryService.lose(l.id, { lost_reason: 'Budget cut', lost_to: 'Rival' }, actor(owner));
     lostId = l.id;
 
     await newEnquiry('INCOMING', owner, { expected_value: 25000 });
-    await log(lostId, owner); // a follow-up logged by the owner
   });
 
   it('Monthly MIS: this month carries the raised, offered, won and lost figures', async () => {

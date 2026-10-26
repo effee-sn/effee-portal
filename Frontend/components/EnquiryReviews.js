@@ -109,7 +109,7 @@ function ReviewModal({ enquiryId, review, users, onClose, onSaved }) {
 }
 
 // ── Reviews card ──────────────────────────────────────────────────────────────
-// canCreate: log (Sales → View + Create, any stage). canEdit / canDelete: Sales →
+// canCreate: log (until Won / Lost: View + Create, or View while holding it). canEdit / canDelete: Sales →
 // Edit / Delete. owns(review): only whoever logged it may edit or delete it.
 export default function EnquiryReviews({ enquiryId, canCreate, canEdit = canCreate, canDelete = canEdit, owns = () => true, users = [], onChanged }) {
   const [items, setItems]   = useState([]);

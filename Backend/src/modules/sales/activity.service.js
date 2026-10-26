@@ -102,8 +102,8 @@ function createActivityService(repository) {
      */
     async create(enquiryId, dto, actor) {
       const enquiry = await loadEnquiry(enquiryId);
-      // Open at every stage (Sales → View + Create), not only to the holder.
-      assertActivityAccess('log', actor);
+      // Open at every stage until Won / Lost: Sales → View + Create, or View while it is with you.
+      assertActivityAccess('log', actor, null, enquiry);
       assertMayFlagNegotiation(enquiry, dto, actor);
 
       const data = pickWritable(dto, {

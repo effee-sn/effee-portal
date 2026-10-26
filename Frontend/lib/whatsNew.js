@@ -12,6 +12,18 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.4.1',
+    date: '2026-10-26',
+    items: [
+      {
+        icon: 'spark',
+        title: 'Activities and reviews: the enquiry’s holder can always log',
+        text: 'Whoever an enquiry is with right now (for example Internal Sales at Review) can log activities and reviews with Sales view access alone. Others need view and create access. Once an enquiry is won or lost, no new activities or reviews are added.',
+        perm: 'SALES_VIEW',
+      },
+    ],
+  },
+  {
     version: '1.4.0',
     date: '2026-10-25',
     items: [
