@@ -8,17 +8,18 @@ import { useEffect, useRef, useState } from 'react';
  *
  * @param {object} props
  * @param {string} props.value       the selected value ('' = none)
- * @param {(value: string) => void} props.onChange
+ * @param {(value: string, item?: any) => void} props.onChange  the picked item too ('' and none when cleared)
  * @param {(q: string, skip: number) => Promise<{ items: any[], has_more: boolean }>} props.fetchPage
  * @param {(item: any) => string} props.getValue
  * @param {(item: any) => { label: string, sub?: string }} props.describe
  * @param {string} [props.placeholder]   shown when nothing is selected
  * @param {string} [props.searchPlaceholder]
  * @param {boolean} [props.invalid]      red border
+ * @param {string} [props.display]       text shown for the selected value (default: the value itself)
  */
 export default function AsyncSearchSelect({
   value, onChange, fetchPage, getValue, describe,
-  placeholder = '— Select —', searchPlaceholder = 'Type to search…', invalid = false,
+  placeholder = '— Select —', searchPlaceholder = 'Type to search…', invalid = false, display,
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -59,13 +60,13 @@ export default function AsyncSearchSelect({
     finally { setBusy(false); }
   };
 
-  const pick = (v) => { onChange(v); setOpen(false); setQ(''); };
+  const pick = (v, item) => { onChange(v, item); setOpen(false); setQ(''); };
 
   return (
     <div ref={boxRef} className="relative">
       <button type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="listbox" aria-expanded={open}
         className={`w-full flex items-center justify-between gap-2 px-3 py-2 border rounded-lg text-sm text-left bg-[var(--ams-surface)] cursor-pointer ${invalid ? 'border-red-400' : 'border-gray-300'}`}>
-        <span className={`truncate ${value ? 'text-gray-900 font-mono' : 'text-gray-400'}`}>{value || placeholder}</span>
+        <span className={`truncate ${value ? 'text-gray-900 font-mono' : 'text-gray-400'}`}>{value ? (display ?? value) : placeholder}</span>
         <span className="flex items-center gap-1 shrink-0">
           {value && (
             <span role="button" tabIndex={0} aria-label="Clear" onClick={(e) => { e.stopPropagation(); onChange(''); }}
@@ -92,7 +93,7 @@ export default function AsyncSearchSelect({
               const v = getValue(it); const d = describe(it);
               return (
                 <li key={v} role="option" aria-selected={v === value}>
-                  <button type="button" onClick={() => pick(v)}
+                  <button type="button" onClick={() => pick(v, it)}
                     className={`w-full text-left px-4 py-2 cursor-pointer hover:bg-gray-50 ${v === value ? 'bg-gray-50' : ''}`}>
                     <span className="block text-sm text-gray-800 font-mono">{d.label}</span>
                     {d.sub && <span className="block text-xs text-gray-500">{d.sub}</span>}

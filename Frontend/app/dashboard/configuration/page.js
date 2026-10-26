@@ -7,6 +7,9 @@ import usePermissions from '@/lib/usePermissions';
 import { SkeletonLine } from '@/components/Skeleton';
 import SalesConfig from '@/components/config/SalesConfig';
 import MaterialCodesConfig from '@/components/config/MaterialCodesConfig';
+import UnitsConfig from '@/components/config/UnitsConfig';
+import RevisionsConfig from '@/components/config/RevisionsConfig';
+import MachineIdsConfig from '@/components/config/MachineIdsConfig';
 
 /**
  * Administrator → Configuration: every module's settings in one place.
@@ -26,6 +29,21 @@ const SECTIONS = [
     key: 'material-codes', label: 'Material Codes', perm: 'MATERIAL_CONFIG_VIEW',
     hint: 'IMM code prefixes and numbering',
     render: (has) => <MaterialCodesConfig has={has} />,
+  },
+  {
+    key: 'units', label: 'Units of Measure', perm: 'MATERIAL_CONFIG_VIEW',
+    hint: 'What material quantities are counted in',
+    render: (has) => <UnitsConfig has={has} />,
+  },
+  {
+    key: 'revisions', label: 'Revisions', perm: 'MATERIAL_CONFIG_VIEW',
+    hint: 'How subassembly revisions are labelled',
+    render: (has) => <RevisionsConfig has={has} />,
+  },
+  {
+    key: 'machine-ids', label: 'Machine IDs', perm: 'PROJECT_CONFIG_VIEW',
+    hint: 'How project machines are numbered',
+    render: (has) => <MachineIdsConfig has={has} />,
   },
 ];
 

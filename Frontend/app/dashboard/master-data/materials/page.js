@@ -2,114 +2,25 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
-import { apiGet, apiPut, apiDelete } from '@/lib/api';
+import { apiGet, downloadFile } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
 import usePageSize from '@/lib/usePageSize';
 import PageSizeSelect from '@/components/PageSizeSelect';
 import { MATERIAL_TYPES, MATERIAL_TYPE_LABEL } from '@/lib/materialOptions';
-import AsyncSearchSelect from '@/components/AsyncSearchSelect';
 
 /**
- * Master Data → Materials. The list, with search and filters; new materials
- * are added in bulk on /new; a row opens its edit form. The IMM code is
- * generated from the chosen prefix and never changes.
+ * Master Data → Materials. The list, with search and filters, and an Excel
+ * export of what's filtered; new materials are added in bulk on /new; a row
+ * opens the material's page (details, where it's used, history). The IMM code
+ * is generated from the chosen prefix and never changes.
  */
-
-const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1';
-
-function EditModal({ material, canEdit, canDelete, onClose, onSaved, onDeleted }) {
-  const [form, setForm] = useState({
-    drawing_no: material.drawing_no || '', item_name: material.item_name, description: material.description,
-    technical_spec: material.technical_spec, material_type: material.material_type, material: material.material,
-    remarks: material.remarks || '', is_active: material.is_active,
-  });
-  const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
-  const set = (k, v) => { setForm((f) => ({ ...f, [k]: v })); setError(''); };
-  // The drawing no. is picked from the BOM subassemblies (or left empty).
-  const fetchDrawings = (q, skip) => apiGet(`/materials/drawing-options?q=${encodeURIComponent(q)}&skip=${skip}`, { silent: true }).then((r) => r.data);
-
-  const submit = async (e) => {
-    e.preventDefault();
-    setSaving(true); setError('');
-    try { const r = await apiPut(`/materials/${material.id}`, { ...form, drawing_no: form.drawing_no || null }); onSaved(r.data); onClose(); }
-    catch (err) { setError(err.message); }
-    finally { setSaving(false); }
-  };
-  const del = async () => {
-    if (!window.confirm(`Delete ${material.imm_code} (${material.item_name})?`)) return;
-    try { await apiDelete(`/materials/${material.id}`); onDeleted(material.id); onClose(); }
-    catch (err) { setError(err.message); }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-2xl bg-white rounded-lg shadow-xl flex flex-col max-h-[92vh]">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <div>
-            <p className="text-xs text-gray-500">IMM code</p>
-            <h2 className="text-base font-semibold font-mono text-gray-800">{material.imm_code}</h2>
-          </div>
-          <button onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-gray-600 text-2xl leading-none cursor-pointer">&times;</button>
-        </div>
-        <form onSubmit={submit} className="overflow-y-auto px-6 py-4 space-y-4">
-          {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm">{error}</div>}
-          <fieldset disabled={!canEdit} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className={label} htmlFor="m-name">Item name<span className="text-red-500"> *</span></label>
-                <input id="m-name" value={form.item_name} onChange={(e) => set('item_name', e.target.value)} required maxLength={191} className="ams-input" />
-              </div>
-              <div>
-                <span className={label}>Drawing no. <span className="normal-case font-normal text-gray-400">(from the BOM, optional)</span></span>
-                {canEdit
-                  ? <AsyncSearchSelect value={form.drawing_no} onChange={(v) => set('drawing_no', v || '')} fetchPage={fetchDrawings}
-                      getValue={(d) => d.drawing_no} describe={(d) => ({ label: d.drawing_no, sub: d.name })}
-                      placeholder="None" searchPlaceholder="Search drawing no. or name…" />
-                  : <p className="text-sm text-gray-700 py-1.5">{form.drawing_no || '—'}</p>}
-              </div>
-              <div>
-                <label className={label} htmlFor="m-type">Material type<span className="text-red-500"> *</span></label>
-                <select id="m-type" value={form.material_type} onChange={(e) => set('material_type', e.target.value)} className="ams-input">
-                  {MATERIAL_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className={label} htmlFor="m-mat">Material<span className="text-red-500"> *</span></label>
-                <input id="m-mat" value={form.material} onChange={(e) => set('material', e.target.value)} required maxLength={191} placeholder="e.g. MS, SS304, Copper" className="ams-input" />
-              </div>
-            </div>
-            <div>
-              <label className={label} htmlFor="m-desc">Description<span className="text-red-500"> *</span></label>
-              <textarea id="m-desc" value={form.description} onChange={(e) => set('description', e.target.value)} required rows={2} className="ams-input resize-y" />
-            </div>
-            <div>
-              <label className={label} htmlFor="m-spec">Technical specification<span className="text-red-500"> *</span></label>
-              <textarea id="m-spec" value={form.technical_spec} onChange={(e) => set('technical_spec', e.target.value)} required rows={3} className="ams-input resize-y" />
-            </div>
-            <div>
-              <label className={label} htmlFor="m-rem">Remarks</label>
-              <textarea id="m-rem" value={form.remarks} onChange={(e) => set('remarks', e.target.value)} rows={2} placeholder="Optional" className="ams-input resize-y" />
-            </div>
-            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-              <input type="checkbox" checked={form.is_active} onChange={(e) => set('is_active', e.target.checked)} /> Active
-            </label>
-          </fieldset>
-          <div className="flex gap-3 pt-1">
-            {canDelete && <button type="button" onClick={del} className="btn-danger justify-center py-2">Delete</button>}
-            <button type="button" onClick={onClose} className="btn-secondary flex-1 justify-center py-2">{canEdit ? 'Cancel' : 'Close'}</button>
-            {canEdit && <button type="submit" disabled={saving} className="btn-primary flex-1 justify-center py-2">{saving ? 'Saving…' : 'Save'}</button>}
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
 
 export default function MaterialsPage() {
   useAuth();
+  const router = useRouter();
   const { me, can, loading: permLoading } = usePermissions();
   const has = (code) => me?.is_system || can(code);
   const canView = has('MATERIAL_VIEW');
@@ -121,17 +32,30 @@ export default function MaterialsPage() {
   const [search, setSearch] = useState('');
   const [type, setType] = useState('');
   const [prefixId, setPrefixId] = useState('');
+  const [unitId, setUnitId] = useState('');
+  const [kind, setKind] = useState(''); // '' | 'part' | 'subassembly'
   const [prefixes, setPrefixes] = useState([]);
+  const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   const [limit, setLimit, limitRef] = usePageSize('materials', 20);
 
-  const fetchRows = async (p = page, s = search, t = type, px = prefixId) => {
+  /** The current search and filters as a query string. */
+  const filterQuery = (s = search, t = type, px = prefixId, u = unitId, k = kind) => {
+    const q = new URLSearchParams({ search: s });
+    if (k) q.set('kind', k);
+    if (t) q.set('material_type', t);
+    if (px) q.set('prefix_id', px);
+    if (u) q.set('uom_id', u);
+    return q;
+  };
+
+  const fetchRows = async (p = page, s = search, t = type, px = prefixId, u = unitId, k = kind) => {
     setLoading(true);
     try {
-      const q = new URLSearchParams({ page: String(p), limit: String(limitRef.current), search: s });
-      if (t) q.set('material_type', t);
-      if (px) q.set('prefix_id', px);
+      const q = filterQuery(s, t, px, u, k);
+      q.set('page', String(p)); q.set('limit', String(limitRef.current));
       const res = await apiGet(`/materials?${q.toString()}`);
       setRows(res.data); setTotal(res.meta.pagination.total);
     } catch { setRows([]); }
@@ -142,6 +66,7 @@ export default function MaterialsPage() {
     if (!permLoading && canView) {
       fetchRows(1);
       apiGet('/materials/prefixes', { silent: true }).then((r) => setPrefixes(r.data || [])).catch(() => {});
+      apiGet('/materials/units', { silent: true }).then((r) => setUnits(r.data || [])).catch(() => {});
     } else if (!permLoading) setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [permLoading]);
@@ -149,10 +74,20 @@ export default function MaterialsPage() {
   const onSearch = (e) => { e.preventDefault(); setPage(1); fetchRows(1, search); };
   const onType = (v) => { setType(v); setPage(1); fetchRows(1, search, v); };
   const onPrefix = (v) => { setPrefixId(v); setPage(1); fetchRows(1, search, type, v); };
+  const onUnit = (v) => { setUnitId(v); setPage(1); fetchRows(1, search, type, prefixId, v); };
+  const onKind = (v) => { setKind(v); setPage(1); fetchRows(1, search, type, prefixId, unitId, v); };
   const goPage = (d) => { const p = page + d; setPage(p); fetchRows(p); };
   const onPageSize = (n) => { setLimit(n); setPage(1); fetchRows(1); };
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to = Math.min(page * limit, total);
+
+  const exportXlsx = async () => {
+    setExporting(true);
+    setExportError('');
+    try { await downloadFile(`/materials/export?${filterQuery().toString()}`, `materials-${new Date().toISOString().slice(0, 10)}.xlsx`); }
+    catch (e) { setExportError(e.message); }
+    finally { setExporting(false); }
+  };
 
   if (permLoading) return <div className="bg-white rounded border border-gray-200 overflow-hidden"><TableSkeleton cols={6} rows={6} /></div>;
   if (!canView) {
@@ -164,6 +99,8 @@ export default function MaterialsPage() {
     );
   }
 
+  const selectCls = 'py-1.5 px-2 text-sm text-gray-700 border border-gray-300 rounded bg-white outline-none cursor-pointer';
+
   return (
     <div className="bg-white rounded border border-gray-200 overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-3 border-b border-gray-200 flex-wrap">
@@ -173,20 +110,31 @@ export default function MaterialsPage() {
         )}
         <span className="text-sm font-medium text-gray-700 shrink-0 px-1">Materials</span>
         <div className="flex-1" />
-        <select value={type} onChange={(e) => onType(e.target.value)} aria-label="Material type"
-          className="py-1.5 px-2 text-sm text-gray-700 border border-gray-300 rounded bg-white outline-none cursor-pointer">
+        <select value={kind} onChange={(e) => onKind(e.target.value)} aria-label="Parts or subassemblies" className={selectCls}>
+          <option value="">Parts &amp; subassemblies</option>
+          <option value="part">Parts only</option>
+          <option value="subassembly">Subassemblies only</option>
+        </select>
+        <select value={type} onChange={(e) => onType(e.target.value)} aria-label="Material type" className={selectCls}>
           <option value="">All types</option>
           {MATERIAL_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
         </select>
-        <select value={prefixId} onChange={(e) => onPrefix(e.target.value)} aria-label="Prefix"
-          className="py-1.5 px-2 text-sm text-gray-700 border border-gray-300 rounded bg-white outline-none cursor-pointer">
+        <select value={prefixId} onChange={(e) => onPrefix(e.target.value)} aria-label="Prefix" className={selectCls}>
           <option value="">All prefixes</option>
           {prefixes.map((p) => <option key={p.id} value={p.id}>{p.prefix}</option>)}
+        </select>
+        <select value={unitId} onChange={(e) => onUnit(e.target.value)} aria-label="Unit" className={selectCls}>
+          <option value="">All units</option>
+          {units.map((u) => <option key={u.id} value={u.id}>{u.code}</option>)}
         </select>
         <form onSubmit={onSearch} className="flex items-center border border-gray-300 rounded overflow-hidden min-w-[220px]">
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search code, name, drawing, material…"
             className="flex-1 min-w-0 py-1.5 px-2.5 text-sm text-gray-700 outline-none bg-transparent" />
         </form>
+        <button type="button" onClick={exportXlsx} disabled={exporting || total === 0} className="btn-secondary px-3 py-1.5"
+          title="Download the filtered list as an Excel file">
+          {exporting ? 'Exporting…' : 'Excel'}
+        </button>
         <div className="flex items-center gap-0.5 shrink-0 text-sm text-gray-500">
           <PageSizeSelect value={limit} onChange={onPageSize} />
           <span className="px-1 tabular-nums">{total === 0 ? '0' : `${from}-${to}`} / {total}</span>
@@ -197,13 +145,15 @@ export default function MaterialsPage() {
         </div>
       </div>
 
+      {exportError && <p className="mx-3 mt-3 px-3 py-2 rounded text-sm border bg-red-50 border-red-200 text-red-700">{exportError}</p>}
+
       {loading ? <TableSkeleton cols={6} rows={6} /> : rows.length === 0 ? (
         <p className="py-14 text-center text-sm text-gray-400">
-          No materials {search || type || prefixId ? 'match your filters' : 'yet'}.
+          No materials {search || type || prefixId || unitId || kind ? 'match your filters' : 'yet'}.
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm" style={{ minWidth: 900 }}>
+          <table className="w-full text-sm" style={{ minWidth: 960 }}>
             <thead>
               <tr className="border-b border-gray-200 text-left text-gray-500">
                 <th className="px-3 py-3 font-normal">IMM code</th>
@@ -211,18 +161,25 @@ export default function MaterialsPage() {
                 <th className="px-3 py-3 font-normal">Drawing no.</th>
                 <th className="px-3 py-3 font-normal">Type</th>
                 <th className="px-3 py-3 font-normal">Material</th>
+                <th className="px-3 py-3 font-normal">Unit</th>
                 <th className="px-3 py-3 font-normal">Description</th>
                 <th className="px-3 py-3 font-normal">Status</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((m) => (
-                <tr key={m.id} onClick={() => setEditing(m)} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer">
-                  <td className="px-3 py-2.5 font-mono text-xs font-semibold text-gray-800 whitespace-nowrap">{m.imm_code}</td>
-                  <td className="px-3 py-2.5 text-gray-800">{m.item_name}</td>
+                <tr key={m.id} onClick={() => router.push(`/dashboard/master-data/materials/${m.id}`)} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer">
+                  <td className="px-3 py-2.5 font-mono text-xs font-semibold whitespace-nowrap">
+                    <Link href={`/dashboard/master-data/materials/${m.id}`} onClick={(e) => e.stopPropagation()} className="text-gray-800 hover:underline">{m.imm_code}</Link>
+                  </td>
+                  <td className="px-3 py-2.5 text-gray-800">
+                    {m.item_name}
+                    {m.subassembly && <span className="ml-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700">Subassembly</span>}
+                  </td>
                   <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{m.drawing_no || '—'}</td>
                   <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{MATERIAL_TYPE_LABEL[m.material_type]}</td>
                   <td className="px-3 py-2.5 text-gray-600">{m.material}</td>
+                  <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{m.uom?.code}</td>
                   <td className="px-3 py-2.5 text-gray-500 max-w-xs truncate" title={m.description}>{m.description}</td>
                   <td className="px-3 py-2.5">
                     <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium ${m.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
@@ -234,13 +191,6 @@ export default function MaterialsPage() {
             </tbody>
           </table>
         </div>
-      )}
-
-      {editing && (
-        <EditModal material={editing} canEdit={has('MATERIAL_EDIT')} canDelete={has('MATERIAL_DELETE')}
-          onClose={() => setEditing(null)}
-          onSaved={(m) => setRows((prev) => prev.map((r) => (r.id === m.id ? m : r)))}
-          onDeleted={(id) => { setRows((prev) => prev.filter((r) => r.id !== id)); setTotal((t) => t - 1); }} />
       )}
     </div>
   );

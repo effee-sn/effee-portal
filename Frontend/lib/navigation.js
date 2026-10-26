@@ -89,8 +89,8 @@ export const AREAS = [
       { label: 'Customers', href: '/dashboard/master-data/customers', perm: 'CUSTOMER_VIEW' },
       { label: 'Currencies', href: '/dashboard/master-data/currencies', perm: 'CURRENCY_VIEW' },
       { label: 'Materials', href: '/dashboard/master-data/materials', perm: 'MATERIAL_VIEW' },
-      // Drawing-wise BOMs: a reusable library that projects pick from.
-      { label: 'BOM', href: '/dashboard/master-data/bom', perm: 'BOM_VIEW' },
+      // Drawing-wise subassemblies (multi-level): the library project BOMs pick from.
+      { label: 'Subassemblies', href: '/dashboard/master-data/subassemblies', perm: 'SUBASSEMBLY_VIEW' },
     ],
   },
   {
@@ -103,7 +103,7 @@ export const AREAS = [
       { label: 'Departments',  href: '/dashboard/departments', perm: 'DEPT_VIEW' },
       { label: 'Flow Builder', href: '/dashboard/flows',       perm: 'FLOW_VIEW' },
       // Every module's settings in one place (Sales, Material Codes, …).
-      { label: 'Configuration', href: '/dashboard/configuration', perm: null, anyPerm: ['SALES_CONFIG_VIEW', 'MATERIAL_CONFIG_VIEW'] },
+      { label: 'Configuration', href: '/dashboard/configuration', perm: null, anyPerm: ['SALES_CONFIG_VIEW', 'MATERIAL_CONFIG_VIEW', 'PROJECT_CONFIG_VIEW'] },
       { label: 'Audit Log',    href: '/dashboard/audit',       perm: null, system: true },
       { label: 'Backup',       href: '/dashboard/backup',      perm: null, system: true },
       { label: 'Settings',     href: '/dashboard/settings',    perm: null },

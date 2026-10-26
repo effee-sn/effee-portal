@@ -46,6 +46,30 @@ const deleteProject = async (req, res) => {
   ApiResponse.message(res, 'Project deleted successfully');
 };
 
+/** `POST /projects/:id/machines` — add machines, each with a new Machine ID. */
+const addMachines = async (req, res) => {
+  ApiResponse.created(res, await projectService.addMachines(req.params.id, req.body, requestContext(req)));
+};
+
+/** `PUT /projects/:id/machines/:machineId` */
+const updateMachine = async (req, res) => {
+  ApiResponse.ok(res, await projectService.updateMachine(req.params.id, req.params.machineId, req.body, requestContext(req)));
+};
+
+/** `DELETE /projects/:id/machines/:machineId` */
+const removeMachine = async (req, res) => {
+  await projectService.removeMachine(req.params.id, req.params.machineId, requestContext(req));
+  ApiResponse.ok(res, { id: req.params.machineId });
+};
+
+/** `GET /projects/machine-numbering` */
+const getMachineNumbering = async (req, res) => ApiResponse.ok(res, await projectService.getMachineNumbering());
+
+/** `PUT /projects/machine-numbering` */
+const setMachineNumbering = async (req, res) => {
+  ApiResponse.ok(res, await projectService.setMachineNumbering(req.body, requestContext(req)));
+};
+
 module.exports = {
   getProjects,
   getEnquiryOptions,
@@ -53,4 +77,9 @@ module.exports = {
   createProject,
   updateProject,
   deleteProject,
+  addMachines,
+  updateMachine,
+  removeMachine,
+  getMachineNumbering,
+  setMachineNumbering,
 };

@@ -66,7 +66,7 @@ function createLookupRepository(db) {
     findDepartments() {
       return db.department.findMany({
         where: { deleted_at: null },
-        select: { id: true, name: true },
+        select: { id: true, name: true, dept_no: true },
         orderBy: { name: 'asc' },
       });
     },

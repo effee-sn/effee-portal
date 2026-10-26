@@ -22,6 +22,16 @@ function createDepartmentService(repository) {
   }
 
   /**
+   * A department no. is unique among live departments (it goes into project
+   * tag numbers). @param {number|null|undefined} deptNo @param {number} [excludeId]
+   */
+  async function assertDeptNoFree(deptNo, excludeId) {
+    if (deptNo === null || deptNo === undefined) return;
+    const clash = await repository.findByDeptNo(deptNo, excludeId);
+    if (clash) throw new ConflictError(`Department no. ${deptNo} is already used by ${clash.name}`);
+  }
+
+  /**
    * Asserts the chosen head is a real user, when one is supplied.
    * @param {number|null|undefined} headUserId
    * @throws {ValidationError}
@@ -64,11 +74,13 @@ function createDepartmentService(repository) {
     async create(dto, actor) {
       await assertUnique({ name: dto.name });
       await assertHeadExists(dto.head_user_id);
+      await assertDeptNoFree(dto.dept_no);
 
       const dept = await repository.create({
         name: dto.name,
         description: dto.description ?? null,
         head_user_id: dto.head_user_id ?? null,
+        dept_no: dto.dept_no ?? null,
         created_by: actor?.id ?? null,
         updated_by: actor?.id ?? null,
       });
@@ -100,6 +112,7 @@ function createDepartmentService(repository) {
       if (dto.head_user_id !== undefined && dto.head_user_id !== null) {
         await assertHeadExists(dto.head_user_id);
       }
+      if (dto.dept_no !== undefined && dto.dept_no !== before.dept_no) await assertDeptNoFree(dto.dept_no, id);
 
       /** @type {Record<string, unknown>} */
       const data = {};
@@ -107,6 +120,7 @@ function createDepartmentService(repository) {
       if (dto.description  !== undefined) data.description = dto.description;
       // `head_user_id` accepts null to clear the head.
       if (dto.head_user_id !== undefined) data.head_user_id = dto.head_user_id;
+      if (dto.dept_no      !== undefined) data.dept_no = dto.dept_no;
       data.updated_by = actor?.id ?? null;
 
       const dept = await repository.update(id, data);

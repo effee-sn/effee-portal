@@ -18,13 +18,37 @@ export const RELEASES = [
       {
         icon: 'grid',
         title: 'Material master',
-        text: 'Master Data → Materials lists every material with its IMM code. Add many at once in a grid, or paste them from Excel — each code is generated from the prefix you pick.',
+        text: 'Master Data → Materials lists every material with its IMM code and unit. Add many at once in a grid, or paste them from Excel — each code is generated from the prefix you pick, and look-alike duplicates are pointed out before saving.',
         perm: 'MATERIAL_VIEW',
       },
       {
         icon: 'grid',
-        title: 'BOM — subassemblies',
-        text: 'Master Data → BOM: build subassemblies (name + drawing no.) from the material master — search by IMM code, drawing no. or name, then set the quantity.',
+        title: 'A page for every material',
+        text: 'Open a material to see its details, where it’s used (which subassemblies, how many) and its full change history. Export the list to Excel.',
+        perm: 'MATERIAL_VIEW',
+      },
+      {
+        icon: 'grid',
+        title: 'Subassemblies, any levels deep',
+        text: 'Master Data → Subassemblies: build drawing-wise subassemblies from materials — and from other subassemblies. Each gets its own IMM code, and shows its full structure with the total of every material it needs.',
+        perm: 'SUBASSEMBLY_VIEW',
+      },
+      {
+        icon: 'spark',
+        title: 'Subassembly revisions',
+        text: 'Change a subassembly through revisions (Rev A, B, C …): draft, then release with a change note. Released revisions are locked, every revision stays in the history, and you can compare any two.',
+        perm: 'SUBASSEMBLY_VIEW',
+      },
+      {
+        icon: 'grid',
+        title: 'Machines on projects',
+        text: 'Each project now has its machines, each with its own Machine ID (e.g. M0001). Open a project to see and add them. Departments have a number too, and a subassembly records the department it comes from.',
+        perm: 'PROJECT_VIEW',
+      },
+      {
+        icon: 'spark',
+        title: 'Project BOM with tag numbers',
+        text: 'A project’s BOM tab: add subassemblies and materials per machine, then lock it — every part gets its tag number (Machine ID - dept no. - subassembly - part), and you get the total of every material for the project, with an Excel export.',
         perm: 'BOM_VIEW',
       },
       {
@@ -36,7 +60,7 @@ export const RELEASES = [
       {
         icon: 'spark',
         title: 'Material code prefixes',
-        text: 'Administrator → Configuration → Material Codes sets the IMM code prefixes and their numbering (separator, digits, next number), with a live preview.',
+        text: 'Administrator → Configuration → Material Codes sets the IMM code prefixes and their numbering (separator, digits, next number), with a live preview. Units of Measure sets the units materials are counted in.',
         perm: 'MATERIAL_CONFIG_VIEW',
       },
     ],

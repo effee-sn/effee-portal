@@ -15,6 +15,7 @@ function DepartmentModal({ dept, onClose, onSaved }) {
     name: dept?.name || '',
     description: dept?.description || '',
     head_user_id: dept?.head_user_id || '',
+    dept_no: dept?.dept_no != null ? String(dept.dept_no) : '',
   });
   const [users, setUsers]   = useState([]);
   const [error, setError]   = useState('');
@@ -51,6 +52,11 @@ function DepartmentModal({ dept, onClose, onSaved }) {
           <div>
             <label className={label}>Name<span className="text-red-500"> *</span></label>
             <input name="name" value={form.name} onChange={change} required placeholder="Engineering" className="ams-input" />
+          </div>
+          <div>
+            <label className={label}>Department no. <span className="text-gray-400 font-normal normal-case">(optional)</span></label>
+            <input name="dept_no" type="number" min={1} max={999} value={form.dept_no} onChange={change} placeholder="e.g. 2" className="ams-input" />
+            <p className="text-[11px] text-gray-500 mt-1">Used in project tag numbers (Machine ID - dept no. - subassembly - part). Unique per department.</p>
           </div>
           <div>
             <label className={label}>Head / Lead <span className="text-gray-400 font-normal normal-case">(optional)</span></label>
@@ -222,6 +228,7 @@ export default function DepartmentsPage() {
               <thead>
                 <tr className="border-b border-gray-200 text-left text-gray-500">
                   <th className="px-3 py-3 font-normal">Name</th>
+                  <th className="px-3 py-3 font-normal">Dept no.</th>
                   <th className="px-3 py-3 font-normal">Head / Lead</th>
                   <th className="px-3 py-3 font-normal">Description</th>
                   <th className="px-3 py-3 font-normal">Members</th>
@@ -232,6 +239,7 @@ export default function DepartmentsPage() {
                 {rows.map((d) => (
                   <tr key={d.id} className="border-b border-gray-100 hover:bg-gray-50 group">
                     <td className="px-3 py-3 font-medium text-gray-800">{d.name}</td>
+                    <td className="px-3 py-3 text-gray-700 tabular-nums">{d.dept_no ?? '—'}</td>
                     <td className="px-3 py-3 text-gray-600">{d.head?.name || '—'}</td>
                     <td className="px-3 py-3 text-gray-500 truncate max-w-[280px]">{d.description || '—'}</td>
                     <td className="px-3 py-3 text-gray-600 tabular-nums">{d._count?.users ?? 0}</td>

@@ -111,6 +111,8 @@ model Department {
   id          Int     @id @default(autoincrement())
   name        String  @unique
   description String? @db.Text
+  // Its number in project tag numbers (Machine ID - dept no. - …); unique among live departments.
+  dept_no     Int?
 
   // The functional lead of the department. Used by workflows that route to
   // "the head of a department" (e.g. the originating department's lead).
@@ -126,9 +128,12 @@ model Department {
   users              User[]          @relation("DepartmentMembers")
   workflowSteps      WorkflowStep[]  @relation("StepAssigneeDepartment")
   originatingTickets ServiceTicket[] @relation("OriginatingTickets")
+  subassemblies      Subassembly[]
+  bom_lines          ProjectBomLine[]
 
   @@index([deleted_at])
   @@index([created_at])
+  @@index([dept_no])
 }
 
 /// A workflow definition — an ordered set of stages a record moves through.
@@ -242,6 +247,16 @@ model CompanySettings {
   company_gstin   String?
 
   // SMTP is configured from the environment (SMTP_* in .env), not stored here.
+
+  // How new subassembly revisions are labelled: LETTERS (A, B … Z, AA) or NUMBERS (00, 01 …).
+  revision_scheme      String @default("LETTERS") @db.VarChar(10)
+
+  // Machine ID numbering (Administrator → Configuration → Machine IDs): prefix +
+  // separator + zero-padded number, e.g. M0001; the counter only moves forward.
+  machine_prefix    String @default("M") @db.VarChar(20)
+  machine_separator String @default("") @db.VarChar(1)
+  machine_digits    Int    @default(4)
+  machine_next      Int    @default(1)
 
   login_max_attempts   Int @default(5)
   login_window_minutes Int @default(15)
@@ -1080,6 +1095,9 @@ model Project {
   owner    User? @relation("ProjectOwner", fields: [owner_id], references: [id])
   owner_id Int?
 
+  machines ProjectMachine[]
+  boms     ProjectBom[]
+
   start_date DateTime?
   end_date   DateTime?
 
@@ -1337,9 +1355,16 @@ model Material {
   material_type  MaterialType
   // What it is made of, e.g. MS, SS304, Copper.
   material       String       @db.VarChar(191)
+  // What its quantities are counted in (Nos, m, kg…). Fixed once it is on a subassembly.
+  uom            UnitOfMeasure @relation(fields: [uom_id], references: [id])
+  uom_id         Int
   remarks        String?      @db.Text
   is_active      Boolean      @default(true)
   bom_items      SubassemblyItem[]
+  project_bom_lines ProjectBomLine[]
+  project_bom_items ProjectBomItem[]
+  // Set when this material is a subassembly's own item.
+  subassembly    Subassembly?
 
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
@@ -1348,18 +1373,45 @@ model Material {
   updated_by Int?
 
   @@index([prefix_id])
+  @@index([uom_id])
   @@index([item_name])
   @@index([deleted_at])
 }
 
-/// A subassembly (Master Data → BOM): a drawing-wise bill of materials — a
-/// named, drawn part built from materials of the material master. Reusable:
-/// projects will pick subassemblies with their quantities.
+/// A unit of measure for material quantities (Administrator → Configuration →
+/// Units of Measure), e.g. Nos, m, kg. A used unit keeps its code.
+model UnitOfMeasure {
+  id         Int        @id @default(autoincrement())
+  code       String     @unique @db.VarChar(20)
+  name       String     @db.VarChar(100)
+  is_active  Boolean    @default(true)
+  sort_order Int        @default(0)
+  materials  Material[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by Int?
+  updated_by Int?
+}
+
+/// A subassembly (Master Data → Subassemblies): a drawing-wise part built
+/// from materials of the material master — and from other subassemblies, any
+/// levels deep. It is itself an item of the material master (a Finished
+/// material with its own IMM code), which is how it goes on other
+/// subassemblies. Reusable: project BOMs will pick subassemblies.
 model Subassembly {
-  id         Int               @id @default(autoincrement())
-  name       String            @db.VarChar(191)
-  drawing_no String            @db.VarChar(100)
-  items      SubassemblyItem[]
+  id          Int               @id @default(autoincrement())
+  name        String            @db.VarChar(191)
+  drawing_no  String            @db.VarChar(100)
+  // Its own item in the material master (null only for ones made before items existed).
+  material    Material?         @relation(fields: [material_id], references: [id])
+  material_id Int?              @unique
+  // The department it comes from (its number goes into project tag numbers).
+  department    Department?     @relation(fields: [department_id], references: [id])
+  department_id Int?
+  // Its lines, per revision; `items` is every line of every revision.
+  items       SubassemblyItem[]
+  revisions   SubassemblyRevision[]
 
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
@@ -1369,18 +1421,177 @@ model Subassembly {
 
   @@index([drawing_no])
   @@index([deleted_at])
+  @@index([department_id])
 }
 
-/// One material on a subassembly, with how many are needed.
-model SubassemblyItem {
-  id             Int         @id @default(autoincrement())
-  subassembly    Subassembly @relation(fields: [subassembly_id], references: [id], onDelete: Cascade)
-  subassembly_id Int
-  material       Material    @relation(fields: [material_id], references: [id])
-  material_id    Int
-  quantity       Decimal     @default(1) @db.Decimal(12, 3)
-  sort_order     Int         @default(0)
+enum RevisionStatus {
+  DRAFT
+  RELEASED
+  SUPERSEDED
+}
 
-  @@unique([subassembly_id, material_id])
+/// A revision of a subassembly (Rev A, B … or 00, 01 …): its lines as they
+/// stood. Only a DRAFT changes; releasing locks it (with a change note) and
+/// supersedes the one released before. At most one DRAFT and one RELEASED
+/// (the current one) per subassembly; the IMM code stays the same across them.
+model SubassemblyRevision {
+  id             Int            @id @default(autoincrement())
+  subassembly    Subassembly    @relation(fields: [subassembly_id], references: [id], onDelete: Cascade)
+  subassembly_id Int
+  // 1, 2, 3 … in order; `rev` is its label in the scheme in use when it was made.
+  seq            Int
+  rev            String         @db.VarChar(10)
+  status         RevisionStatus @default(DRAFT)
+  change_note    String?        @db.Text
+  released_at    DateTime?
+  released_by    Int?
+  items          SubassemblyItem[] @relation("RevisionLines")
+  // Lines of other subassemblies that use this revision of it.
+  pinned_by      SubassemblyItem[] @relation("PinnedChildRevision")
+  // Project BOM lines that use this revision of it.
+  bom_lines      ProjectBomLine[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by Int?
+  updated_by Int?
+
+  @@unique([subassembly_id, seq])
+  @@index([subassembly_id, status])
+}
+
+/// One line of a subassembly revision: a material (or another subassembly's
+/// item) and how many are needed. A child subassembly is held at the
+/// revision it was added at (`child_revision`) until a newer draft moves it on.
+model SubassemblyItem {
+  id                Int                  @id @default(autoincrement())
+  subassembly       Subassembly          @relation(fields: [subassembly_id], references: [id], onDelete: Cascade)
+  subassembly_id    Int
+  revision          SubassemblyRevision  @relation("RevisionLines", fields: [revision_id], references: [id], onDelete: Cascade)
+  revision_id       Int
+  material          Material             @relation(fields: [material_id], references: [id])
+  material_id       Int
+  child_revision    SubassemblyRevision? @relation("PinnedChildRevision", fields: [child_revision_id], references: [id], onDelete: Restrict)
+  child_revision_id Int?
+  quantity          Decimal              @default(1) @db.Decimal(12, 3)
+  sort_order        Int                  @default(0)
+
+  @@unique([revision_id, material_id])
+  @@index([subassembly_id])
+  @@index([material_id])
+  @@index([child_revision_id])
+}
+
+/// A machine (unit) of a project: what its BOM is built and tagged for. Its
+/// Machine ID is given when it is added, from the numbering in settings, and
+/// never changes (project tag numbers start with it).
+model ProjectMachine {
+  id          Int     @id @default(autoincrement())
+  project     Project @relation(fields: [project_id], references: [id])
+  project_id  Int
+  machine_no  String  @unique @db.VarChar(40)
+  name        String? @db.VarChar(191)
+  description String? @db.Text
+  sort_order  Int     @default(0)
+  bom_lines   ProjectBomLine[]
+  bom_items   ProjectBomItem[]
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+  created_by Int?
+  updated_by Int?
+
+  @@index([project_id])
+  @@index([deleted_at])
+}
+
+/// A revision of a project's BOM (Rev 1, 2 …). Only a DRAFT changes: its
+/// lines say, per machine, which subassemblies (held at a revision) and
+/// materials it needs. LOCKING it (status RELEASED, shown as "Locked") explodes
+/// every level into ProjectBomItem — a frozen snapshot with tag numbers — and
+/// supersedes the one locked before. At most one draft and one locked (current).
+model ProjectBom {
+  id          Int            @id @default(autoincrement())
+  project     Project        @relation(fields: [project_id], references: [id])
+  project_id  Int
+  rev         Int
+  status      RevisionStatus @default(DRAFT)
+  change_note String?        @db.Text
+  locked_at   DateTime?
+  locked_by   Int?
+  lines       ProjectBomLine[]
+  items       ProjectBomItem[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by Int?
+  updated_by Int?
+
+  @@unique([project_id, rev])
+  @@index([project_id, status])
+}
+
+/// One line of a project BOM revision: for a machine, a material or a
+/// subassembly's item (held at `child_revision`), how many, and the department
+/// it comes from (its number goes into the tags).
+model ProjectBomLine {
+  id                Int                  @id @default(autoincrement())
+  bom               ProjectBom           @relation(fields: [bom_id], references: [id], onDelete: Cascade)
+  bom_id            Int
+  machine           ProjectMachine       @relation(fields: [machine_id], references: [id])
+  machine_id        Int
+  material          Material             @relation(fields: [material_id], references: [id])
+  material_id       Int
+  child_revision    SubassemblyRevision? @relation(fields: [child_revision_id], references: [id], onDelete: Restrict)
+  child_revision_id Int?
+  department        Department?          @relation(fields: [department_id], references: [id])
+  department_id     Int?
+  quantity          Decimal              @default(1) @db.Decimal(12, 3)
+  sort_order        Int                  @default(0)
+
+  @@unique([bom_id, machine_id, material_id])
+  @@index([machine_id])
+  @@index([material_id])
+  @@index([child_revision_id])
+  @@index([department_id])
+}
+
+/// One tag of a locked project BOM: a node of the exploded structure, with
+/// the material's details as they were at lock. `tag` is Machine ID - dept
+/// no. - subassembly IMM code(s) - part IMM code, with /1, /2 … on each copy of
+/// a subassembly or Finished part needed more than once. `quantity` is how
+/// many this tag stands for (1 for a copy; the full quantity for bought-out
+/// and consumable parts).
+model ProjectBomItem {
+  id             Int            @id @default(autoincrement())
+  bom            ProjectBom     @relation(fields: [bom_id], references: [id], onDelete: Cascade)
+  bom_id         Int
+  machine        ProjectMachine @relation(fields: [machine_id], references: [id])
+  machine_id     Int
+  tag            String         @db.VarChar(255)
+  parent_tag     String?        @db.VarChar(255)
+  level          Int
+  sort_order     Int            @default(0)
+  material       Material       @relation(fields: [material_id], references: [id])
+  material_id    Int
+  is_subassembly Boolean        @default(false)
+  // For a subassembly: the revision it was exploded at.
+  revision_id    Int?
+  rev            String?        @db.VarChar(10)
+  imm_code       String         @db.VarChar(40)
+  item_name      String         @db.VarChar(191)
+  drawing_no     String?        @db.VarChar(100)
+  material_type  MaterialType
+  material_text  String         @db.VarChar(191)
+  technical_spec String?        @db.Text
+  uom            String         @db.VarChar(20)
+  dept_no        Int
+  department     String?        @db.VarChar(120)
+  qty_per_parent Decimal        @db.Decimal(12, 3)
+  quantity       Decimal        @db.Decimal(16, 3)
+
+  @@unique([bom_id, tag])
+  @@index([bom_id, machine_id])
   @@index([material_id])
 }

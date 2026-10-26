@@ -10,6 +10,7 @@ function createDepartmentRepository(db) {
     id: true,
     name: true,
     description: true,
+    dept_no: true,
     head_user_id: true,
     head: { select: { id: true, name: true } },
     created_at: true,
@@ -46,8 +47,16 @@ function createDepartmentRepository(db) {
     findActiveOptions() {
       return db.department.findMany({
         where: active(),
-        select: { id: true, name: true },
+        select: { id: true, name: true, dept_no: true },
         orderBy: { name: 'asc' },
+      });
+    },
+
+    /** Another live department with this number. @param {number} deptNo @param {number} [excludeId] */
+    findByDeptNo(deptNo, excludeId) {
+      return db.department.findFirst({
+        where: active({ dept_no: deptNo, ...(excludeId !== undefined ? { NOT: { id: excludeId } } : {}) }),
+        select: { id: true, name: true },
       });
     },
 

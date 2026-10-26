@@ -19,6 +19,11 @@ function createProjectRepository(db) {
     start_date: true,
     end_date: true,
     created_at: true,
+    _count: { select: { machines: { where: { deleted_at: null } } } },
+  });
+
+  const machineSelect = Object.freeze({
+    id: true, machine_no: true, name: true, description: true, sort_order: true, created_at: true, updated_at: true,
   });
 
   const projectDetailSelect = Object.freeze({
@@ -26,7 +31,43 @@ function createProjectRepository(db) {
     description: true,
     updated_at: true,
     created_by: true,
+    machines: { where: { deleted_at: null }, select: machineSelect, orderBy: [{ sort_order: 'asc' }, { id: 'asc' }] },
   });
+
+  /**
+   * Gives `n` new machines of a project their Machine IDs, inside `tx`: the
+   * counter in settings is advanced by `n` in one UPDATE (which locks the
+   * row), so two people adding machines at once never get the same ID.
+   * @param {import('@prisma/client').Prisma.TransactionClient} tx
+   * @param {number} projectId @param {number} n
+   * @param {(p: { machine_prefix: string, machine_separator: string, machine_digits: number }, n: number) => string} formatNo
+   * @param {{ name?: string|null, actorId?: number|null }} [extra]
+   */
+  async function addMachinesIn(tx, projectId, n, formatNo, { name = null, actorId = null } = {}) {
+    if (n < 1) return [];
+    const settings = (await tx.companySettings.findFirst({ select: { id: true } })) ?? (await tx.companySettings.create({ data: {}, select: { id: true } }));
+    const p = await tx.companySettings.update({
+      where: { id: settings.id },
+      data: { machine_next: { increment: n } },
+      select: { machine_prefix: true, machine_separator: true, machine_digits: true, machine_next: true },
+    });
+    const nos = Array.from({ length: n }, (_, i) => formatNo(p, p.machine_next - n + i));
+    const taken = await tx.projectMachine.findMany({ where: { machine_no: { in: nos } }, select: { machine_no: true } });
+    if (taken.length) {
+      const err = new Error(`Machine ID ${taken.map((t) => t.machine_no).join(', ')} already exists`);
+      err.code = 'MACHINE_NO_TAKEN';
+      throw err;
+    }
+    const last = await tx.projectMachine.aggregate({ where: { project_id: projectId }, _max: { sort_order: true } });
+    const start = (last._max.sort_order ?? -1) + 1;
+    await tx.projectMachine.createMany({
+      data: nos.map((machine_no, i) => ({
+        project_id: projectId, machine_no, name: n === 1 ? name : (name ? `${name} ${i + 1}` : null),
+        sort_order: start + i, created_by: actorId, updated_by: actorId,
+      })),
+    });
+    return nos;
+  }
 
   /** @param {Record<string, unknown>} [where] */
   const active = (where = {}) => ({ ...where, deleted_at: null });
@@ -65,9 +106,47 @@ function createProjectRepository(db) {
       return row?.code ?? null;
     },
 
-    /** @param {object} data */
-    create(data) {
-      return db.project.create({ data, select: projectDetailSelect });
+    /** A project and its first `machines` machines, together. */
+    create(data, machines, formatNo) {
+      return db.$transaction(async (tx) => {
+        const p = await tx.project.create({ data, select: { id: true } });
+        await addMachinesIn(tx, p.id, machines, formatNo, { actorId: data.created_by ?? null });
+        return tx.project.findUnique({ where: { id: p.id }, select: projectDetailSelect });
+      });
+    },
+
+    /** More machines for a project; returns their Machine IDs. */
+    addMachines(projectId, n, formatNo, extra) {
+      return db.$transaction((tx) => addMachinesIn(tx, projectId, n, formatNo, extra));
+    },
+
+    /** A live machine of a project. @param {number} projectId @param {number} machineId */
+    findMachine(projectId, machineId) {
+      return db.projectMachine.findFirst({ where: { id: machineId, project_id: projectId, deleted_at: null }, select: machineSelect });
+    },
+
+    updateMachine(machineId, data) {
+      return db.projectMachine.update({ where: { id: machineId }, data, select: machineSelect });
+    },
+
+    /** BOM revisions (any) with lines for this machine. @param {number} machineId */
+    machineBomRevs(machineId) {
+      return db.projectBom.findMany({ where: { lines: { some: { machine_id: machineId } } }, select: { rev: true, status: true }, orderBy: { rev: 'asc' } });
+    },
+
+    softDeleteMachine(machineId, actorId) {
+      return db.projectMachine.update({ where: { id: machineId }, data: { deleted_at: new Date(), updated_by: actorId }, select: { id: true } });
+    },
+
+    /** The Machine ID numbering, and how many machines exist (any project). */
+    async machineNumbering() {
+      const s = (await db.companySettings.findFirst()) ?? (await db.companySettings.create({ data: {} }));
+      const used = await db.projectMachine.count();
+      return { id: s.id, machine_prefix: s.machine_prefix, machine_separator: s.machine_separator, machine_digits: s.machine_digits, machine_next: s.machine_next, used };
+    },
+
+    setMachineNumbering(id, data) {
+      return db.companySettings.update({ where: { id }, data, select: { id: true } });
     },
 
     /** @param {number} id @param {object} data */

@@ -8,23 +8,27 @@ import { apiGet, apiPost } from '@/lib/api';
 import SearchableSelect from '@/components/SearchableSelect';
 import AsyncSearchSelect from '@/components/AsyncSearchSelect';
 import { TableSkeleton } from '@/components/Skeleton';
-import { MATERIAL_TYPES, formatImmCode } from '@/lib/materialOptions';
+import { MATERIAL_TYPES, formatImmCode, unitFromText } from '@/lib/materialOptions';
 
 /**
  * Master Data → Materials → New: add many materials at once.
  *
  * A grid, one material per row. Each row picks its IMM code prefix (searchable);
  * the code itself is generated on save, so the grid only shows what it will
- * be. The drawing no. is optional and, when given, is picked from the BOM
- * subassemblies' drawing numbers. Rows left completely empty are ignored. Rows
- * can also be pasted from Excel. Everything is saved together, or nothing is.
+ * be. The drawing no. is optional and, when given, is picked from the
+ * subassemblies' drawing numbers. Every row needs a unit of measure. Rows left
+ * completely empty are ignored. Rows can also be pasted from Excel. Before
+ * saving, rows that look like materials already in the master (or like each
+ * other) are pointed out, and can still be saved. Everything is saved
+ * together, or nothing is.
  */
 
-const REQUIRED = ['prefix_id', 'item_name', 'description', 'technical_spec', 'material_type', 'material'];
+const REQUIRED = ['prefix_id', 'item_name', 'description', 'technical_spec', 'material_type', 'material', 'uom_id'];
+// What makes a row "filled" (the prefix and unit can be preset on empty rows).
 const FIELDS = ['drawing_no', 'item_name', 'description', 'technical_spec', 'material_type', 'material', 'remarks'];
 let seq = 0;
-const blank = (prefix_id = '') => ({
-  key: (seq += 1), prefix_id, drawing_no: '', item_name: '', description: '', technical_spec: '', material_type: '', material: '', remarks: '',
+const blank = (prefix_id = '', uom_id = '') => ({
+  key: (seq += 1), prefix_id, uom_id, drawing_no: '', item_name: '', description: '', technical_spec: '', material_type: '', material: '', remarks: '',
 });
 const isEmpty = (r) => FIELDS.every((f) => !String(r[f] || '').trim());
 
@@ -46,7 +50,11 @@ export default function NewMaterialsPage() {
   const canCreate = me?.is_system || can('MATERIAL_CREATE');
 
   const [prefixes, setPrefixes] = useState(null);
-  // Drawing numbers known to be BOM subassemblies' (picked ones, and pasted ones checked with the server).
+  const [units, setUnits] = useState([]);
+  const [defaultUnit, setDefaultUnit] = useState('');
+  // Rows that look like existing materials (or each other), found on save; null = not checked.
+  const [dupes, setDupes] = useState(null);
+  // Drawing numbers known to be subassemblies' (picked ones, and pasted ones checked with the server).
   const [knownDrawings, setKnownDrawings] = useState(() => new Set());
   const [checkedDrawings, setCheckedDrawings] = useState(() => new Set());
   const [rows, setRows] = useState(() => Array.from({ length: 5 }, () => blank()));
@@ -63,8 +71,11 @@ export default function NewMaterialsPage() {
     let cancelled = false;
     apiGet('/materials/prefixes').then((r) => { if (!cancelled) setPrefixes(r.data || []); })
       .catch((e) => { if (!cancelled) { setPrefixes([]); setError(e.message); } });
+    apiGet('/materials/units').then((r) => { if (!cancelled) setUnits(r.data || []); }).catch(() => {});
     return () => { cancelled = true; };
   }, [loading, canCreate]);
+
+  const activeUnits = useMemo(() => units.filter((u) => u.is_active), [units]);
 
   const activePrefixes = useMemo(() => (prefixes || []).filter((p) => p.is_active), [prefixes]);
   const prefixOptions = useMemo(() => activePrefixes.map((p) => ({
@@ -76,10 +87,10 @@ export default function NewMaterialsPage() {
     if (v) setKnownDrawings((s) => new Set(s).add(v));
     set(key, 'drawing_no', v || '');
   };
-  // A drawing no. (e.g. pasted) the server says isn't a BOM subassembly's.
+  // A drawing no. (e.g. pasted) the server says isn't a subassembly's.
   const unknownDrawing = (r) => Boolean(r.drawing_no) && checkedDrawings.has(r.drawing_no) && !knownDrawings.has(r.drawing_no);
 
-  // Pasted drawing numbers are checked against the BOM in one call.
+  // Pasted drawing numbers are checked against the subassemblies in one call.
   const checkDrawings = async (nos) => {
     const list = [...new Set(nos.filter(Boolean))];
     if (!list.length) return;
@@ -101,9 +112,9 @@ export default function NewMaterialsPage() {
     });
   }, [rows, activePrefixes]);
 
-  const set = (key, field, value) => { setRows((prev) => prev.map((r) => (r.key === key ? { ...r, [field]: value } : r))); setError(''); };
-  const addRows = (n) => setRows((prev) => [...prev, ...Array.from({ length: n }, () => blank(defaultPrefix))]);
-  const removeRow = (key) => setRows((prev) => (prev.length > 1 ? prev.filter((r) => r.key !== key) : [blank(defaultPrefix)]));
+  const set = (key, field, value) => { setRows((prev) => prev.map((r) => (r.key === key ? { ...r, [field]: value } : r))); setError(''); setDupes(null); };
+  const addRows = (n) => setRows((prev) => [...prev, ...Array.from({ length: n }, () => blank(defaultPrefix, defaultUnit))]);
+  const removeRow = (key) => { setDupes(null); setRows((prev) => (prev.length > 1 ? prev.filter((r) => r.key !== key) : [blank(defaultPrefix, defaultUnit)])); };
   const duplicate = (key) => setRows((prev) => {
     const i = prev.findIndex((r) => r.key === key);
     const copy = { ...prev[i], key: (seq += 1) };
@@ -113,15 +124,21 @@ export default function NewMaterialsPage() {
     setDefaultPrefix(v);
     if (v) setRows((prev) => prev.map((r) => (r.prefix_id ? r : { ...r, prefix_id: v })));
   };
+  const applyUnitToEmpty = (v) => {
+    setDefaultUnit(v);
+    if (v) setRows((prev) => prev.map((r) => (r.uom_id ? r : { ...r, uom_id: v })));
+  };
 
   const applyPaste = () => {
     const lines = paste.split(/\r?\n/).map((l) => l.replace(/\s+$/, '')).filter((l) => l.trim());
     if (!lines.length) return;
     const pasted = lines.map((l) => {
       const c = l.split('\t');
-      return { ...blank(defaultPrefix), drawing_no: c[0] || '', item_name: c[1] || '', description: c[2] || '',
-        technical_spec: c[3] || '', material_type: typeFromText(c[4]), material: c[5] || '', remarks: c[6] || '' };
+      return { ...blank(defaultPrefix, defaultUnit), drawing_no: c[0] || '', item_name: c[1] || '', description: c[2] || '',
+        technical_spec: c[3] || '', material_type: typeFromText(c[4]), material: c[5] || '',
+        uom_id: unitFromText(c[6], units) || defaultUnit, remarks: c[7] || '' };
     });
+    setDupes(null);
     setRows((prev) => [...prev.filter((r) => !isEmpty(r)), ...pasted]);
     setPaste(''); setShowPaste(false);
     checkDrawings(pasted.map((p) => p.drawing_no));
@@ -131,14 +148,28 @@ export default function NewMaterialsPage() {
   const missing = (r, f) => tried && !isEmpty(r) && !String(r[f] || '').trim();
   const invalidCount = filled.filter((r) => REQUIRED.some((f) => !String(r[f] || '').trim()) || unknownDrawing(r)).length;
 
-  const save = async () => {
+  // Row number on screen of the n-th filled row.
+  const rowNo = (n) => rows.indexOf(filled[n]) + 1;
+  const dupeFor = (r) => dupes?.find((d) => filled[d.row] === r);
+
+  /** @param {boolean} anyway  save even though some rows look like duplicates */
+  const save = async (anyway = false) => {
     setTried(true); setError('');
     if (!filled.length) { setError('Fill in at least one material.'); return; }
-    if (invalidCount) { setError(`${invalidCount} row(s) need attention: a missing required field, or a drawing no. that isn't in the BOM (marked in red).`); return; }
+    if (invalidCount) { setError(`${invalidCount} row(s) need attention: a missing required field, or a drawing no. that isn't a subassembly's (marked in red).`); return; }
     setSaving(true);
     try {
-      const body = { rows: filled.map((r) => ({ ...Object.fromEntries(FIELDS.map((f) => [f, r[f]])), prefix_id: Number(r.prefix_id) })) };
+      if (!anyway) {
+        const check = await apiPost('/materials/duplicates', {
+          rows: filled.map((r) => ({ item_name: r.item_name, material: r.material, technical_spec: r.technical_spec })),
+        });
+        if (check.data.matches.length) { setDupes(check.data.matches); return; }
+      }
+      const body = { rows: filled.map((r) => ({
+        ...Object.fromEntries(FIELDS.map((f) => [f, r[f]])), prefix_id: Number(r.prefix_id), uom_id: Number(r.uom_id),
+      })) };
       const res = await apiPost('/materials/bulk', body);
+      setDupes(null);
       setCreated(res.data);
     } catch (e) { setError(e.message); }
     finally { setSaving(false); }
@@ -172,7 +203,7 @@ export default function NewMaterialsPage() {
           ))}
         </ul>
         <div className="px-5 py-4 border-t border-gray-200 flex gap-3">
-          <button type="button" onClick={() => { setCreated(null); setRows(Array.from({ length: 5 }, () => blank(defaultPrefix))); setTried(false); }}
+          <button type="button" onClick={() => { setCreated(null); setRows(Array.from({ length: 5 }, () => blank(defaultPrefix, defaultUnit))); setTried(false); }}
             className="btn-secondary px-4 py-2">Add more</button>
           <Link href="/dashboard/master-data/materials" className="btn-primary px-4 py-2">Back to materials</Link>
         </div>
@@ -190,6 +221,11 @@ export default function NewMaterialsPage() {
         <div className="w-56">
           <SearchableSelect options={prefixOptions} value={defaultPrefix} onChange={applyPrefixToEmpty} placeholder="Prefix for all rows…" />
         </div>
+        <select value={defaultUnit} onChange={(e) => applyUnitToEmpty(e.target.value)} aria-label="Unit for all rows"
+          className="py-1.5 px-2 text-sm text-gray-700 border border-gray-300 rounded bg-white outline-none cursor-pointer">
+          <option value="">Unit for all rows…</option>
+          {activeUnits.map((u) => <option key={u.id} value={u.id}>{u.code} — {u.name}</option>)}
+        </select>
         <button type="button" onClick={() => setShowPaste((v) => !v)} className="btn-secondary px-3 py-1.5">Paste from Excel</button>
       </div>
 
@@ -203,9 +239,10 @@ export default function NewMaterialsPage() {
         <div className="mx-3 mt-3 rounded border border-gray-200 p-3 space-y-2">
           <p className="text-xs text-gray-600">
             Copy rows from Excel with these columns, in this order:{' '}
-            <b>Drawing no. · Item name · Description · Technical specification · Material type · Material · Remarks</b>.
-            Material type: Finished, Bought-out or Consumables. A drawing no. must be a BOM subassembly&apos;s (or left empty).
-            The prefix chosen above is applied to every pasted row.
+            <b>Drawing no. · Item name · Description · Technical specification · Material type · Material · Unit · Remarks</b>.
+            Material type: Finished, Bought-out or Consumables. Unit: its code or name (e.g. Nos, kg, Metre). A drawing no.
+            must be a subassembly&apos;s (or left empty). The prefix and unit chosen above fill in what a pasted row leaves out.
+            An Excel export of the materials list, without its first column (IMM code) and last (Status), pastes straight back in.
           </p>
           <textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={5} className="ams-input font-mono text-xs" placeholder="Paste here (Ctrl+V)…" />
           <div className="flex gap-2">
@@ -217,7 +254,26 @@ export default function NewMaterialsPage() {
 
       {error && <p className="mx-3 mt-3 px-3 py-2 rounded text-sm border bg-red-50 border-red-200 text-red-700">{error}</p>}
 
-      <table className="w-full text-sm mt-2" style={{ minWidth: 1360 }}>
+      {dupes && dupes.length > 0 && (
+        <div className="mx-3 mt-3 px-3 py-2.5 rounded text-sm border bg-amber-50 border-amber-200 text-amber-900 space-y-2">
+          <p className="font-medium">{dupes.length} row{dupes.length === 1 ? ' looks' : 's look'} like a material that already exists (same item name, material and specification):</p>
+          <ul className="list-disc pl-5 space-y-0.5">
+            {dupes.map((d) => (
+              <li key={d.row}>
+                Row {rowNo(d.row)}: {d.kind === 'existing'
+                  ? <>same as <Link href={`/dashboard/master-data/materials/${d.id}`} target="_blank" className="font-mono font-semibold underline">{d.imm_code}</Link> ({d.item_name})</>
+                  : <>same as row {rowNo(d.other_row)} above</>}
+              </li>
+            ))}
+          </ul>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => save(true)} disabled={saving} className="btn-primary px-3 py-1.5">{saving ? 'Saving…' : 'Save anyway'}</button>
+            <button type="button" onClick={() => setDupes(null)} className="btn-secondary px-3 py-1.5">Go back and change</button>
+          </div>
+        </div>
+      )}
+
+      <table className="w-full text-sm mt-2" style={{ minWidth: 1460 }}>
         <thead>
           <tr className="border-b border-gray-200 text-left text-[11px] uppercase tracking-wide text-gray-500">
             <th className="px-2 py-2 font-medium w-8">#</th>
@@ -228,6 +284,7 @@ export default function NewMaterialsPage() {
             <th className="px-2 py-2 font-medium">Technical specification <span className="text-red-500">*</span></th>
             <th className="px-2 py-2 font-medium w-36">Material type <span className="text-red-500">*</span></th>
             <th className="px-2 py-2 font-medium w-36">Material <span className="text-red-500">*</span></th>
+            <th className="px-2 py-2 font-medium w-28">Unit <span className="text-red-500">*</span></th>
             <th className="px-2 py-2 font-medium w-44">Remarks</th>
             <th className="px-2 py-2 w-16"><span className="sr-only">Row actions</span></th>
           </tr>
@@ -246,10 +303,12 @@ export default function NewMaterialsPage() {
                   <AsyncSearchSelect value={r.drawing_no} onChange={(v) => pickDrawing(r.key, v)} fetchPage={fetchDrawings}
                     getValue={(d) => d.drawing_no} describe={(d) => ({ label: d.drawing_no, sub: d.name })}
                     placeholder="None" searchPlaceholder="Search drawing no. or name…" invalid={unknownDrawing(r)} />
-                  {unknownDrawing(r) && <p className="text-[11px] text-red-600 mt-1">{r.drawing_no} isn&apos;t in the BOM</p>}
+                  {unknownDrawing(r) && <p className="text-[11px] text-red-600 mt-1">{r.drawing_no} {r.drawing_no} isn&apos;t a subassembly&apos;s</p>}
                 </td>
                 <td className="px-2 py-2">
-                  <input aria-label={`Row ${i + 1} item name`} value={r.item_name} onChange={(e) => set(r.key, 'item_name', e.target.value)} maxLength={191} className={`${cell} ${bad('item_name')}`} />
+                  <input aria-label={`Row ${i + 1} item name`} value={r.item_name} onChange={(e) => set(r.key, 'item_name', e.target.value)} maxLength={191}
+                    className={`${cell} ${dupeFor(r) ? 'border-amber-400 bg-amber-50' : bad('item_name')}`} />
+                  {dupeFor(r) && <p className="text-[11px] text-amber-700 mt-1">Looks like a duplicate</p>}
                 </td>
                 <td className="px-2 py-2">
                   <textarea aria-label={`Row ${i + 1} description`} value={r.description} onChange={(e) => set(r.key, 'description', e.target.value)} rows={2} className={`${cell} resize-y ${bad('description')}`} />
@@ -265,6 +324,12 @@ export default function NewMaterialsPage() {
                 </td>
                 <td className="px-2 py-2">
                   <input aria-label={`Row ${i + 1} material`} value={r.material} onChange={(e) => set(r.key, 'material', e.target.value)} maxLength={191} placeholder="e.g. MS, SS304" className={`${cell} ${bad('material')}`} />
+                </td>
+                <td className="px-2 py-2">
+                  <select aria-label={`Row ${i + 1} unit`} value={r.uom_id} onChange={(e) => set(r.key, 'uom_id', e.target.value)} className={`${cell} ${bad('uom_id')}`}>
+                    <option value="">Select…</option>
+                    {activeUnits.map((u) => <option key={u.id} value={u.id}>{u.code}</option>)}
+                  </select>
                 </td>
                 <td className="px-2 py-2">
                   <input aria-label={`Row ${i + 1} remarks`} value={r.remarks} onChange={(e) => set(r.key, 'remarks', e.target.value)} placeholder="Optional" className={`${cell} border-gray-300`} />
@@ -286,7 +351,7 @@ export default function NewMaterialsPage() {
         <button type="button" onClick={() => addRows(5)} className="btn-secondary px-3 py-1.5">+ Add 5 rows</button>
         <div className="flex-1" />
         <span className="text-sm text-gray-500">{filled.length} material{filled.length === 1 ? '' : 's'} to add</span>
-        <button type="button" onClick={save} disabled={saving || !filled.length} className="btn-primary px-5 py-2">
+        <button type="button" onClick={() => save(false)} disabled={saving || !filled.length} className="btn-primary px-5 py-2">
           {saving ? 'Saving…' : `Save ${filled.length || ''}`.trim()}
         </button>
       </div>

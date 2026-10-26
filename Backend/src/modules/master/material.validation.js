@@ -43,6 +43,8 @@ const materialFields = {
   technical_spec: requiredText('Technical specification', 5000),
   material_type: z.enum(TYPES, { message: 'Material type must be Finished, Bought-out or Consumables' }),
   material: requiredText('Material', 191),
+  uom_id: z.coerce.number({ required_error: 'Choose a unit of measure', invalid_type_error: 'Choose a unit of measure' })
+    .int().positive('Choose a unit of measure'),
   remarks: optionalText(5000),
 };
 
@@ -65,8 +67,34 @@ const listMaterialsQuery = z.object({
   order: z.string().optional(),
   material_type: z.string().optional(),
   prefix_id: z.string().optional(),
+  uom_id: z.string().optional(),
   is_active: z.string().optional(),
+  kind: z.enum(['subassembly', 'part']).optional(),
 });
+
+// Bulk entry's duplicate check: only the fields compared are needed.
+const duplicatesBody = z.object({
+  rows: z.array(z.object({
+    item_name: z.string().max(191).optional().default(''),
+    material: z.string().max(191).optional().default(''),
+    technical_spec: z.string().max(5000).optional().default(''),
+  })).min(1).max(200),
+});
+
+const historyQuery = z.object({ page: z.coerce.number().int().min(1).optional(), limit: z.coerce.number().int().min(1).max(100).optional() });
+
+// ── Units of measure ─────────────────────────────────────────────────────────
+const unitFields = {
+  code: z.string().trim().min(1, 'Code is required').max(20, 'At most 20 characters')
+    .regex(/^[\p{L}\p{N}.\/²³ -]+$/u, 'Letters, numbers, spaces and . / - only'),
+  name: requiredText('Name', 100),
+  is_active: z.boolean(),
+  sort_order: z.coerce.number().int().min(0).max(9999),
+};
+const createUnitBody = z.object({ ...unitFields, is_active: unitFields.is_active.optional(), sort_order: unitFields.sort_order.optional() });
+const updateUnitBody = z.object(unitFields).partial().refine(
+  (d) => Object.values(d).some((v) => v !== undefined), { message: 'Nothing to update' },
+);
 
 const drawingOptionsQuery = z.object({
   q: z.string().max(100).optional(),
@@ -75,6 +103,6 @@ const drawingOptionsQuery = z.object({
 });
 
 module.exports = {
-  drawingOptionsQuery,
+  drawingOptionsQuery, duplicatesBody, historyQuery, createUnitBody, updateUnitBody,
   TYPES, idParam, createPrefixBody, updatePrefixBody, bulkCreateBody, updateMaterialBody, listMaterialsQuery,
 };

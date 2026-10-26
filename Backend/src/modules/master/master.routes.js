@@ -175,6 +175,27 @@ router.delete(
   asyncHandler(materialController.deletePrefix)
 );
 
+// Units of measure: same access pattern as the prefixes.
+router.get('/materials/units', authorize('MATERIAL_VIEW', 'MATERIAL_CONFIG_VIEW'), asyncHandler(materialController.listUnits));
+router.post(
+  '/materials/units',
+  authorize('MATERIAL_CONFIG_CREATE'),
+  validate({ body: materialValidation.createUnitBody }),
+  asyncHandler(materialController.createUnit)
+);
+router.put(
+  '/materials/units/:id',
+  authorize('MATERIAL_CONFIG_EDIT'),
+  validate({ params: materialValidation.idParam, body: materialValidation.updateUnitBody }),
+  asyncHandler(materialController.updateUnit)
+);
+router.delete(
+  '/materials/units/:id',
+  authorize('MATERIAL_CONFIG_DELETE'),
+  validate({ params: materialValidation.idParam }),
+  asyncHandler(materialController.deleteUnit)
+);
+
 // For the material forms' drawing no. list (before /materials/:id).
 router.get('/materials/drawing-options', authorize('MATERIAL_CREATE', 'MATERIAL_EDIT'),
   validate({ query: materialValidation.drawingOptionsQuery }), asyncHandler(materialController.getDrawingOptions));
@@ -184,11 +205,35 @@ router.get(
   validate({ query: materialValidation.listMaterialsQuery }),
   asyncHandler(materialController.listMaterials)
 );
+router.get(
+  '/materials/export',
+  authorize('MATERIAL_VIEW'),
+  validate({ query: materialValidation.listMaterialsQuery }),
+  asyncHandler(materialController.exportMaterials)
+);
+router.post(
+  '/materials/duplicates',
+  authorize('MATERIAL_CREATE'),
+  validate({ body: materialValidation.duplicatesBody }),
+  asyncHandler(materialController.findDuplicates)
+);
 router.post(
   '/materials/bulk',
   authorize('MATERIAL_CREATE'),
   validate({ body: materialValidation.bulkCreateBody }),
   asyncHandler(materialController.createMaterials)
+);
+router.get(
+  '/materials/:id/where-used',
+  authorize('MATERIAL_VIEW'),
+  validate({ params: materialValidation.idParam }),
+  asyncHandler(materialController.getWhereUsed)
+);
+router.get(
+  '/materials/:id/history',
+  authorize('MATERIAL_VIEW'),
+  validate({ params: materialValidation.idParam, query: materialValidation.historyQuery }),
+  asyncHandler(materialController.getHistory)
 );
 router.get(
   '/materials/:id',
@@ -209,16 +254,31 @@ router.delete(
   asyncHandler(materialController.deleteMaterial)
 );
 
-// ── BOM: subassemblies built from materials ───────────────────────────────────
-const bomValidation = require('./bom.validation');
-const bomController = require('./bom.controller');
+// ── Subassemblies: drawing-wise parts built from materials and other subassemblies ──
+const subassemblyValidation = require('./subassembly.validation');
+const subassemblyController = require('./subassembly.controller');
+const sv = subassemblyValidation;
+const sc = subassemblyController;
 
-router.get('/bom/subassemblies', authorize('BOM_VIEW'), validate({ query: bomValidation.listSubassembliesQuery }), asyncHandler(bomController.listSubassemblies));
-// Picking materials needs only BOM access, not the material master's.
-router.get('/bom/material-search', authorize('BOM_CREATE', 'BOM_EDIT'), validate({ query: bomValidation.materialSearchQuery }), asyncHandler(bomController.searchMaterials));
-router.post('/bom/subassemblies', authorize('BOM_CREATE'), validate({ body: bomValidation.createSubassemblyBody }), asyncHandler(bomController.createSubassembly));
-router.get('/bom/subassemblies/:id', authorize('BOM_VIEW'), validate({ params: bomValidation.idParam }), asyncHandler(bomController.getSubassembly));
-router.put('/bom/subassemblies/:id', authorize('BOM_EDIT'), validate({ params: bomValidation.idParam, body: bomValidation.updateSubassemblyBody }), asyncHandler(bomController.updateSubassembly));
-router.delete('/bom/subassemblies/:id', authorize('BOM_DELETE'), validate({ params: bomValidation.idParam }), asyncHandler(bomController.deleteSubassembly));
+router.get('/subassemblies', authorize('SUBASSEMBLY_VIEW'), validate({ query: sv.listSubassembliesQuery }), asyncHandler(sc.listSubassemblies));
+// Building one needs only subassembly access, not the material master's (these come before /subassemblies/:id).
+router.get('/subassemblies/material-search', authorize('SUBASSEMBLY_CREATE', 'SUBASSEMBLY_EDIT'), validate({ query: sv.searchQuery }), asyncHandler(sc.searchMaterials));
+router.get('/subassemblies/item-options', authorize('SUBASSEMBLY_CREATE', 'SUBASSEMBLY_EDIT'), validate({ query: sv.searchQuery }), asyncHandler(sc.getItemOptions));
+router.get('/subassemblies/item-setup', authorize('SUBASSEMBLY_CREATE', 'SUBASSEMBLY_EDIT'), asyncHandler(sc.getItemSetup));
+// How revisions are labelled: a material-master setting (Administrator → Configuration → Revisions).
+router.get('/subassemblies/revision-scheme', authorize('SUBASSEMBLY_VIEW', 'MATERIAL_CONFIG_VIEW'), asyncHandler(sc.getRevisionScheme));
+router.put('/subassemblies/revision-scheme', authorize('MATERIAL_CONFIG_EDIT'), validate({ body: sv.schemeBody }), asyncHandler(sc.setRevisionScheme));
+router.post('/subassemblies', authorize('SUBASSEMBLY_CREATE'), validate({ body: sv.createSubassemblyBody }), asyncHandler(sc.createSubassembly));
+router.get('/subassemblies/:id', authorize('SUBASSEMBLY_VIEW'), validate({ params: sv.idParam }), asyncHandler(sc.getSubassembly));
+router.get('/subassemblies/:id/tree', authorize('SUBASSEMBLY_VIEW'), validate({ params: sv.idParam, query: sv.treeQuery }), asyncHandler(sc.getTree));
+router.get('/subassemblies/:id/compare', authorize('SUBASSEMBLY_VIEW'), validate({ params: sv.idParam, query: sv.compareQuery }), asyncHandler(sc.compareRevisions));
+router.put('/subassemblies/:id', authorize('SUBASSEMBLY_EDIT'), validate({ params: sv.idParam, body: sv.updateSubassemblyBody }), asyncHandler(sc.updateSubassembly));
+router.delete('/subassemblies/:id', authorize('SUBASSEMBLY_DELETE'), validate({ params: sv.idParam }), asyncHandler(sc.deleteSubassembly));
+// Revisions: drafts are edited with Edit; releasing needs Approve.
+router.post('/subassemblies/:id/revisions', authorize('SUBASSEMBLY_EDIT'), validate({ params: sv.idParam }), asyncHandler(sc.newRevision));
+router.get('/subassemblies/:id/revisions/:revId', authorize('SUBASSEMBLY_VIEW'), validate({ params: sv.revParam }), asyncHandler(sc.getRevision));
+router.put('/subassemblies/:id/revisions/:revId', authorize('SUBASSEMBLY_EDIT'), validate({ params: sv.revParam, body: sv.draftBody }), asyncHandler(sc.saveDraft));
+router.post('/subassemblies/:id/revisions/:revId/release', authorize('SUBASSEMBLY_APPROVE'), validate({ params: sv.revParam, body: sv.releaseBody }), asyncHandler(sc.releaseRevision));
+router.delete('/subassemblies/:id/revisions/:revId', authorize('SUBASSEMBLY_EDIT'), validate({ params: sv.revParam }), asyncHandler(sc.discardDraft));
 
 module.exports = router;
