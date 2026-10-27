@@ -64,12 +64,12 @@ export default function EnquiryKanban({ search, appId, onOpen, version = 0, mone
   }
 
   return (
-    <div className="flex gap-3 overflow-x-auto p-3 items-start" style={{ minHeight: 420 }}>
+    <div className="flex-1 min-h-0 flex gap-3 overflow-x-auto p-3 items-start">
       {ALL_STAGES.map((s) => {
         const c = cols[s.value];
         const st = STAGE_STYLE[s.value] || { color: '#6B7280', bg: '#F3F4F6' };
         return (
-          <section key={s.value} aria-label={`${s.label}: ${c.total}`} className="w-72 shrink-0 rounded-lg bg-gray-50 border border-gray-200 flex flex-col max-h-[calc(100vh-220px)]">
+          <section key={s.value} aria-label={`${s.label}: ${c.total}`} className="w-72 shrink-0 rounded-lg bg-gray-50 border border-gray-200 flex flex-col max-h-full">
             <header className="px-3 py-2.5 flex items-center gap-2 border-b border-gray-200" style={{ borderTop: `3px solid ${st.color}`, borderTopLeftRadius: 8, borderTopRightRadius: 8 }}>
               <span className="text-sm font-semibold text-gray-800">{s.label}</span>
               <span className="ml-auto text-xs tabular-nums px-1.5 py-0.5 rounded font-medium" style={{ color: st.color, backgroundColor: st.bg }}>{c.total}</span>

@@ -13,6 +13,14 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.6.2] — 2026-10-27
+
+### Fixed — Sales: the enquiry list fills the screen
+
+- **Sales → Enquiries** now fills the screen below the top bar at any screen size: the list (and the Kanban columns) end at the bottom of the window instead of a fixed height that left a blank strip on some screens. The rows still scroll inside with the column headers on top.
+
+---
+
 ## [1.6.1] — 2026-10-27
 
 ### Changed — Sales: amounts in their own currency show exactly as entered

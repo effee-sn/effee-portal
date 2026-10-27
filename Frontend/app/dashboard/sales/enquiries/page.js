@@ -274,11 +274,13 @@ export default function EnquiriesPage() {
     );
   }
 
+  // The card fills the screen below the navbar, whatever its height; the rows
+  // (or the Kanban columns) scroll inside it.
   return (
-    <div>
-      <div className="bg-white rounded border border-gray-200 overflow-hidden">
+    <div className="h-full flex flex-col">
+      <div className="flex-1 min-h-0 flex flex-col bg-white rounded border border-gray-200 overflow-hidden">
         {/* Control panel */}
-        <div className="flex items-center gap-2 px-3 py-3 border-b border-gray-200 flex-wrap bg-white">
+        <div className="shrink-0 flex items-center gap-2 px-3 py-3 border-b border-gray-200 flex-wrap bg-white">
           {canCreate && (
             <button onClick={() => setShowCreate(true)}
               className="shrink-0 px-3 py-1.5 text-sm font-medium text-white rounded-sm cursor-pointer"
@@ -344,7 +346,7 @@ export default function EnquiriesPage() {
 
         {/* Table */}
         {/* The rows scroll inside the card, so the column headers stay on top. */}
-        {view === 'list' && <div className="overflow-auto max-h-[calc(100vh-190px)]">
+        {view === 'list' && <div className="flex-1 min-h-0 overflow-auto">
           {rows.length === 0 ? (
             <div className="py-20 text-center text-sm text-gray-400">No enquiries {stage || appId || search ? 'match your filters' : 'yet'}.</div>
           ) : (
