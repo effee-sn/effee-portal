@@ -9,6 +9,7 @@ import { apiGet } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
 import usePageSize from '@/lib/usePageSize';
 import PageSizeSelect from '@/components/PageSizeSelect';
+import { revName } from '@/lib/materialOptions';
 
 /**
  * Master Data → Subassemblies.
@@ -129,8 +130,8 @@ export default function SubassembliesPage() {
                       {s.department ? <>{s.department.name}{s.department.dept_no != null && <span className="text-xs text-gray-400"> · {s.department.dept_no}</span>}</> : '—'}
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
-                      {s.current ? <span className="text-gray-800">Rev <b>{s.current.rev}</b></span> : <span className="text-xs text-amber-700">Not released</span>}
-                      {s.draft && <span className="ml-2 text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800">Draft {s.draft.rev}</span>}
+                      {s.current ? <span className="text-gray-800"><b>{revName(s.current.rev)}</b></span> : <span className="text-xs text-amber-700">Not released</span>}
+                      {s.draft && <span className="ml-2 text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800">Draft {revName(s.draft.rev)}</span>}
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{s.item_count}</td>
                     <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{fmtDate(s.updated_at)}</td>

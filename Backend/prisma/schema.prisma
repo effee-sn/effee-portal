@@ -248,8 +248,14 @@ model CompanySettings {
 
   // SMTP is configured from the environment (SMTP_* in .env), not stored here.
 
-  // How new subassembly revisions are labelled: LETTERS (A, B … Z, AA) or NUMBERS (00, 01 …).
+  // How new drawing revisions (subassemblies, Finished parts) are labelled:
+  // LETTERS (A, B … Z, AA) or NUMBERS (00, 01 …).
   revision_scheme      String @default("LETTERS") @db.VarChar(10)
+  // The first release: ORIGINAL — just the drawing no., labelled
+  // revision_original_label; the first change is then Rev A / 01. REV — the
+  // first release is already Rev A / 00.
+  revision_first_release  String @default("ORIGINAL") @db.VarChar(10)
+  revision_original_label String @default("Original") @db.VarChar(10)
 
   // Machine ID numbering (Administrator → Configuration → Machine IDs): prefix +
   // separator + zero-padded number, e.g. M0001; the counter only moves forward.
@@ -1365,6 +1371,8 @@ model Material {
   project_bom_items ProjectBomItem[]
   // Set when this material is a subassembly's own item.
   subassembly    Subassembly?
+  // A Finished part's drawing revisions (a subassembly's item has its subassembly's instead).
+  revisions      MaterialRevision[]
 
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
@@ -1473,6 +1481,9 @@ model SubassemblyItem {
   material_id       Int
   child_revision    SubassemblyRevision? @relation("PinnedChildRevision", fields: [child_revision_id], references: [id], onDelete: Restrict)
   child_revision_id Int?
+  // For a Finished part with revisions: the revision of its drawing it is held at.
+  part_revision     MaterialRevision?    @relation("PinnedPartRevision", fields: [part_revision_id], references: [id], onDelete: Restrict)
+  part_revision_id  Int?
   quantity          Decimal              @default(1) @db.Decimal(12, 3)
   sort_order        Int                  @default(0)
 
@@ -1480,6 +1491,37 @@ model SubassemblyItem {
   @@index([subassembly_id])
   @@index([material_id])
   @@index([child_revision_id])
+  @@index([part_revision_id])
+}
+
+// A Finished part's drawing revision (Original, then A, B … or 01, 02 …).
+// The first one is released when the part is created; later ones start as a
+// draft and are released with Materials → Approve. The part itself always
+// carries the current revision's description, specification and material.
+model MaterialRevision {
+  id             Int            @id @default(autoincrement())
+  material       Material       @relation(fields: [material_id], references: [id], onDelete: Cascade)
+  material_id    Int
+  seq            Int
+  rev            String         @db.VarChar(10)
+  status         RevisionStatus @default(DRAFT)
+  change_note    String?        @db.Text
+  description    String         @db.Text
+  technical_spec String         @db.Text
+  material_text  String         @db.VarChar(191)
+  released_at    DateTime?
+  released_by    Int?
+  // Subassembly lines and project BOM lines holding this revision.
+  pinned_by      SubassemblyItem[] @relation("PinnedPartRevision")
+  bom_lines      ProjectBomLine[]  @relation("BomLinePartRevision")
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by Int?
+  updated_by Int?
+
+  @@unique([material_id, seq])
+  @@index([material_id, status])
 }
 
 /// A machine (unit) of a project: what its BOM is built and tagged for. Its
@@ -1545,6 +1587,8 @@ model ProjectBomLine {
   material_id       Int
   child_revision    SubassemblyRevision? @relation(fields: [child_revision_id], references: [id], onDelete: Restrict)
   child_revision_id Int?
+  part_revision     MaterialRevision?    @relation("BomLinePartRevision", fields: [part_revision_id], references: [id], onDelete: Restrict)
+  part_revision_id  Int?
   department        Department?          @relation(fields: [department_id], references: [id])
   department_id     Int?
   quantity          Decimal              @default(1) @db.Decimal(12, 3)
@@ -1554,6 +1598,7 @@ model ProjectBomLine {
   @@index([machine_id])
   @@index([material_id])
   @@index([child_revision_id])
+  @@index([part_revision_id])
   @@index([department_id])
 }
 
@@ -1578,6 +1623,9 @@ model ProjectBomItem {
   is_subassembly Boolean        @default(false)
   // For a subassembly: the revision it was exploded at.
   revision_id    Int?
+  // For a Finished part with revisions: the drawing revision it was made to.
+  part_revision_id Int?
+  // Either one's label.
   rev            String?        @db.VarChar(10)
   imm_code       String         @db.VarChar(40)
   item_name      String         @db.VarChar(191)

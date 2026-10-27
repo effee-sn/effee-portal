@@ -85,7 +85,7 @@ describe('Material master', () => {
 
   it('editing keeps the IMM code; deleting hides it from the list', async () => {
     const [m] = await svc.createBulk({ rows: [row(a.id)] }, actor);
-    // (A drawing no. must be a BOM subassembly's — covered in bom.test.js.)
+    // (Drawing numbers, one material each — covered in subassemblies.test.js.)
     const e = await svc.update(m.id, { item_name: 'Renamed' }, actor);
     assert.equal(e.imm_code, m.imm_code);
     assert.equal(e.item_name, 'Renamed');

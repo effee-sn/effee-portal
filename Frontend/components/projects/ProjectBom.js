@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { apiGet, apiPost, apiPut, apiDelete, downloadFile } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
-import { MATERIAL_TYPE_LABEL } from '@/lib/materialOptions';
+import { MATERIAL_TYPE_LABEL, revName } from '@/lib/materialOptions';
 
 /**
  * A project's BOM (the BOM tab of a project).
@@ -99,7 +99,7 @@ function LinePicker({ excludeIds, onPick }) {
                         <span className="font-mono text-xs font-semibold text-gray-800">{m.imm_code}</span>
                         <span className="text-sm text-gray-800">{m.item_name}</span>
                         {m.subassembly && <SubBadge />}
-                        {m.subassembly?.revisions?.[0] && <span className="text-[11px] text-gray-500">Rev {m.subassembly.revisions[0].rev}</span>}
+                        {m.subassembly?.revisions?.[0] && <span className="text-[11px] text-gray-500">{revName(m.subassembly.revisions[0].rev)}</span>}
                       </span>
                       <span className="block text-xs text-gray-500 mt-0.5">
                         {m.drawing_no ? `Drawing ${m.drawing_no} · ` : ''}{MATERIAL_TYPE_LABEL[m.material_type]} · {m.material} · {m.uom?.code}
@@ -277,7 +277,7 @@ function Totals({ projectId, bomId, version }) {
 
 const toLines = (bomLines) => bomLines.map((l) => ({
   machine_id: l.machine_id, material: l.material, quantity: String(Number(l.quantity)),
-  department_id: l.department ? String(l.department.id) : '', child: l.child,
+  department_id: l.department ? String(l.department.id) : '', child: l.child, part: l.part,
 }));
 
 /** @param {{ projectId: number|string, canEdit: boolean, canApprove: boolean }} props */
@@ -331,9 +331,12 @@ export default function ProjectBom({ projectId, canEdit, canApprove }) {
   const setLine = (mid, patch) => { setLines((prev) => prev.map((l) => (l.machine_id === machineId && l.material.id === mid ? { ...l, ...patch } : l))); touch(); };
   const addLine = (m) => {
     const current = m.subassembly?.revisions?.[0] ?? null;
+    // A Finished part is held at its current drawing revision.
+    const partCurrent = !m.subassembly && m.material_type === 'FINISHED' ? m.revisions?.find((r) => r.status === 'RELEASED') ?? null : null;
     setLines((prev) => [...prev, {
       machine_id: machineId, material: m, quantity: '1', department_id: '',
       child: m.subassembly ? { subassembly_id: m.subassembly.id, held: current, current, newer: false } : null,
+      part: partCurrent ? { held: partCurrent, current: partCurrent, newer: false } : null,
     }]);
     touch();
   };
@@ -353,6 +356,7 @@ export default function ProjectBom({ projectId, canEdit, canApprove }) {
       machine_id: l.machine_id, material_id: l.material.id, quantity: Number(l.quantity),
       department_id: l.department_id ? Number(l.department_id) : null,
       ...(l.child?.held ? { child_revision_id: l.child.held.id } : {}),
+      ...(l.part?.held ? { part_revision_id: l.part.held.id } : {}),
     })),
   });
   const qtyOk = () => {
@@ -508,11 +512,20 @@ export default function ProjectBom({ projectId, canEdit, canApprove }) {
                                 {l.child && (
                                   <span className="inline-flex items-center gap-1.5 ml-2 font-sans">
                                     <Link href={`${SUBS}/${l.child.subassembly_id}`} target="_blank" className="hover:opacity-80"><SubBadge /></Link>
-                                    {l.child.held && <span className="text-[11px] text-gray-600">Rev {l.child.held.rev}</span>}
+                                    {l.child.held && <span className="text-[11px] text-gray-600">{revName(l.child.held.rev)}</span>}
                                     {l.child.newer && (editable ? (
                                       <button type="button" onClick={() => setLine(m.id, { child: { ...l.child, held: l.child.current, newer: false } })}
-                                        className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 hover:bg-amber-100 cursor-pointer">Use Rev {l.child.current.rev}</button>
-                                    ) : <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800">Rev {l.child.current.rev} available</span>)}
+                                        className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 hover:bg-amber-100 cursor-pointer">Use {revName(l.child.current.rev)}</button>
+                                    ) : <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800">{revName(l.child.current.rev)} available</span>)}
+                                  </span>
+                                )}
+                                {l.part?.held && (
+                                  <span className="inline-flex items-center gap-1.5 ml-2 font-sans">
+                                    <span className="text-[11px] text-gray-600" title="The drawing revision of this part used here">{revName(l.part.held.rev)}</span>
+                                    {l.part.newer && (editable ? (
+                                      <button type="button" onClick={() => setLine(m.id, { part: { ...l.part, held: l.part.current, newer: false } })}
+                                        className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 hover:bg-amber-100 cursor-pointer">Use {revName(l.part.current.rev)}</button>
+                                    ) : <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800">{revName(l.part.current.rev)} available</span>)}
                                   </span>
                                 )}
                               </td>

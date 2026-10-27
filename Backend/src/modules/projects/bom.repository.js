@@ -17,11 +17,14 @@ function createBomRepository(db) {
         revisions: { where: { status: 'RELEASED' }, select: { id: true, rev: true } },
       },
     },
+    // A Finished part's current drawing revision.
+    revisions: { where: { status: 'RELEASED' }, select: { id: true, rev: true, status: true } },
   });
 
   const lineSelect = Object.freeze({
-    id: true, machine_id: true, quantity: true, sort_order: true, child_revision_id: true,
+    id: true, machine_id: true, quantity: true, sort_order: true, child_revision_id: true, part_revision_id: true,
     child_revision: { select: { id: true, rev: true, status: true, subassembly_id: true } },
+    part_revision: { select: { id: true, rev: true, status: true } },
     department: { select: { id: true, name: true, dept_no: true, deleted_at: true } },
     material: { select: materialBrief },
   });
@@ -34,7 +37,7 @@ function createBomRepository(db) {
 
   const itemSelect = Object.freeze({
     id: true, machine_id: true, tag: true, parent_tag: true, level: true, sort_order: true,
-    material_id: true, is_subassembly: true, revision_id: true, rev: true, imm_code: true, item_name: true,
+    material_id: true, is_subassembly: true, revision_id: true, part_revision_id: true, rev: true, imm_code: true, item_name: true,
     drawing_no: true, material_type: true, material_text: true, technical_spec: true, uom: true,
     dept_no: true, department: true, qty_per_parent: true, quantity: true,
   });
@@ -91,12 +94,19 @@ function createBomRepository(db) {
       return db.subassemblyItem.findMany({
         where: { revision_id: { in: revIds } },
         select: {
-          revision_id: true, quantity: true, child_revision_id: true,
+          revision_id: true, quantity: true, child_revision_id: true, part_revision_id: true,
           child_revision: { select: { id: true, rev: true } },
+          part_revision: { select: { id: true, rev: true } },
           material: { select: materialBrief },
         },
         orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
       });
+    },
+
+    /** These part drawing revisions' specifications (for the locked snapshot). @param {number[]} ids */
+    partRevisionSpecs(ids) {
+      if (!ids.length) return [];
+      return db.materialRevision.findMany({ where: { id: { in: ids } }, select: { id: true, technical_spec: true } });
     },
 
     /** Starts a draft revision, copying the lines of `fromBomId` when given. */
@@ -109,7 +119,7 @@ function createBomRepository(db) {
         if (fromBomId) {
           const lines = await tx.projectBomLine.findMany({
             where: { bom_id: fromBomId },
-            select: { machine_id: true, material_id: true, child_revision_id: true, department_id: true, quantity: true, sort_order: true },
+            select: { machine_id: true, material_id: true, child_revision_id: true, part_revision_id: true, department_id: true, quantity: true, sort_order: true },
           });
           if (lines.length) await tx.projectBomLine.createMany({ data: lines.map((l) => ({ ...l, bom_id: b.id })) });
         }

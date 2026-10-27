@@ -27,7 +27,7 @@ const getRevisionScheme = async (req, res) => ApiResponse.ok(res, await subassem
 
 /** `PUT /subassemblies/revision-scheme` */
 const setRevisionScheme = async (req, res) => {
-  ApiResponse.ok(res, await subassemblyService.setRevisionScheme(req.body.scheme, requestContext(req)));
+  ApiResponse.ok(res, await subassemblyService.setRevisionScheme(req.body, requestContext(req)));
 };
 
 /** `GET /subassemblies/:id` */

@@ -141,6 +141,7 @@ const PERMISSIONS = [
   { module: 'material', action: 'CREATE', code: 'MATERIAL_CREATE' },
   { module: 'material', action: 'EDIT',   code: 'MATERIAL_EDIT' },
   { module: 'material', action: 'DELETE', code: 'MATERIAL_DELETE' },
+  { module: 'material', action: 'APPROVE', code: 'MATERIAL_APPROVE' },
   { module: 'material-config', action: 'VIEW',   code: 'MATERIAL_CONFIG_VIEW' },
   { module: 'material-config', action: 'CREATE', code: 'MATERIAL_CONFIG_CREATE' },
   { module: 'material-config', action: 'EDIT',   code: 'MATERIAL_CONFIG_EDIT' },

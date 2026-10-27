@@ -22,6 +22,14 @@ function createMaterialRepository(db) {
     uom: { select: { id: true, code: true, name: true } },
     // Set when the material is a subassembly's own item.
     subassembly: { select: { id: true } },
+    // A Finished part's current and draft drawing revisions.
+    revisions: { where: { status: { in: ['RELEASED', 'DRAFT'] } }, select: { id: true, rev: true, status: true } },
+  });
+
+  const revisionSelect = Object.freeze({
+    id: true, material_id: true, seq: true, rev: true, status: true, change_note: true,
+    description: true, technical_spec: true, material_text: true,
+    released_at: true, released_by: true, created_at: true, created_by: true, updated_at: true,
   });
 
   const unitSelect = Object.freeze({
@@ -61,26 +69,16 @@ function createMaterialRepository(db) {
     },
 
     /**
-     * Drawing numbers of live subassemblies (what a material's drawing no.
-     * may be), matching a search on drawing no. or name — one page.
-     * @param {string} q @param {number} skip @param {number} take
+     * Live materials already using any of these drawing numbers (the database
+     * compares without regard to case).
+     * @param {string[]} nos @param {number[]} [exceptIds]  materials to leave out
      */
-    searchDrawingOptions(q, skip, take) {
-      const term = q.trim();
-      return db.subassembly.findMany({
-        where: { deleted_at: null, ...(term ? { OR: [{ drawing_no: { contains: term } }, { name: { contains: term } }] } : {}) },
-        select: { drawing_no: true, name: true },
-        orderBy: { drawing_no: 'asc' },
-        skip,
-        take,
+    findByDrawingNos(nos, exceptIds = []) {
+      if (!nos.length) return [];
+      return db.material.findMany({
+        where: active({ drawing_no: { in: nos }, ...(exceptIds.length ? { id: { notIn: exceptIds } } : {}) }),
+        select: { id: true, imm_code: true, item_name: true, drawing_no: true },
       });
-    },
-
-    /** Which of these drawing numbers belong to live subassemblies. @param {string[]} nos */
-    async existingDrawingNos(nos) {
-      if (!nos.length) return new Set();
-      const rows = await db.subassembly.findMany({ where: { deleted_at: null, drawing_no: { in: nos } }, select: { drawing_no: true } });
-      return new Set(rows.map((r) => r.drawing_no));
     },
 
     // ── Materials ────────────────────────────────────────────────────────────
@@ -113,26 +111,20 @@ function createMaterialRepository(db) {
 
     /**
      * Where a material is used: the subassemblies listing it in their current
-     * or draft revision (superseded ones are history), and the subassembly
-     * whose drawing it belongs to (its drawing no.).
-     * @param {number} id @param {string|null} drawingNo
+     * or draft revision (superseded ones are history).
+     * @param {number} id
      */
-    async whereUsed(id, drawingNo) {
-      const [lines, drawing] = await Promise.all([
-        db.subassemblyItem.findMany({
-          where: { ...liveLines(id), revision: { status: { in: ['DRAFT', 'RELEASED'] } } },
-          select: {
-            quantity: true,
-            subassembly: { select: { id: true, name: true, drawing_no: true } },
-            revision: { select: { rev: true, status: true } },
-          },
-          orderBy: { subassembly: { drawing_no: 'asc' } },
-        }),
-        drawingNo
-          ? db.subassembly.findFirst({ where: { deleted_at: null, drawing_no: drawingNo }, select: { id: true, name: true, drawing_no: true } })
-          : null,
-      ]);
-      return { lines, drawing };
+    whereUsed(id) {
+      return db.subassemblyItem.findMany({
+        where: { ...liveLines(id), revision: { status: { in: ['DRAFT', 'RELEASED'] } } },
+        select: {
+          quantity: true,
+          subassembly: { select: { id: true, name: true, drawing_no: true } },
+          revision: { select: { rev: true, status: true } },
+          part_revision: { select: { id: true, rev: true } },
+        },
+        orderBy: { subassembly: { drawing_no: 'asc' } },
+      });
     },
 
     /**
@@ -191,8 +183,86 @@ function createMaterialRepository(db) {
      * @param {number|null} actorId
      * @returns {Promise<Array<object>>} the created materials, in input order
      */
-    createMany(rows, formatCode, actorId) {
-      return db.$transaction((tx) => this.createManyIn(tx, rows, formatCode, actorId));
+    createMany(rows, formatCode, actorId, originalLabel) {
+      return db.$transaction(async (tx) => {
+        const created = await this.createManyIn(tx, rows, formatCode, actorId);
+        // A Finished part starts with its first drawing revision, released.
+        const parts = created.filter((m) => m.material_type === 'FINISHED');
+        if (!parts.length) return created;
+        const now = new Date();
+        await tx.materialRevision.createMany({
+          data: parts.map((m) => ({
+            material_id: m.id, seq: 1, rev: originalLabel, status: 'RELEASED', change_note: 'First release',
+            description: m.description, technical_spec: m.technical_spec, material_text: m.material,
+            released_at: now, released_by: actorId, created_by: actorId, updated_by: actorId,
+          })),
+        });
+        return Promise.all(created.map((m) => (m.material_type === 'FINISHED'
+          ? tx.material.findUnique({ where: { id: m.id }, select: materialSelect }) : m)));
+      });
+    },
+
+    /** id → name, for "released by". @param {number[]} ids */
+    async userNames(ids) {
+      const want = [...new Set(ids.filter(Boolean))];
+      if (!want.length) return new Map();
+      const rows = await db.user.findMany({ where: { id: { in: want } }, select: { id: true, name: true } });
+      return new Map(rows.map((u) => [u.id, u.name]));
+    },
+
+    // ── Drawing revisions of a Finished part ─────────────────────────────────
+    /** All of a part's revisions, newest first. @param {number} materialId */
+    listRevisions(materialId) {
+      return db.materialRevision.findMany({ where: { material_id: materialId }, select: revisionSelect, orderBy: { seq: 'desc' } });
+    },
+
+    /** @param {number} materialId @param {number} revId */
+    findRevision(materialId, revId) {
+      return db.materialRevision.findFirst({ where: { id: revId, material_id: materialId }, select: revisionSelect });
+    },
+
+    /** Highest revision number so far. @param {number} materialId */
+    async lastRevisionSeq(materialId) {
+      const r = await db.materialRevision.aggregate({ where: { material_id: materialId }, _max: { seq: true } });
+      return r._max.seq ?? 0;
+    },
+
+    createRevision(data) {
+      return db.materialRevision.create({ data, select: revisionSelect });
+    },
+
+    updateRevision(id, data) {
+      return db.materialRevision.update({ where: { id }, data, select: revisionSelect });
+    },
+
+    deleteRevisionDraft(materialId, revId) {
+      return db.materialRevision.deleteMany({ where: { id: revId, material_id: materialId, status: 'DRAFT' } });
+    },
+
+    /**
+     * Releases a draft: it becomes the current revision, the one before is
+     * superseded, and the part takes the draft's description, specification and
+     * material. False when it was no longer a draft (released or discarded meanwhile).
+     */
+    releaseRevision(materialId, revId, note, actorId) {
+      return db.$transaction(async (tx) => {
+        const now = new Date();
+        const done = await tx.materialRevision.updateMany({
+          where: { id: revId, material_id: materialId, status: 'DRAFT' },
+          data: { status: 'RELEASED', change_note: note, released_at: now, released_by: actorId, updated_by: actorId },
+        });
+        if (done.count !== 1) return false;
+        await tx.materialRevision.updateMany({
+          where: { material_id: materialId, status: 'RELEASED', id: { not: revId } },
+          data: { status: 'SUPERSEDED', updated_by: actorId },
+        });
+        const r = await tx.materialRevision.findUnique({ where: { id: revId }, select: { description: true, technical_spec: true, material_text: true } });
+        await tx.material.update({
+          where: { id: materialId },
+          data: { description: r.description, technical_spec: r.technical_spec, material: r.material_text, updated_by: actorId },
+        });
+        return true;
+      });
     },
 
     /**

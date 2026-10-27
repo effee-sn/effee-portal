@@ -16,11 +16,14 @@ function createSubassemblyRepository(db) {
     material: true, is_active: true, deleted_at: true, uom: { select: { code: true } },
     // Set when this material is itself a subassembly: its current (released) revision.
     subassembly: { select: { id: true, deleted_at: true, revisions: { where: { status: 'RELEASED' }, select: { id: true, rev: true } } } },
+    // A Finished part's current drawing revision.
+    revisions: { where: { status: 'RELEASED' }, select: { id: true, rev: true, status: true } },
   });
 
   const lineSelect = Object.freeze({
-    id: true, quantity: true, sort_order: true, child_revision_id: true,
+    id: true, quantity: true, sort_order: true, child_revision_id: true, part_revision_id: true,
     child_revision: { select: { id: true, rev: true, status: true } },
+    part_revision: { select: { id: true, rev: true, status: true } },
     material: { select: materialBrief },
   });
 
@@ -85,6 +88,7 @@ function createSubassemblyRepository(db) {
         select: {
           id: true, is_active: true, deleted_at: true, imm_code: true, material_type: true,
           subassembly: { select: { id: true, deleted_at: true, revisions: { where: { status: 'RELEASED' }, select: { id: true, rev: true } } } },
+          revisions: { where: { status: 'RELEASED' }, select: { id: true, rev: true, status: true } },
         },
       });
     },
@@ -104,8 +108,9 @@ function createSubassemblyRepository(db) {
       return db.subassemblyItem.findMany({
         where: { revision_id: { in: revIds } },
         select: {
-          revision_id: true, quantity: true, child_revision_id: true,
+          revision_id: true, quantity: true, child_revision_id: true, part_revision_id: true,
           child_revision: { select: { id: true, rev: true, subassembly_id: true } },
+          part_revision: { select: { id: true, rev: true } },
           material: { select: materialBrief },
         },
         orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
@@ -213,17 +218,13 @@ function createSubassemblyRepository(db) {
     },
 
     /**
-     * Changes a subassembly's name / drawing no. (its item follows; a new
-     * drawing no. is carried to the materials that referenced the old one) and
+     * Changes a subassembly's name / drawing no. (its item follows), and
      * gives one made before items existed its item via `makeItem(tx)`.
      */
-    updateDetails(id, data, oldDrawingNo, makeItem) {
+    updateDetails(id, data, makeItem) {
       return db.$transaction(async (tx) => {
         if (makeItem) data.material_id = await makeItem(tx);
         const s = await tx.subassembly.update({ where: { id }, data, select: { material_id: true, name: true, drawing_no: true } });
-        if (data.drawing_no && oldDrawingNo && data.drawing_no !== oldDrawingNo) {
-          await tx.material.updateMany({ where: { drawing_no: oldDrawingNo }, data: { drawing_no: data.drawing_no } });
-        }
         if (s.material_id) {
           await tx.material.update({ where: { id: s.material_id }, data: { item_name: s.name, drawing_no: s.drawing_no, updated_by: data.updated_by ?? null } });
         }
@@ -239,7 +240,7 @@ function createSubassemblyRepository(db) {
         });
         const lines = await tx.subassemblyItem.findMany({
           where: { revision_id: fromRevId },
-          select: { material_id: true, child_revision_id: true, quantity: true, sort_order: true },
+          select: { material_id: true, child_revision_id: true, part_revision_id: true, quantity: true, sort_order: true },
         });
         if (lines.length) await tx.subassemblyItem.createMany({ data: lines.map((l) => ({ ...l, subassembly_id: subId, revision_id: r.id })) });
         return r.id;

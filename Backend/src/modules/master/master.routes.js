@@ -196,9 +196,9 @@ router.delete(
   asyncHandler(materialController.deleteUnit)
 );
 
-// For the material forms' drawing no. list (before /materials/:id).
-router.get('/materials/drawing-options', authorize('MATERIAL_CREATE', 'MATERIAL_EDIT'),
-  validate({ query: materialValidation.drawingOptionsQuery }), asyncHandler(materialController.getDrawingOptions));
+// For the bulk entry: drawing numbers already taken (before /materials/:id).
+router.get('/materials/drawing-check', authorize('MATERIAL_CREATE', 'MATERIAL_EDIT'),
+  validate({ query: materialValidation.drawingCheckQuery }), asyncHandler(materialController.getDrawingCheck));
 router.get(
   '/materials',
   authorize('MATERIAL_VIEW'),
@@ -228,6 +228,36 @@ router.get(
   authorize('MATERIAL_VIEW'),
   validate({ params: materialValidation.idParam }),
   asyncHandler(materialController.getWhereUsed)
+);
+router.get(
+  '/materials/:id/revisions',
+  authorize('MATERIAL_VIEW'),
+  validate({ params: materialValidation.idParam }),
+  asyncHandler(materialController.listRevisions)
+);
+router.post(
+  '/materials/:id/revisions',
+  authorize('MATERIAL_EDIT'),
+  validate({ params: materialValidation.idParam }),
+  asyncHandler(materialController.newRevision)
+);
+router.put(
+  '/materials/:id/revisions/:revId',
+  authorize('MATERIAL_EDIT'),
+  validate({ params: materialValidation.revisionParam, body: materialValidation.revisionDraftBody }),
+  asyncHandler(materialController.saveRevisionDraft)
+);
+router.post(
+  '/materials/:id/revisions/:revId/release',
+  authorize('MATERIAL_APPROVE'),
+  validate({ params: materialValidation.revisionParam, body: materialValidation.revisionReleaseBody }),
+  asyncHandler(materialController.releaseRevision)
+);
+router.delete(
+  '/materials/:id/revisions/:revId',
+  authorize('MATERIAL_EDIT'),
+  validate({ params: materialValidation.revisionParam }),
+  asyncHandler(materialController.discardRevisionDraft)
 );
 router.get(
   '/materials/:id/history',

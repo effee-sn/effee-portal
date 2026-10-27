@@ -13,6 +13,8 @@ const items = z.array(z.object({
   material_id: z.coerce.number().int().positive(),
   // For a child subassembly: the revision to hold it at (its current one, or the one held now).
   child_revision_id: z.coerce.number().int().positive().optional().nullable(),
+  // For a Finished part: the drawing revision to hold it at (its current one, or the one held now).
+  part_revision_id: z.coerce.number().int().positive().optional().nullable(),
   quantity: z.coerce.number({ invalid_type_error: 'Quantity must be a number' })
     .positive('Quantity must be more than 0').max(999_999_999, 'Quantity is too large')
     .refine((v) => Math.abs(v * 1000 - Math.round(v * 1000)) < 1e-6, 'At most 3 decimals'),
@@ -60,7 +62,15 @@ const draftBody = z.object({ items });
 const releaseBody = z.object({ change_note: z.string().trim().max(5000, 'At most 5000 characters').optional().nullable() });
 const compareQuery = z.object({ from: z.coerce.number().int().positive(), to: z.coerce.number().int().positive() });
 const treeQuery = z.object({ rev: z.coerce.number().int().positive().optional() });
-const schemeBody = z.object({ scheme: z.enum(['LETTERS', 'NUMBERS'], { message: 'Choose letters or numbers' }) });
+// How drawing revisions are labelled (Administrator → Configuration → Revisions).
+const schemeBody = z.object({
+  scheme: z.enum(['LETTERS', 'NUMBERS'], { message: 'Choose letters or numbers' }).optional(),
+  first_release: z.enum(['ORIGINAL', 'REV'], { message: 'Choose how the first release is labelled' }).optional(),
+  // Shown for the first release, e.g. "Original" — not something that reads like a revision (A, 01).
+  original_label: z.string().trim().min(1, 'Give the first release a name').max(10, 'At most 10 characters')
+    .refine((v) => !/^([A-Z]{1,3}|\d+)$/.test(v), 'That reads like a revision label — use a word, e.g. Original')
+    .optional(),
+}).refine((d) => Object.values(d).some((v) => v !== undefined), { message: 'Nothing to update' });
 
 module.exports = {
   idParam, revParam, createSubassemblyBody, updateSubassemblyBody, listSubassembliesQuery, searchQuery,

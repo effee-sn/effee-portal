@@ -14,6 +14,8 @@ const { NotFoundError, ConflictError, ValidationError } = require('../../core');
  *     level through the revisions held into **tags** — a frozen snapshot, with
  *     each material's details as they are at that moment — and supersedes the
  *     BOM locked before. Changing a locked BOM means a new draft revision.
+ *   - A **Finished part** is held at a drawing revision the same way, and its
+ *     tags record that revision.
  *   - **Tags**: Machine ID - dept no. - subassembly IMM code(s) - part IMM code.
  *     A subassembly or Finished part needed n times (a whole number) gets one
  *     tag per piece: …/1, …/2 (a single one: no suffix); each piece's own parts
@@ -33,6 +35,10 @@ function createBomService(repository) {
 
   /** A subassembly's current (released) revision, or null. */
   const currentOf = (sub) => (sub && !sub.deleted_at ? sub.revisions?.[0] ?? null : null);
+  /** A plain Finished part (not a subassembly's item): it has drawing revisions. */
+  const isPart = (m) => m.material_type === 'FINISHED' && (!m.subassembly || m.subassembly.deleted_at);
+  /** A part's current (released) drawing revision, or null. */
+  const partCurrentOf = (m) => (isPart(m) ? m.revisions?.find((r) => r.status === 'RELEASED') ?? null : null);
 
   async function loadProject(projectId) {
     const p = await repository.findProject(projectId);
@@ -56,8 +62,14 @@ function createBomService(repository) {
   const shapeLine = (l) => {
     const sub = l.material.subassembly && !l.material.subassembly.deleted_at ? l.material.subassembly : null;
     const current = currentOf(sub);
+    const partCurrent = partCurrentOf(l.material);
     return {
       ...l,
+      part: isPart(l.material) ? {
+        held: l.part_revision ? { id: l.part_revision.id, rev: l.part_revision.rev } : null,
+        current: partCurrent ? { id: partCurrent.id, rev: partCurrent.rev } : null,
+        newer: Boolean(partCurrent && l.part_revision && partCurrent.id !== l.part_revision.id),
+      } : null,
       child: sub ? {
         subassembly_id: sub.id,
         held: l.child_revision ? { id: l.child_revision.id, rev: l.child_revision.rev } : null,
@@ -103,8 +115,17 @@ function createBomService(repository) {
         } else child = had?.child_revision_id ?? current?.id ?? null;
         if (!child) errors.push({ field: `${field}.material_id`, message: `${at}: ${m.imm_code} has no released revision yet` });
       }
+      let part = null;
+      if (isPart(m)) {
+        const current = partCurrentOf(m);
+        const allowed = new Set([had?.part_revision_id, current?.id].filter(Boolean));
+        if (l.part_revision_id) {
+          if (!allowed.has(l.part_revision_id)) errors.push({ field: `${field}.part_revision_id`, message: `${at}: ${m.imm_code} can be held at its current revision only` });
+          part = l.part_revision_id;
+        } else part = had?.part_revision_id ?? current?.id ?? null;
+      }
       return {
-        machine_id: l.machine_id, material_id: m.id, quantity: l.quantity, sort_order: i, child_revision_id: child,
+        machine_id: l.machine_id, material_id: m.id, quantity: l.quantity, sort_order: i, child_revision_id: child, part_revision_id: part,
         department_id: l.department_id ?? (m.subassembly && !m.subassembly.deleted_at ? m.subassembly.department_id : null) ?? null,
       };
     });
@@ -114,7 +135,7 @@ function createBomService(repository) {
 
   /**
    * Explodes lines into tags. `lines` carry machine_id, quantity, material
-   * (brief), child_revision ({ id, rev }) and department ({ name, dept_no }).
+   * (brief), child_revision / part_revision ({ id, rev }) and department ({ name, dept_no }).
    * @returns {Promise<Array<object>>} tags in order, as ProjectBomItem rows (without bom_id)
    */
   async function explode(project, lines) {
@@ -130,7 +151,7 @@ function createBomService(repository) {
     const items = [];
     let order = 0;
 
-    const emit = async (machine, dept, m, qtyPerParent, times, held, parentTag, level, path) => {
+    const emit = async (machine, dept, m, qtyPerParent, times, held, parentTag, level, path, part = null) => {
       if (level > MAX_LEVELS) throw new ConflictError(`The structure under ${parentTag} is more than ${MAX_LEVELS} levels deep`);
       const sub = m.subassembly && !m.subassembly.deleted_at ? m.subassembly : null;
       const rev = sub ? (held ?? currentOf(sub)) : null;
@@ -145,13 +166,14 @@ function createBomService(repository) {
       for (const c of copies) {
         items.push({
           machine_id: machine.id, tag: c.tag, parent_tag: parentTag, level, sort_order: (order += 1),
-          material_id: m.id, is_subassembly: Boolean(sub), revision_id: rev?.id ?? null, rev: rev?.rev ?? null,
+          material_id: m.id, is_subassembly: Boolean(sub), revision_id: rev?.id ?? null,
+          part_revision_id: sub ? null : part?.id ?? null, rev: rev?.rev ?? (sub ? null : part?.rev ?? null),
           imm_code: m.imm_code, item_name: m.item_name, drawing_no: m.drawing_no ?? null, material_type: m.material_type,
           material_text: m.material, technical_spec: null, uom: m.uom?.code ?? '', dept_no: dept.dept_no, department: dept.name ?? null,
           qty_per_parent: Number(qtyPerParent), quantity: c.quantity, has_children: children.length > 0,
         });
         for (const ch of children) {
-          await emit(machine, dept, ch.material, ch.quantity, c.quantity, ch.child_revision, c.tag, level + 1, nextPath);
+          await emit(machine, dept, ch.material, ch.quantity, c.quantity, ch.child_revision, c.tag, level + 1, nextPath, ch.part_revision);
         }
       }
     };
@@ -159,7 +181,7 @@ function createBomService(repository) {
     for (const l of lines) {
       const machine = machines.get(l.machine_id);
       if (!machine) continue;
-      await emit(machine, l.department, l.material, l.quantity, 1, l.child_revision, null, 1, new Set());
+      await emit(machine, l.department, l.material, l.quantity, 1, l.child_revision, null, 1, new Set(), l.part_revision);
     }
     return items;
   }
@@ -293,9 +315,13 @@ function createBomService(repository) {
       if (previous && !note) throw fail('change_note', 'Say what changed and why');
 
       const items = await explode(project, draft.lines);
-      // The snapshot: each material's specification as it is now.
+      // The snapshot: each material's specification as it is now — a part's
+      // as it is in the drawing revision it is held at.
       const specs = new Map((await repository.materialDetails([...new Set(items.map((i) => i.material_id))])).map((m) => [m.id, m.technical_spec]));
-      const rows = items.map(({ has_children, ...i }) => ({ ...i, technical_spec: specs.get(i.material_id) ?? null }));
+      const partSpecs = new Map((await repository.partRevisionSpecs([...new Set(items.map((i) => i.part_revision_id).filter(Boolean))])).map((r) => [r.id, r.technical_spec]));
+      const rows = items.map(({ has_children, ...i }) => ({
+        ...i, technical_spec: (i.part_revision_id ? partSpecs.get(i.part_revision_id) : null) ?? specs.get(i.material_id) ?? null,
+      }));
       const ok = await repository.lock(projectId, bomId, note || 'First lock', rows, actor?.id ?? null);
       if (!ok) throw new ConflictError('This draft was locked or discarded meanwhile — reload');
       await auditService.record({

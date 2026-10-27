@@ -2,6 +2,7 @@ const { subassemblyRepository } = require('./subassembly.repository');
 const { materialRepository } = require('./material.repository');
 const { materialService } = require('./material.service');
 const { settingsRepository } = require('../settings/settings.repository');
+const { SCHEMES, FIRST_RELEASE, labelFor, revName, loadRevisionConfig } = require('./revisionLabels');
 const { auditService } = require('../audit/audit.service');
 const { NotFoundError, ConflictError, ValidationError, buildSearchClause } = require('../../core');
 
@@ -13,8 +14,8 @@ const { NotFoundError, ConflictError, ValidationError, buildSearchClause } = req
  *     material — its IMM code), created with it from a prefix and unit or
  *     linked from an existing Finished material. The item follows its name
  *     and drawing no., stays the same across revisions, and goes with it.
- *   - **Revisions** hold the lines (Rev A, B … or 00, 01 …, see
- *     REVISION_SCHEMES). Only a **draft** changes; **releasing** it (Subassemblies
+ *   - **Revisions** hold the lines (Original, then Rev A, B … or 01, 02 …;
+ *     see revisionLabels). Only a **draft** changes; **releasing** it (Subassemblies
  *     → Approve, with a change note) makes it the current revision and
  *     supersedes the one before, which stays readable forever. At most one
  *     draft at a time; a new one starts as a copy of the current revision. A
@@ -24,6 +25,8 @@ const { NotFoundError, ConflictError, ValidationError, buildSearchClause } = req
  *     revision the line shows it; only a new draft moves the line on. No
  *     loops (a subassembly never contains itself, at any depth) and at most
  *     MAX_LEVELS levels.
+ *   - A **Finished part** on a line is held at a drawing revision of it the
+ *     same way (the part's current one when added; a new draft moves it on).
  *   - A material appears once per revision. Only active materials (and
  *     subassemblies with a released revision) can be added; one made inactive
  *     later stays, flagged. A subassembly used on another can't be deleted.
@@ -33,24 +36,19 @@ const { NotFoundError, ConflictError, ValidationError, buildSearchClause } = req
 function createSubassemblyService(repository) {
   const SORTABLE_FIELDS = Object.freeze(['name', 'drawing_no', 'updated_at', 'created_at']);
   const SEARCHABLE_FIELDS = Object.freeze(['name', 'drawing_no']);
-  const REVISION_SCHEMES = Object.freeze(['LETTERS', 'NUMBERS']);
+  const REVISION_SCHEMES = SCHEMES;
   const MAX_LEVELS = 10;
   const PAGE = 10;
 
   const round = (n) => Math.round(n * 1e6) / 1e6;
   const fail = (field, message) => new ValidationError('Validation failed', [{ field, message }]);
 
-  /** The n-th revision's label: LETTERS 1 → A … 26 → Z, 27 → AA; NUMBERS 1 → 00, 2 → 01. */
-  function revisionLabel(scheme, seq) {
-    if (scheme === 'NUMBERS') return String(seq - 1).padStart(2, '0');
-    let n = seq; let s = '';
-    while (n > 0) { n -= 1; s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26); }
-    return s;
-  }
-  const scheme = async () => (await settingsRepository.getOrCreate()).revision_scheme || 'LETTERS';
-
   /** A child subassembly's current (released) revision, or null. */
   const currentOf = (sub) => (sub && !sub.deleted_at ? sub.revisions?.[0] ?? null : null);
+  /** A plain Finished part (not a subassembly's item): it has drawing revisions. */
+  const isPart = (m) => m.material_type === 'FINISHED' && (!m.subassembly || m.subassembly.deleted_at);
+  /** A part's current (released) drawing revision, or null. */
+  const partCurrentOf = (m) => (isPart(m) ? m.revisions?.find((r) => r.status === 'RELEASED') ?? null : null);
 
   /** The department it comes from must be a live one. @param {number|null|undefined} id */
   async function assertDepartment(id) {
@@ -58,9 +56,17 @@ function createSubassemblyService(repository) {
     if (!(await repository.findDepartment(id))) throw fail('department_id', 'That department was not found');
   }
 
-  async function assertDrawingFree(drawingNo, exceptId) {
+  /**
+   * A drawing no. belongs to one subassembly, and to no other material (the
+   * subassembly's own item carries it).
+   * @param {string} drawingNo @param {number} [exceptId]  the subassembly being edited
+   * @param {Array<number|null|undefined>} [ownItemIds]  its item (or the material about to become it)
+   */
+  async function assertDrawingFree(drawingNo, exceptId, ownItemIds = []) {
     const clash = await repository.findByDrawingNo(drawingNo, exceptId);
     if (clash) throw new ConflictError(`Drawing no. ${drawingNo} is already used by "${clash.name}"`);
+    const m = await materialService.drawingOwner(drawingNo, ownItemIds);
+    if (m) throw new ConflictError(`Drawing no. ${drawingNo} is already used by material ${m.imm_code} (${m.item_name})`);
   }
 
   /**
@@ -68,8 +74,9 @@ function createSubassemblyService(repository) {
    * a revision: the one asked for (`child_revision_id`: the line's current
    * hold in `previous`, or the child's current revision), else the line's
    * current hold, else the child's current revision.
-   * @param {Array<{ material_id: number, quantity: number, child_revision_id?: number }>} items
-   * @param {Map<number, { child_revision_id: number|null }>} [previous]  the draft's lines now, by material
+   * A Finished part is held at a drawing revision the same way (`part_revision_id`).
+   * @param {Array<{ material_id: number, quantity: number, child_revision_id?: number, part_revision_id?: number }>} items
+   * @param {Map<number, { child_revision_id: number|null, part_revision_id: number|null }>} [previous]  the draft's lines now, by material
    */
   async function toRows(items, previous = new Map()) {
     const ids = items.map((i) => i.material_id);
@@ -94,7 +101,16 @@ function createSubassemblyService(repository) {
         } else child = had?.child_revision_id ?? current?.id ?? null;
         if (!child) errors.push({ field, message: `${at}: ${m.imm_code} has no released revision yet — release it first` });
       }
-      return { material_id: m.id, quantity: i.quantity, sort_order: idx, child_revision_id: child };
+      let part = null;
+      if (isPart(m)) {
+        const current = partCurrentOf(m);
+        const allowed = new Set([had?.part_revision_id, current?.id].filter(Boolean));
+        if (i.part_revision_id) {
+          if (!allowed.has(i.part_revision_id)) errors.push({ field: `items.${idx}.part_revision_id`, message: `${at}: ${m.imm_code} can be held at its current revision only` });
+          part = i.part_revision_id;
+        } else part = had?.part_revision_id ?? current?.id ?? null;
+      }
+      return { material_id: m.id, quantity: i.quantity, sort_order: idx, child_revision_id: child, part_revision_id: part };
     });
     if (errors.length) throw new ValidationError('Validation failed', errors);
     return rows;
@@ -191,15 +207,21 @@ function createSubassemblyService(repository) {
   async function loadDraft(subId, revId) {
     const r = await repository.findRevision(subId, revId);
     if (!r) throw new NotFoundError('Revision');
-    if (r.status !== 'DRAFT') throw new ConflictError(`Rev ${r.rev} is ${r.status === 'RELEASED' ? 'released' : 'superseded'} — it can't change. Start a new revision instead.`);
+    if (r.status !== 'DRAFT') throw new ConflictError(`${revName(r.rev)} is ${r.status === 'RELEASED' ? 'released' : 'superseded'} — it can't change. Start a new revision instead.`);
     return r;
   }
 
-  /** A line as shown: its child's held revision, and a newer one if there is. */
+  /** A line as shown: its child's (or part's) held revision, and a newer one if there is. */
   const shapeLine = (l) => {
     const current = currentOf(l.material.subassembly);
+    const partCurrent = partCurrentOf(l.material);
     return {
       ...l,
+      part: isPart(l.material) ? {
+        held: l.part_revision ? { id: l.part_revision.id, rev: l.part_revision.rev } : null,
+        current: partCurrent ? { id: partCurrent.id, rev: partCurrent.rev } : null,
+        newer: Boolean(partCurrent && l.part_revision && partCurrent.id !== l.part_revision.id),
+      } : null,
       child: l.material.subassembly && !l.material.subassembly.deleted_at ? {
         subassembly_id: l.material.subassembly.id,
         held: l.child_revision ? { id: l.child_revision.id, rev: l.child_revision.rev } : null,
@@ -213,7 +235,6 @@ function createSubassemblyService(repository) {
     SORTABLE_FIELDS,
     MAX_LEVELS,
     REVISION_SCHEMES,
-    revisionLabel,
 
     /** @param {import('../../core/http/queryOptions').ListQuery} query */
     async list(query) {
@@ -290,22 +311,30 @@ function createSubassemblyService(repository) {
       return {
         prefixes: prefixes.map((p) => ({ ...p, preview: materialService.formatCode(p, p.next_number) })),
         units,
-        first_rev: revisionLabel(await scheme(), 1),
+        first_rev: labelFor(await loadRevisionConfig(), 1),
       };
     },
 
     // ── Revision labels (Administrator → Configuration → Revisions) ──────────
     async getRevisionScheme() {
-      const s = await scheme();
-      return { scheme: s, examples: [1, 2, 3].map((n) => revisionLabel(s, n)) };
+      const cfg = await loadRevisionConfig();
+      return {
+        scheme: cfg.scheme, first_release: cfg.first, original_label: cfg.originalLabel,
+        examples: [1, 2, 3].map((n) => labelFor(cfg, n)),
+      };
     },
 
-    async setRevisionScheme(value, actor) {
+    /** @param {{ scheme?: string, first_release?: string, original_label?: string }} dto */
+    async setRevisionScheme(dto, actor) {
       const before = await settingsRepository.getOrCreate();
-      await settingsRepository.update(before.id, { revision_scheme: value, updated_by: actor?.id ?? null });
+      const data = { updated_by: actor?.id ?? null };
+      if (dto.scheme && SCHEMES.includes(dto.scheme)) data.revision_scheme = dto.scheme;
+      if (dto.first_release && FIRST_RELEASE.includes(dto.first_release)) data.revision_first_release = dto.first_release;
+      if (dto.original_label) data.revision_original_label = dto.original_label;
+      await settingsRepository.update(before.id, data);
       await auditService.record({
         action: auditService.Action.UPDATE, entity: 'CompanySettings', entityId: before.id, actor,
-        changes: { revision_scheme: { from: before.revision_scheme, to: value } },
+        changes: auditService.diff(before, data),
       });
       return this.getRevisionScheme();
     },
@@ -313,12 +342,12 @@ function createSubassemblyService(repository) {
     // ── Subassemblies ────────────────────────────────────────────────────────
     /** A new subassembly with its item and its first revision (a draft) holding the lines. */
     async create(dto, actor) {
-      await assertDrawingFree(dto.drawing_no);
+      await assertDrawingFree(dto.drawing_no, undefined, [dto.item?.mode === 'existing' ? dto.item.material_id : null]);
       await assertDepartment(dto.department_id);
       const rows = await toRows(dto.items || []);
       const item = await planItem(dto.item, dto, actor);
       await assertStructure(null, item.materialId, rows);
-      const rev = revisionLabel(await scheme(), 1);
+      const rev = labelFor(await loadRevisionConfig(), 1);
       const id = await saving(() => repository.create({
         name: dto.name, drawing_no: dto.drawing_no, department_id: dto.department_id ?? null,
         created_by: actor?.id ?? null, updated_by: actor?.id ?? null,
@@ -335,8 +364,11 @@ function createSubassemblyService(repository) {
     /** Name, drawing no. — and an item for one made before items existed. Lines change through revisions. */
     async updateDetails(id, dto, actor) {
       const before = await loadSub(id);
-      if (dto.drawing_no !== undefined && dto.drawing_no !== before.drawing_no) await assertDrawingFree(dto.drawing_no, id);
       if (dto.item && before.material) throw new ConflictError('This subassembly already has its item');
+      // Checked when it changes, or when an item (which will carry it) is given.
+      if ((dto.drawing_no !== undefined && dto.drawing_no !== before.drawing_no) || dto.item) {
+        await assertDrawingFree(dto.drawing_no ?? before.drawing_no, id, [before.material?.id, dto.item?.mode === 'existing' ? dto.item.material_id : null]);
+      }
       await assertDepartment(dto.department_id);
       const data = { updated_by: actor?.id ?? null };
       if (dto.name !== undefined) data.name = dto.name;
@@ -344,7 +376,7 @@ function createSubassemblyService(repository) {
       if (dto.department_id !== undefined) data.department_id = dto.department_id;
       const sub = { name: data.name ?? before.name, drawing_no: data.drawing_no ?? before.drawing_no };
       const item = dto.item ? await planItem(dto.item, sub, actor) : null;
-      await saving(() => repository.updateDetails(id, data, before.drawing_no, item?.make));
+      await saving(() => repository.updateDetails(id, data, item?.make));
       if (item?.created) await recordItemCreated(item.created, actor);
       const s = await this.getById(id);
       await auditService.record({
@@ -380,11 +412,11 @@ function createSubassemblyService(repository) {
     async newRevision(id, actor) {
       const s = await loadSub(id);
       const draft = s.revisions.find((r) => r.status === 'DRAFT');
-      if (draft) throw new ConflictError(`Rev ${draft.rev} is already being drafted — finish or discard it first`);
+      if (draft) throw new ConflictError(`${revName(draft.rev)} is already being drafted — finish or discard it first`);
       const current = s.revisions.find((r) => r.status === 'RELEASED');
       if (!current) throw new ConflictError('There is no released revision to start from');
       const seq = (await repository.lastSeq(id)) + 1;
-      const rev = revisionLabel(await scheme(), seq);
+      const rev = labelFor(await loadRevisionConfig(), seq);
       const revId = await saving(() => repository.createDraftFrom(id, current.id, seq, rev, actor?.id ?? null));
       await auditService.record({ action: auditService.Action.CREATE, entity: 'SubassemblyRevision', entityId: revId, actor, changes: { subassembly: s.drawing_no, rev, from: current.rev } });
       return this.getRevision(id, revId);
@@ -448,18 +480,19 @@ function createSubassemblyService(repository) {
       const added = []; const removed = []; const changed = [];
       for (const [mid, l] of after) {
         const o = before.get(mid);
-        if (!o) { added.push({ material: l.material, quantity: l.quantity, held: l.child_revision }); continue; }
+        if (!o) { added.push({ material: l.material, quantity: l.quantity, held: l.child_revision ?? l.part_revision }); continue; }
         const qty = Number(o.quantity) !== Number(l.quantity);
-        const held = (o.child_revision_id ?? null) !== (l.child_revision_id ?? null);
+        const held = (o.child_revision_id ?? null) !== (l.child_revision_id ?? null)
+          || (o.part_revision_id ?? null) !== (l.part_revision_id ?? null);
         if (qty || held) {
           changed.push({
             material: l.material,
             ...(qty ? { quantity: { from: o.quantity, to: l.quantity } } : {}),
-            ...(held ? { held: { from: o.child_revision, to: l.child_revision } } : {}),
+            ...(held ? { held: { from: o.child_revision ?? o.part_revision, to: l.child_revision ?? l.part_revision } } : {}),
           });
         }
       }
-      for (const [mid, o] of before) if (!after.has(mid)) removed.push({ material: o.material, quantity: o.quantity, held: o.child_revision });
+      for (const [mid, o] of before) if (!after.has(mid)) removed.push({ material: o.material, quantity: o.quantity, held: o.child_revision ?? o.part_revision });
       const byCode = (x, y) => x.material.imm_code.localeCompare(y.material.imm_code);
       const strip = ({ items, _count, ...r }) => r;
       return { from: strip(a), to: strip(b), added: added.sort(byCode), removed: removed.sort(byCode), changed: changed.sort(byCode) };
@@ -482,6 +515,7 @@ function createSubassemblyService(repository) {
         return {
           material: l.material, quantity: Number(l.quantity),
           subassembly_id: sub?.id ?? null, revision: held ? { id: held.id, rev: held.rev } : null,
+          part_revision: l.part_revision ? { id: l.part_revision.id, rev: l.part_revision.rev } : null,
           children: [],
         };
       };

@@ -24,8 +24,8 @@ const deletePrefix = async (req, res) => {
   ApiResponse.ok(res, { id: req.params.id });
 };
 
-/** `GET /materials/drawing-options` — the subassembly drawing numbers a material may use. */
-const getDrawingOptions = async (req, res) => ApiResponse.ok(res, await materialService.drawingOptions(req.query));
+/** `GET /materials/drawing-check?nos=` — which drawing numbers other materials already use. */
+const getDrawingCheck = async (req, res) => ApiResponse.ok(res, await materialService.drawingCheck(req.query));
 
 /**
  * The list's search, filters and sort (shared by the list and its export).
@@ -109,6 +109,30 @@ const updateMaterial = async (req, res) => {
   ApiResponse.ok(res, await materialService.update(req.params.id, req.body, requestContext(req)));
 };
 
+/** `GET /materials/:id/revisions` — a Finished part's drawing revisions. */
+const listRevisions = async (req, res) => ApiResponse.ok(res, await materialService.revisions(req.params.id));
+
+/** `POST /materials/:id/revisions` — start the next revision as a draft. */
+const newRevision = async (req, res) => {
+  ApiResponse.created(res, await materialService.newRevision(req.params.id, requestContext(req)));
+};
+
+/** `PUT /materials/:id/revisions/:revId` — change a draft. */
+const saveRevisionDraft = async (req, res) => {
+  ApiResponse.ok(res, await materialService.saveRevisionDraft(req.params.id, req.params.revId, req.body, requestContext(req)));
+};
+
+/** `POST /materials/:id/revisions/:revId/release` — Materials → Approve. */
+const releaseRevision = async (req, res) => {
+  ApiResponse.ok(res, await materialService.releaseRevision(req.params.id, req.params.revId, req.body, requestContext(req)));
+};
+
+/** `DELETE /materials/:id/revisions/:revId` — discard a draft. */
+const discardRevisionDraft = async (req, res) => {
+  await materialService.discardRevisionDraft(req.params.id, req.params.revId, requestContext(req));
+  ApiResponse.ok(res, { id: req.params.revId });
+};
+
 /** `DELETE /materials/:id` */
 const deleteMaterial = async (req, res) => {
   await materialService.remove(req.params.id, requestContext(req));
@@ -117,7 +141,8 @@ const deleteMaterial = async (req, res) => {
 
 module.exports = {
   listPrefixes, createPrefix, updatePrefix, deletePrefix,
-  getDrawingOptions, listMaterials, getMaterial, createMaterials, updateMaterial, deleteMaterial,
+  getDrawingCheck, listMaterials, getMaterial, createMaterials, updateMaterial, deleteMaterial,
+  listRevisions, newRevision, saveRevisionDraft, releaseRevision, discardRevisionDraft,
   exportMaterials, findDuplicates, getWhereUsed, getHistory,
   listUnits, createUnit, updateUnit, deleteUnit,
 };

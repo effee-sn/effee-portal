@@ -9,7 +9,7 @@ import useNav from '@/lib/useNav';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
 import AsyncSearchSelect from '@/components/AsyncSearchSelect';
-import { MATERIAL_TYPE_LABEL, formatImmCode } from '@/lib/materialOptions';
+import { MATERIAL_TYPE_LABEL, formatImmCode, revName } from '@/lib/materialOptions';
 
 /**
  * Master Data → Subassemblies → one subassembly (new, copied or existing).
@@ -107,7 +107,7 @@ function LinePicker({ excludeIds, onPick }) {
                       <span className="font-mono text-xs font-semibold text-gray-800">{m.imm_code}</span>
                       <span className="text-sm text-gray-800">{m.item_name}</span>
                       {m.subassembly && <SubBadge />}
-                      {m.subassembly?.revisions?.[0] && <span className="text-[11px] text-gray-500">Rev {m.subassembly.revisions[0].rev}</span>}
+                      {m.subassembly?.revisions?.[0] && <span className="text-[11px] text-gray-500">{revName(m.subassembly.revisions[0].rev)}</span>}
                     </span>
                     <span className="block text-xs text-gray-500 mt-0.5">
                       {m.drawing_no ? `Drawing ${m.drawing_no} · ` : ''}{MATERIAL_TYPE_LABEL[m.material_type]} · {m.material} · {m.uom?.code}
@@ -186,13 +186,31 @@ function ChildRev({ child, editable, onUseCurrent }) {
   return (
     <span className="inline-flex items-center gap-1.5 ml-2 font-sans">
       <Link href={`${SUBS}/${child.subassembly_id}`} target="_blank" className="hover:opacity-80" title="Open this subassembly"><SubBadge /></Link>
-      {child.held && <span className="text-[11px] text-gray-600">Rev {child.held.rev}</span>}
+      {child.held && <span className="text-[11px] text-gray-600">{revName(child.held.rev)}</span>}
       {child.newer && (
         editable ? (
           <button type="button" onClick={onUseCurrent} className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 hover:bg-amber-100 cursor-pointer"
-            title="Hold this line at the child's current revision">Use Rev {child.current.rev}</button>
+            title="Hold this line at the child's current revision">Use {revName(child.current.rev)}</button>
         ) : (
-          <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800" title="A newer revision of this subassembly is released">Rev {child.current.rev} available</span>
+          <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800" title="A newer revision of this subassembly is released">{revName(child.current.rev)} available</span>
+        )
+      )}
+    </span>
+  );
+}
+
+/** A line's Finished part: the drawing revision held, and a newer one (with "use it" while drafting). */
+function PartRev({ part, editable, onUseCurrent }) {
+  if (!part?.held) return null;
+  return (
+    <span className="inline-flex items-center gap-1.5 ml-2 font-sans">
+      <span className="text-[11px] text-gray-600" title="The drawing revision of this part used here">{revName(part.held.rev)}</span>
+      {part.newer && (
+        editable ? (
+          <button type="button" onClick={onUseCurrent} className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 hover:bg-amber-100 cursor-pointer"
+            title="Hold this line at the part's current drawing revision">Use {revName(part.current.rev)}</button>
+        ) : (
+          <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800" title="A newer drawing revision of this part is released">{revName(part.current.rev)} available</span>
         )
       )}
     </span>
@@ -235,6 +253,7 @@ function LinesTable({ lines, editable, exclude, onAdd, onQty, onRemove, onUseCur
                     <td className="px-3 py-2 font-mono text-xs font-semibold text-gray-800 whitespace-nowrap">
                       {m.imm_code}
                       <ChildRev child={l.child} editable={editable} onUseCurrent={() => onUseCurrent(m.id)} />
+                      <PartRev part={l.part} editable={editable} onUseCurrent={() => onUseCurrent(m.id)} />
                       {flag && <span className="ml-2 font-sans font-medium text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">{flag}</span>}
                     </td>
                     <td className="px-3 py-2 text-gray-800">{m.item_name}</td>
@@ -283,7 +302,8 @@ function TreeRow({ node, depth, open, toggle, path }) {
             {node.subassembly_id && (
               <Link href={`${SUBS}/${node.subassembly_id}`} className="hover:opacity-80"><SubBadge /></Link>
             )}
-            {node.revision && <span className="text-[11px] text-gray-500">Rev {node.revision.rev}</span>}
+            {node.revision && <span className="text-[11px] text-gray-500">{revName(node.revision.rev)}</span>}
+            {node.part_revision && <span className="text-[11px] text-gray-500">{revName(node.part_revision.rev)}</span>}
           </span>
         </td>
         <td className="py-1.5 pr-3 text-gray-700">{node.material.item_name}</td>
@@ -321,7 +341,7 @@ function Structure({ id, revId }) {
     <div className="space-y-6 px-4 py-4">
       <div>
         <div className="flex items-center gap-3 mb-2 flex-wrap">
-          <h3 className="text-sm font-semibold text-gray-800">Structure of Rev {tree.revision.rev} <span className="font-normal text-gray-400">· {tree.levels} level{tree.levels === 1 ? '' : 's'}</span></h3>
+          <h3 className="text-sm font-semibold text-gray-800">Structure of {revName(tree.revision.rev)} <span className="font-normal text-gray-400">· {tree.levels} level{tree.levels === 1 ? '' : 's'}</span></h3>
           <button type="button" onClick={() => setOpen(new Set(all))} className="text-xs text-[var(--ams-primary)] hover:underline cursor-pointer">Expand all</button>
           <button type="button" onClick={() => setOpen(new Set())} className="text-xs text-[var(--ams-primary)] hover:underline cursor-pointer">Collapse all</button>
         </div>
@@ -343,7 +363,7 @@ function Structure({ id, revId }) {
       </div>
 
       <div>
-        <h3 className="text-sm font-semibold text-gray-800 mb-1">Materials needed for 1 × {tree.drawing_no} (Rev {tree.revision.rev})</h3>
+        <h3 className="text-sm font-semibold text-gray-800 mb-1">Materials needed for 1 × {tree.drawing_no} ({revName(tree.revision.rev)})</h3>
         <p className="text-xs text-gray-500 mb-2">Every plain material at the bottom of the structure, with quantities multiplied through the levels above it.</p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm" style={{ minWidth: 560 }}>
@@ -393,7 +413,7 @@ function Compare({ id, revisions, initialFrom, initialTo }) {
 
   if (revisions.length < 2) return <Empty>Only one revision so far — nothing to compare yet.</Empty>;
   const sel = 'py-1.5 px-2 text-sm text-gray-700 border border-gray-300 rounded bg-white outline-none cursor-pointer';
-  const opts = revisions.map((r) => <option key={r.id} value={r.id}>Rev {r.rev} · {STATUS[r.status].text}</option>);
+  const opts = revisions.map((r) => <option key={r.id} value={r.id}>{revName(r.rev)} · {STATUS[r.status].text}</option>);
   const name = (x) => <><span className="font-mono text-xs font-semibold text-gray-800">{x.material.imm_code}</span> <span className="text-gray-700">{x.material.item_name}</span></>;
   const unit = (x) => <span className="text-xs text-gray-500">{x.material.uom?.code}</span>;
 
@@ -407,7 +427,7 @@ function Compare({ id, revisions, initialFrom, initialTo }) {
       {from === to ? <p className="text-sm text-gray-400">Pick two different revisions.</p> : !diff ? <TableSkeleton cols={3} rows={3} /> : (
         <>
           {diff.to.change_note && diff.to.status !== 'DRAFT' && (
-            <p className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded px-3 py-2"><span className="text-gray-500">Rev {diff.to.rev} change note:</span> {diff.to.change_note}</p>
+            <p className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded px-3 py-2"><span className="text-gray-500">{revName(diff.to.rev)} change note:</span> {diff.to.change_note}</p>
           )}
           {!diff.added.length && !diff.removed.length && !diff.changed.length ? (
             <p className="text-sm text-gray-500">No differences in the lines.</p>
@@ -416,7 +436,7 @@ function Compare({ id, revisions, initialFrom, initialTo }) {
               {diff.added.map((x) => (
                 <li key={`a${x.material.id}`} className="flex items-center gap-2 flex-wrap">
                   <span className="w-20 shrink-0 text-[11px] font-medium px-1.5 py-0.5 rounded bg-green-50 text-green-700 text-center">Added</span>
-                  {name(x)} <span className="tabular-nums">× {qtyFmt(x.quantity)}</span> {unit(x)}{x.held && <span className="text-[11px] text-gray-500">(Rev {x.held.rev})</span>}
+                  {name(x)} <span className="tabular-nums">× {qtyFmt(x.quantity)}</span> {unit(x)}{x.held && <span className="text-[11px] text-gray-500">({revName(x.held.rev)})</span>}
                 </li>
               ))}
               {diff.removed.map((x) => (
@@ -430,7 +450,7 @@ function Compare({ id, revisions, initialFrom, initialTo }) {
                   <span className="w-20 shrink-0 text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 text-center">Changed</span>
                   {name(x)}
                   {x.quantity && <span className="tabular-nums">qty <span className="line-through text-gray-400">{qtyFmt(x.quantity.from)}</span> → {qtyFmt(x.quantity.to)} {unit(x)}</span>}
-                  {x.held && <span className="text-gray-600">held at Rev <span className="line-through text-gray-400">{x.held.from?.rev ?? '—'}</span> → {x.held.to?.rev ?? '—'}</span>}
+                  {x.held && <span className="text-gray-600">held at <span className="line-through text-gray-400">{x.held.from ? revName(x.held.from.rev) : '—'}</span> → {x.held.to ? revName(x.held.to.rev) : '—'}</span>}
                 </li>
               ))}
             </ul>
@@ -459,13 +479,13 @@ function ReleaseModal({ sub, draft, onClose, onRelease }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
       <form onSubmit={submit} className="w-full max-w-lg bg-white rounded-lg shadow-xl">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-800">Release Rev {draft.rev}</h2>
+          <h2 className="text-base font-semibold text-gray-800">Release {revName(draft.rev)}</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-gray-600 text-2xl leading-none cursor-pointer">&times;</button>
         </div>
         <div className="px-6 py-4 space-y-3">
           {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm">{error}</div>}
           <p className="text-sm text-gray-600">
-            Rev {draft.rev} becomes the current revision of {sub.drawing_no} and is locked{sub.current ? `; Rev ${sub.current.rev} is superseded` : ''}.
+            {revName(draft.rev)} becomes the current revision of {sub.drawing_no} and is locked{sub.current ? `; ${revName(sub.current.rev)} is superseded` : ''}.
             Subassemblies that use {sub.drawing_no} keep their revision until they are updated.
           </p>
           <div>
@@ -477,20 +497,29 @@ function ReleaseModal({ sub, draft, onClose, onRelease }) {
         </div>
         <div className="flex gap-3 px-6 pb-5">
           <button type="button" onClick={onClose} className="btn-secondary flex-1 justify-center py-2">Cancel</button>
-          <button type="submit" disabled={busy} className="btn-primary flex-1 justify-center py-2">{busy ? 'Releasing…' : `Release Rev ${draft.rev}`}</button>
+          <button type="submit" disabled={busy} className="btn-primary flex-1 justify-center py-2">{busy ? 'Releasing…' : `Release ${revName(draft.rev)}`}</button>
         </div>
       </form>
     </div>
   );
 }
 
-const toLines = (items) => items.map((i) => ({ material: i.material, quantity: String(Number(i.quantity)), child: i.child }));
-/** A picked material as a line: a child subassembly is held at its current revision. */
+const toLines = (items) => items.map((i) => ({ material: i.material, quantity: String(Number(i.quantity)), child: i.child, part: i.part }));
+/** A picked material as a line: a child subassembly (or a Finished part) is held at its current revision. */
 const pickedLine = (m) => {
   const current = m.subassembly?.revisions?.[0] ?? null;
-  return { material: m, quantity: '1', child: m.subassembly ? { subassembly_id: m.subassembly.id, held: current, current, newer: false } : null };
+  const partCurrent = !m.subassembly && m.material_type === 'FINISHED' ? m.revisions?.find((r) => r.status === 'RELEASED') ?? null : null;
+  return {
+    material: m, quantity: '1',
+    child: m.subassembly ? { subassembly_id: m.subassembly.id, held: current, current, newer: false } : null,
+    part: partCurrent ? { held: partCurrent, current: partCurrent, newer: false } : null,
+  };
 };
-const lineBody = (lines) => lines.map((l) => ({ material_id: l.material.id, quantity: Number(l.quantity), ...(l.child?.held ? { child_revision_id: l.child.held.id } : {}) }));
+const lineBody = (lines) => lines.map((l) => ({
+  material_id: l.material.id, quantity: Number(l.quantity),
+  ...(l.child?.held ? { child_revision_id: l.child.held.id } : {}),
+  ...(l.part?.held ? { part_revision_id: l.part.held.id } : {}),
+}));
 
 function SubassemblyEditor() {
   useAuth();
@@ -587,7 +616,12 @@ function SubassemblyEditor() {
   const setQty = (mid, v) => { setLines((prev) => prev.map((l) => (l.material.id === mid ? { ...l, quantity: v } : l))); touch(); };
   const removeLine = (mid) => { setLines((prev) => prev.filter((l) => l.material.id !== mid)); touch(); };
   const useCurrent = (mid) => {
-    setLines((prev) => prev.map((l) => (l.material.id === mid && l.child ? { ...l, child: { ...l.child, held: l.child.current, newer: false } } : l)));
+    setLines((prev) => prev.map((l) => {
+      if (l.material.id !== mid) return l;
+      if (l.child) return { ...l, child: { ...l.child, held: l.child.current, newer: false } };
+      if (l.part) return { ...l, part: { ...l.part, held: l.part.current, newer: false } };
+      return l;
+    }));
     touch();
   };
   const linesOk = () => {
@@ -626,14 +660,14 @@ function SubassemblyEditor() {
     const r = await apiPut(`/subassemblies/${id}/revisions/${revId}`, { items: lineBody(lines) });
     setRevision(r.data); setLines(toLines(r.data.items)); setDirty(false);
   };
-  const onSaveDraft = () => { if (linesOk()) run(saveDraft, `Rev ${revision.rev} saved.`); };
+  const onSaveDraft = () => { if (linesOk()) run(saveDraft, `${revName(revision.rev)} saved.`); };
   const startRevision = () => run(async () => {
     const r = await apiPost(`/subassemblies/${id}/revisions`, {});
     await reload(r.data.id);
     setTab('lines');
   }, 'New revision started — change its lines, then release it.');
   const discard = () => {
-    if (!window.confirm(`Discard draft Rev ${revision.rev}? Its changes are lost.`)) return;
+    if (!window.confirm(`Discard draft ${revName(revision.rev)}? Its changes are lost.`)) return;
     run(async () => { await apiDelete(`/subassemblies/${id}/revisions/${revId}`); await reload(sub.current?.id); }, 'Draft discarded.');
   };
   const openRelease = () => {
@@ -646,7 +680,7 @@ function SubassemblyEditor() {
     // Same revision on screen, now released: load it again.
     const rv = (await apiGet(`/subassemblies/${id}/revisions/${revId}`)).data;
     setRevision(rv); setLines(toLines(rv.items)); setDirty(false);
-    setNotice(`Rev ${rv.rev} released.`);
+    setNotice(`${revName(rv.rev)} released.`);
   };
   const remove = () => {
     if (!window.confirm(`Delete subassembly ${form.name} (${form.drawing_no})${sub.material ? ` and its item ${sub.material.imm_code}` : ''}?`)) return;
@@ -702,7 +736,7 @@ function SubassemblyEditor() {
         <div className="bg-white rounded border border-gray-200 px-4 py-3 flex items-center gap-3 flex-wrap">
           <Link href={SUBS} className="text-sm text-gray-500 hover:text-gray-800">← Subassemblies</Link>
           <h1 className="text-base font-semibold text-gray-900">{copyFrom ? 'New subassembly (copy)' : 'New subassembly'}</h1>
-          <span className="text-xs text-gray-500">Saved as draft Rev {setup?.first_rev ?? 'A'} — release it to use it on other subassemblies</span>
+          <span className="text-xs text-gray-500">Saved as draft {revName(setup?.first_rev ?? 'Original')} — release it to use it on other subassemblies</span>
           <div className="flex-1" />
           {canCreate && <button type="submit" disabled={busy} className="btn-primary px-4 py-1.5">{busy ? 'Saving…' : 'Create draft'}</button>}
         </div>
@@ -736,8 +770,8 @@ function SubassemblyEditor() {
         <Link href={SUBS} className="text-sm text-gray-500 hover:text-gray-800">← Subassemblies</Link>
         <h1 className="text-base font-semibold text-gray-900">{sub.name}</h1>
         <span className="font-mono text-xs text-gray-500">{sub.drawing_no}</span>
-        {sub.current ? <span className="text-xs text-gray-600">Current: <b>Rev {sub.current.rev}</b></span> : <span className="text-xs text-amber-700">Not released yet</span>}
-        {sub.draft && <span className="text-xs text-amber-700">· Draft Rev {sub.draft.rev} open</span>}
+        {sub.current ? <span className="text-xs text-gray-600">Current: <b>{revName(sub.current.rev)}</b></span> : <span className="text-xs text-amber-700">Not released yet</span>}
+        {sub.draft && <span className="text-xs text-amber-700">· Draft {revName(sub.draft.rev)} open</span>}
         <div className="flex-1" />
         {canCreate && <Link href={`${SUBS}/new?copy=${id}`} className="btn-secondary px-3 py-1.5" title="Start a new subassembly with these lines">Copy</Link>}
         {canEdit && !sub.draft && sub.current && (
@@ -783,7 +817,7 @@ function SubassemblyEditor() {
             if (dirty && !window.confirm('Leave this draft without saving its changes?')) return;
             setRevId(Number(e.target.value));
           }} className="py-1.5 px-2 text-sm text-gray-800 border border-gray-300 rounded bg-white outline-none cursor-pointer">
-            {sub.revisions.map((r) => <option key={r.id} value={r.id}>Rev {r.rev} · {STATUS[r.status].text}{r.status === 'RELEASED' ? ' (current)' : ''}</option>)}
+            {sub.revisions.map((r) => <option key={r.id} value={r.id}>{revName(r.rev)} · {STATUS[r.status].text}{r.status === 'RELEASED' ? ' (current)' : ''}</option>)}
           </select>
           {revision && <StatusChip status={revision.status} />}
           {revision && revision.status !== 'DRAFT' && (
@@ -799,7 +833,7 @@ function SubassemblyEditor() {
           )}
           {isDraft && canApprove && (
             <button type="button" onClick={openRelease} disabled={busy || !sub.material} className="btn-primary px-4 py-1.5 disabled:opacity-40"
-              title={!sub.material ? 'Give it its IMM code first' : undefined}>Release Rev {revision.rev}…</button>
+              title={!sub.material ? 'Give it its IMM code first' : undefined}>Release {revName(revision.rev)}…</button>
           )}
           {isDraft && !canApprove && <span className="text-xs text-gray-500">Releasing needs Subassemblies → Approve</span>}
         </div>
@@ -828,7 +862,7 @@ function SubassemblyEditor() {
             )}
             {tab === 'structure' && (
               <>
-                {dirty && <p className="px-4 pt-3 text-xs text-amber-700">Showing Rev {revision.rev} as last saved — save the draft to see your changes here.</p>}
+                {dirty && <p className="px-4 pt-3 text-xs text-amber-700">Showing {revName(revision.rev)} as last saved — save the draft to see your changes here.</p>}
                 <Structure key={`${revId}-${revision.updated_at}`} id={id} revId={revId} />
               </>
             )}
@@ -881,10 +915,10 @@ function SubassemblyEditor() {
                         <tr key={`${u.id}-${u.revision.id}`} className="border-b border-gray-100">
                           <td className="py-2 pr-3 font-mono text-xs font-semibold"><Link href={`${SUBS}/${u.id}`} className="text-gray-800 hover:underline">{u.drawing_no}</Link></td>
                           <td className="py-2 pr-3 text-gray-700">{u.name}</td>
-                          <td className="py-2 pr-3 text-gray-600">Rev {u.revision.rev} <StatusChip status={u.revision.status} /></td>
+                          <td className="py-2 pr-3 text-gray-600">{revName(u.revision.rev)} <StatusChip status={u.revision.status} /></td>
                           <td className="py-2 pr-3 text-gray-700">
-                            {u.held ? `Rev ${u.held.rev}` : '—'}
-                            {u.newer && <span className="ml-2 text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800">Rev {sub.current.rev} available</span>}
+                            {u.held ? `${revName(u.held.rev)}` : '—'}
+                            {u.newer && <span className="ml-2 text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800">{revName(sub.current.rev)} available</span>}
                           </td>
                           <td className="py-2 text-right tabular-nums text-gray-700">{qtyFmt(u.quantity)}</td>
                         </tr>

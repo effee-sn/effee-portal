@@ -18,6 +18,8 @@ const draftBody = z.object({
     department_id: z.preprocess((v) => (v === '' ? null : v), z.coerce.number().int().positive().nullable().optional()),
     // For a subassembly: the revision to hold it at (its current one, or the one held now).
     child_revision_id: z.coerce.number().int().positive().optional().nullable(),
+    // For a Finished part: the drawing revision to hold it at.
+    part_revision_id: z.coerce.number().int().positive().optional().nullable(),
   })).max(2000, 'At most 2000 lines'),
 });
 

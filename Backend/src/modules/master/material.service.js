@@ -1,5 +1,6 @@
 const XLSX = require('xlsx');
 const { materialRepository } = require('./material.repository');
+const { labelFor, revName, loadRevisionConfig } = require('./revisionLabels');
 const { auditService } = require('../audit/audit.service');
 const { NotFoundError, ConflictError, ValidationError, buildSearchClause } = require('../../core');
 
@@ -20,6 +21,12 @@ const { NotFoundError, ConflictError, ValidationError, buildSearchClause } = req
  *   - **A subassembly's own item** (Master Data → Subassemblies) takes its name,
  *     drawing no. and type from the subassembly: those are changed there, and
  *     the item is deleted with it.
+ *   - **Drawing revisions** — Finished parts only (not a subassembly's item,
+ *     which has its subassembly's): the first is released when the part is
+ *     made ("Original", see revisionLabels); a change to its description,
+ *     specification or material is a new draft revision, released with
+ *     Materials → Approve and a change note. The part always carries its current
+ *     revision's values; subassembly and project BOM lines hold it at a revision.
  *
  * @param {ReturnType<typeof import('./material.repository').createMaterialRepository>} repository
  */
@@ -35,19 +42,29 @@ function createMaterialService(repository) {
     return { ...rest, material_count: _count.materials, preview: formatCode(p, p.next_number) };
   };
 
+  /** Drawing numbers compare without regard to case. */
+  const drawingKey = (s) => String(s).trim().toLowerCase();
+
   /**
-   * A material's drawing no. is optional; when given it must be the drawing no.
-   * of a subassembly (Master Data → Subassemblies), not free text.
+   * A material's drawing no. is optional free text, and belongs to one
+   * material only: not repeated within the rows, nor used by another live
+   * material (a subassembly's item carries its drawing no. too).
    * @param {Array<{ drawing_no?: string|null }>} rows @param {(i: number) => string} where
+   * @param {number} [exceptId]  the material being edited
    */
-  async function assertDrawingNos(rows, where) {
+  async function assertDrawingNosFree(rows, where, exceptId) {
     const wanted = [...new Set(rows.map((r) => r.drawing_no).filter(Boolean))];
-    const known = await repository.existingDrawingNos(wanted);
+    const taken = new Map((await repository.findByDrawingNos(wanted, exceptId ? [exceptId] : [])).map((m) => [drawingKey(m.drawing_no), m]));
+    const seen = new Map();
     const errors = [];
     rows.forEach((r, i) => {
-      if (r.drawing_no && !known.has(r.drawing_no)) {
-        errors.push({ field: where(i), message: `${rows.length > 1 ? `Row ${i + 1}: ` : ''}drawing no. ${r.drawing_no} is not a subassembly's — pick one from the list` });
-      }
+      if (!r.drawing_no) return;
+      const at = rows.length > 1 ? `Row ${i + 1}: ` : '';
+      const k = drawingKey(r.drawing_no);
+      const m = taken.get(k);
+      if (m) errors.push({ field: where(i), message: `${at}drawing no. ${r.drawing_no} is already used by ${m.imm_code} (${m.item_name})` });
+      else if (seen.has(k)) errors.push({ field: where(i), message: `${at}drawing no. ${r.drawing_no} is repeated — same as row ${seen.get(k) + 1}` });
+      if (!seen.has(k)) seen.set(k, i);
     });
     if (errors.length) throw new ValidationError('Validation failed', errors);
   }
@@ -70,6 +87,25 @@ function createMaterialService(repository) {
     if (errors.length) throw new ValidationError('Validation failed', errors);
   }
 
+  /** A Finished part that is not a subassembly's item: it has drawing revisions. */
+  const hasRevisions = (m) => m.material_type === 'FINISHED' && !m.subassembly;
+  // What a drawing revision carries (material field → revision field).
+  const REVISED = Object.freeze({ description: 'description', technical_spec: 'technical_spec', material: 'material_text' });
+
+  async function loadPart(id) {
+    const m = await repository.findById(id);
+    if (!m) throw new NotFoundError('Material');
+    if (!hasRevisions(m)) throw new ConflictError(`${m.imm_code} has no drawing revisions — only Finished parts do (a subassembly's item is revised on its subassembly)`);
+    return m;
+  }
+
+  async function loadRevisionDraft(m, revId) {
+    const r = await repository.findRevision(m.id, revId);
+    if (!r) throw new NotFoundError('Revision');
+    if (r.status !== 'DRAFT') throw new ConflictError(`${revName(r.rev)} is ${r.status === 'RELEASED' ? 'released' : 'superseded'} — it can't change. Start a new revision instead.`);
+    return r;
+  }
+
   /** Name / material / spec compared loosely: case and extra spaces ignored. */
   const norm = (s) => String(s ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
   const sameKey = (r) => `${norm(r.item_name)}|${norm(r.material)}|${norm(r.technical_spec)}`;
@@ -79,19 +115,23 @@ function createMaterialService(repository) {
     formatCode,
 
     /**
-     * Drawing numbers a material may use (the subassemblies'): search-as-
-     * you-type, a page of 10 at a time. With `nos`, instead reports which of
-     * those drawing numbers exist (to flag pasted ones).
-     * @param {{ q?: string, skip?: number, nos?: string }} query
+     * Which of these drawing numbers other materials already use (to flag them
+     * in the bulk entry before saving).
+     * @param {{ nos?: string }} query  comma-separated
      */
-    async drawingOptions({ q = '', skip = 0, nos } = {}) {
-      if (nos !== undefined) {
-        const list = String(nos).split(',').map((n) => n.trim()).filter(Boolean).slice(0, 500);
-        return { known: [...(await repository.existingDrawingNos(list))] };
-      }
-      const PAGE = 10;
-      const rows = await repository.searchDrawingOptions(String(q), Number(skip) || 0, PAGE + 1);
-      return { items: rows.slice(0, PAGE), has_more: rows.length > PAGE };
+    async drawingCheck({ nos = '' } = {}) {
+      const list = String(nos).split(',').map((n) => n.trim()).filter(Boolean).slice(0, 500);
+      return { taken: await repository.findByDrawingNos(list) };
+    },
+
+    /**
+     * The live material using this drawing no., if any — for subassemblies,
+     * whose drawing no. their own item carries.
+     * @param {string} drawingNo @param {number[]} [exceptIds]
+     */
+    async drawingOwner(drawingNo, exceptIds = []) {
+      const [m] = await repository.findByDrawingNos([drawingNo], exceptIds.filter(Boolean));
+      return m || null;
     },
 
     // ── Prefixes ─────────────────────────────────────────────────────────────
@@ -177,11 +217,11 @@ function createMaterialService(repository) {
       });
       if (errors.length) throw new ValidationError('Validation failed', errors);
       await assertUnits(dto.rows, (i) => `rows.${i}.uom_id`);
-      await assertDrawingNos(dto.rows, (i) => `rows.${i}.drawing_no`);
+      await assertDrawingNosFree(dto.rows, (i) => `rows.${i}.drawing_no`);
 
       let created;
       try {
-        created = await repository.createMany(dto.rows, formatCode, actor?.id ?? null);
+        created = await repository.createMany(dto.rows, formatCode, actor?.id ?? null, labelFor(await loadRevisionConfig(), 1));
       } catch (err) {
         if (err.code === 'IMM_CODE_TAKEN') {
           throw new ConflictError(`${err.message} — raise that prefix's next number in Administrator → Configuration → Material Codes`);
@@ -222,17 +262,91 @@ function createMaterialService(repository) {
       return { matches };
     },
 
-    /** Where a material is used (subassemblies) and the drawing it belongs to. */
+    /** Where a material is used (subassemblies), and the subassembly it is the item of. */
     async whereUsed(id) {
       const m = await repository.findById(id);
       if (!m) throw new NotFoundError('Material');
-      const { lines, drawing } = await repository.whereUsed(id, m.drawing_no);
+      const lines = await repository.whereUsed(id);
       return {
-        drawing,
-        // A subassembly's own item: its drawing is that subassembly.
-        self: Boolean(m.subassembly && drawing && drawing.id === m.subassembly.id),
-        subassemblies: lines.map((l) => ({ ...l.subassembly, quantity: l.quantity, revision: l.revision })),
+        // A subassembly's own item carries its name and drawing no.
+        self: m.subassembly ? { id: m.subassembly.id, name: m.item_name, drawing_no: m.drawing_no } : null,
+        subassemblies: lines.map((l) => ({ ...l.subassembly, quantity: l.quantity, revision: l.revision, held: l.part_revision })),
       };
+    },
+
+    // ── Drawing revisions (Finished parts) ───────────────────────────────────
+    /** A part's revisions, newest first, with who released each. */
+    async revisions(id) {
+      const m = await repository.findById(id);
+      if (!m) throw new NotFoundError('Material');
+      if (!hasRevisions(m)) return { items: [], revisable: false };
+      const items = await repository.listRevisions(id);
+      const names = await repository.userNames(items.flatMap((r) => [r.released_by, r.created_by]));
+      return {
+        revisable: true,
+        items: items.map((r) => ({ ...r, released_by_name: names.get(r.released_by) ?? null, created_by_name: names.get(r.created_by) ?? null })),
+      };
+    },
+
+    /** Starts the next revision as a draft copy of the current one. */
+    async newRevision(id, actor) {
+      const m = await loadPart(id);
+      const all = await repository.listRevisions(id);
+      const draft = all.find((r) => r.status === 'DRAFT');
+      if (draft) throw new ConflictError(`${revName(draft.rev)} is already being drafted — finish or discard it first`);
+      const current = all.find((r) => r.status === 'RELEASED');
+      if (!current) throw new ConflictError(`${m.imm_code} has no released revision to start from`);
+      const seq = (await repository.lastRevisionSeq(id)) + 1;
+      const rev = labelFor(await loadRevisionConfig(), seq);
+      let r;
+      try {
+        r = await repository.createRevision({
+          material_id: id, seq, rev, status: 'DRAFT',
+          description: current.description, technical_spec: current.technical_spec, material_text: current.material_text,
+          created_by: actor?.id ?? null, updated_by: actor?.id ?? null,
+        });
+      } catch (err) {
+        if (err.code === 'P2002') throw new ConflictError('Someone else started a revision at the same time — reload');
+        throw err;
+      }
+      await auditService.record({ action: auditService.Action.CREATE, entity: 'MaterialRevision', entityId: r.id, actor, changes: { material: m.imm_code, rev, from: current.rev } });
+      return r;
+    },
+
+    /** Changes a draft's description, specification or material. */
+    async saveRevisionDraft(id, revId, dto, actor) {
+      const m = await loadPart(id);
+      const before = await loadRevisionDraft(m, revId);
+      const data = { updated_by: actor?.id ?? null };
+      for (const [k, f] of Object.entries(REVISED)) if (dto[k] !== undefined) data[f] = dto[k];
+      const r = await repository.updateRevision(revId, data);
+      await auditService.record({ action: auditService.Action.UPDATE, entity: 'MaterialRevision', entityId: revId, actor, changes: { material: m.imm_code, rev: before.rev, ...auditService.diff(before, data) } });
+      return r;
+    },
+
+    /** Releases a draft (Materials → Approve, with a change note): the part takes its values. */
+    async releaseRevision(id, revId, dto, actor) {
+      const m = await loadPart(id);
+      const draft = await loadRevisionDraft(m, revId);
+      const note = (dto.change_note || '').trim();
+      if (!note) throw new ValidationError('Validation failed', [{ field: 'change_note', message: 'Say what changed and why' }]);
+      const all = await repository.listRevisions(id);
+      const previous = all.find((r) => r.status === 'RELEASED');
+      const ok = await repository.releaseRevision(id, revId, note, actor?.id ?? null);
+      if (!ok) throw new ConflictError('This draft was released or discarded meanwhile — reload');
+      await auditService.record({
+        action: auditService.Action.UPDATE, entity: 'MaterialRevision', entityId: revId, actor,
+        changes: { material: m.imm_code, released: draft.rev, superseded: previous?.rev ?? null, note },
+      });
+      return this.getById(id);
+    },
+
+    /** Discards a draft revision. */
+    async discardRevisionDraft(id, revId, actor) {
+      const m = await loadPart(id);
+      const draft = await loadRevisionDraft(m, revId);
+      await repository.deleteRevisionDraft(id, revId);
+      await auditService.record({ action: auditService.Action.DELETE, entity: 'MaterialRevision', entityId: revId, actor, changes: { material: m.imm_code, rev: draft.rev } });
     },
 
     /** A material's own change history, newest first. */
@@ -320,9 +434,13 @@ function createMaterialService(repository) {
           throw new ConflictError(`${before.imm_code} is a subassembly's item — change its ${changed.map((k) => owned[k]).join(', ')} on the subassembly`);
         }
       }
-      // Only a changed drawing no. is checked: one whose subassembly was since
-      // deleted may stay as it is.
-      if (dto.drawing_no && dto.drawing_no !== before.drawing_no) await assertDrawingNos([dto], () => 'drawing_no');
+      if (hasRevisions(before)) {
+        const revised = Object.keys(REVISED).filter((k) => dto[k] !== undefined && dto[k] !== before[k]);
+        if (revised.length) {
+          throw new ConflictError(`${before.imm_code} has drawing revisions — change its ${revised.map((k) => k.replace('_', ' ')).join(', ')} through a new revision`);
+        }
+      }
+      if (dto.drawing_no && dto.drawing_no !== before.drawing_no) await assertDrawingNosFree([dto], () => 'drawing_no', id);
       if (dto.uom_id !== undefined && dto.uom_id !== before.uom_id) {
         const used = await repository.usageCount(id);
         if (used) throw new ConflictError(`${before.imm_code} is on ${used} subassembly line(s) — its unit can no longer change`);
@@ -332,7 +450,16 @@ function createMaterialService(repository) {
       for (const k of ['drawing_no', 'item_name', 'description', 'technical_spec', 'material_type', 'material', 'uom_id', 'remarks', 'is_active']) {
         if (dto[k] !== undefined) data[k] = dto[k];
       }
-      const m = await repository.updateMaterial(id, data);
+      let m = await repository.updateMaterial(id, data);
+      // Made a Finished part just now: it starts its drawing revisions.
+      if (hasRevisions(m) && !(await repository.lastRevisionSeq(id))) {
+        await repository.createRevision({
+          material_id: id, seq: 1, rev: labelFor(await loadRevisionConfig(), 1), status: 'RELEASED', change_note: 'First release',
+          description: m.description, technical_spec: m.technical_spec, material_text: m.material,
+          released_at: new Date(), released_by: actor?.id ?? null, created_by: actor?.id ?? null, updated_by: actor?.id ?? null,
+        });
+        m = await repository.findById(id);
+      }
       await auditService.record({
         action: auditService.Action.UPDATE, entity: 'Material', entityId: id, actor,
         changes: auditService.diff(before, data),

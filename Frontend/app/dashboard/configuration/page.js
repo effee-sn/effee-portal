@@ -37,7 +37,7 @@ const SECTIONS = [
   },
   {
     key: 'revisions', label: 'Revisions', perm: 'MATERIAL_CONFIG_VIEW',
-    hint: 'How subassembly revisions are labelled',
+    hint: 'How drawing revisions are labelled',
     render: (has) => <RevisionsConfig has={has} />,
   },
   {

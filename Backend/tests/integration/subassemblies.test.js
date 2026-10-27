@@ -14,6 +14,7 @@ const env = { unavailable: false, reason: '' };
 if (!process.env.DATABASE_URL) { env.unavailable = true; env.reason = 'DATABASE_URL is not set'; }
 else if ((process.env.NODE_ENV || '') === 'production') { env.unavailable = true; env.reason = 'refusing to run in production'; }
 const it = (name, fn) => test(name, async (t) => (env.unavailable ? t.skip(env.reason) : fn(t)));
+const { labelFor, revName } = require('../../src/modules/master/revisionLabels');
 
 let prisma; let subs; let materials;
 const tag = `S${Date.now().toString().slice(-6)}`;
@@ -47,16 +48,14 @@ before(async () => {
   ({ materialService: materials } = require('../../src/modules/master/material.service'));
   made.prefix = (await materials.createPrefix({ prefix: tag, separator: '-', digits: 4 }, actor)).id;
   made.uom = (await prisma.unitOfMeasure.findUnique({ where: { code: 'Nos' } })).id;
-  made.scheme = (await subs.getRevisionScheme()).scheme;
-  // A material's drawing no. must be a subassembly's: make that drawing first.
-  await newSub('Tube drawing', `${tag}-DWG-1`, [], { release: false });
+  made.cfg = await subs.getRevisionScheme();
   [m1, m2, m3] = await materials.createBulk({ rows: [part('Copper tube', `${tag}-DWG-1`), part('Thyristor'), part('Busbar')] }, actor);
 });
 
 after(async () => {
   if (!prisma || env.unavailable) return;
   try {
-    if (made.scheme) await subs.setRevisionScheme(made.scheme, actor);
+    if (made.cfg) await subs.setRevisionScheme({ scheme: made.cfg.scheme, first_release: made.cfg.first_release, original_label: made.cfg.original_label }, actor);
     await prisma.subassemblyItem.deleteMany({ where: { subassembly_id: { in: made.subs } } });
     await prisma.subassemblyRevision.deleteMany({ where: { subassembly_id: { in: made.subs } } });
     await prisma.subassembly.deleteMany({ where: { id: { in: made.subs } } });
@@ -65,19 +64,30 @@ after(async () => {
   } finally { await prisma.$disconnect(); }
 });
 
-describe('Material drawing no. comes from a subassembly', () => {
-  it('a material may only use a subassembly drawing no. (or none)', async () => {
-    await assert.rejects(materials.createBulk({ rows: [part('x', 'NOT-A-DRAWING')] }, actor), { name: 'ValidationError' });
-    const [ok] = await materials.createBulk({ rows: [part('x', `${tag}-DWG-1`), part('y')] }, actor);
-    assert.equal(ok.drawing_no, `${tag}-DWG-1`);
-    await assert.rejects(materials.update(ok.id, { drawing_no: 'NOT-A-DRAWING' }, actor), { name: 'ValidationError' });
+describe('A drawing no. belongs to one material', () => {
+  it('is free text, optional, and not repeated in a batch or used by another material', async () => {
+    const [free, none] = await materials.createBulk({ rows: [part('x', `${tag}-FREE-1`), part('y')] }, actor);
+    assert.equal(free.drawing_no, `${tag}-FREE-1`, 'any text');
+    assert.equal(none.drawing_no, null, 'or none');
+    await assert.rejects(materials.createBulk({ rows: [part('a', `${tag}-B-1`), part('b', `${tag}-B-1`)] }, actor),
+      { name: 'ValidationError' }, 'repeated in the batch');
+    await assert.rejects(materials.createBulk({ rows: [part('c', `${tag}-free-1`)] }, actor),
+      { name: 'ValidationError' }, 'used by another material, whatever the case');
+    await assert.rejects(materials.update(none.id, { drawing_no: `${tag}-DWG-1` }, actor), { name: 'ValidationError' }, 'm1 has it');
+    const kept = await materials.update(free.id, { drawing_no: `${tag}-FREE-1`, remarks: 'same drawing, edited' }, actor);
+    assert.equal(kept.drawing_no, `${tag}-FREE-1`, 'a material keeps its own');
+    const check = await materials.drawingCheck({ nos: `${tag}-FREE-1,${tag}-NOBODY` });
+    assert.deepEqual(check.taken.map((t) => t.id), [free.id]);
   });
 
-  it('renaming a subassembly drawing no. carries it to its materials', async () => {
+  it('a subassembly and a material never share one; renaming a subassembly leaves other materials alone', async () => {
+    await assert.rejects(newSub('Clash', `${tag}-DWG-1`), { name: 'ConflictError' }, 'm1 has it');
     const sa = await newSub('Rename me', `${tag}-OLD`, [], { release: false });
-    const [m] = await materials.createBulk({ rows: [part('y', `${tag}-OLD`)] }, actor);
+    await assert.rejects(materials.createBulk({ rows: [part('z', `${tag}-OLD`)] }, actor), { name: 'ValidationError' }, 'its item has it');
     await subs.updateDetails(sa.id, { drawing_no: `${tag}-NEW` }, actor);
-    assert.equal((await materials.getById(m.id)).drawing_no, `${tag}-NEW`);
+    assert.equal((await materials.getById(sa.material.id)).drawing_no, `${tag}-NEW`, 'its own item follows');
+    await assert.rejects(subs.updateDetails(sa.id, { drawing_no: `${tag}-DWG-1` }, actor), { name: 'ConflictError' });
+    assert.equal((await materials.getById(m1.id)).drawing_no, `${tag}-DWG-1`, 'other materials untouched');
   });
 });
 
@@ -98,7 +108,7 @@ describe('Subassemblies', () => {
 
   it('a subassembly is created with its lines and quantities, as a draft of its first revision', async () => {
     sub = await newSub('Coil assembly', `${tag}-SA-1`, [line(m1, 85.5), line(m2, 6)], { release: false });
-    assert.equal(sub.draft.rev, made.scheme === 'NUMBERS' ? '00' : 'A');
+    assert.equal(sub.draft.rev, made.cfg.examples[0], 'the first release label in force');
     assert.equal(sub.current, null, 'nothing released yet');
     const d = await subs.getRevision(sub.id, sub.draft.id);
     assert.equal(d.items.length, 2);
@@ -172,13 +182,85 @@ describe('Revisions', () => {
     await assert.rejects(subs.discardDraft(fresh.id, fresh.draft.id, actor), { name: 'ConflictError' });
   });
 
-  it('labels follow the scheme: letters A … Z, AA; numbers 00, 01', async () => {
-    assert.deepEqual([1, 2, 26, 27, 28].map((n) => subs.revisionLabel('LETTERS', n)), ['A', 'B', 'Z', 'AA', 'AB']);
-    assert.deepEqual([1, 2, 11].map((n) => subs.revisionLabel('NUMBERS', n)), ['00', '01', '10']);
-    await subs.setRevisionScheme('NUMBERS', actor);
-    const n = await newSub('Numbered', `${tag}-NUM`, [line(m1, 1)], { release: false });
-    assert.equal(n.draft.rev, '00');
-    await subs.setRevisionScheme('LETTERS', actor);
+  it('labels: the first release is "Original" (or A / 00), then A, B … or 01, 02', async () => {
+    const at = (scheme, first, ns) => ns.map((n) => labelFor({ scheme, first, originalLabel: 'Original' }, n));
+    assert.deepEqual(at('LETTERS', 'ORIGINAL', [1, 2, 3, 27, 28]), ['Original', 'A', 'B', 'Z', 'AA']);
+    assert.deepEqual(at('NUMBERS', 'ORIGINAL', [1, 2, 11]), ['Original', '01', '10']);
+    assert.deepEqual(at('LETTERS', 'REV', [1, 2, 26, 27]), ['A', 'B', 'Z', 'AA']);
+    assert.deepEqual(at('NUMBERS', 'REV', [1, 2, 11]), ['00', '01', '10']);
+    assert.equal(revName('A'), 'Rev A');
+    assert.equal(revName('Original'), 'Original');
+
+    await subs.setRevisionScheme({ scheme: 'NUMBERS', first_release: 'ORIGINAL', original_label: 'Original' }, actor);
+    let n = await newSub('Numbered', `${tag}-NUM`, [line(m1, 1)]);
+    assert.equal(n.current.rev, 'Original');
+    assert.equal((await subs.newRevision(n.id, actor)).rev, '01', 'the first change');
+    await subs.setRevisionScheme({ scheme: 'LETTERS', first_release: 'REV' }, actor);
+    n = await newSub('Lettered', `${tag}-LET`, [line(m1, 1)], { release: false });
+    assert.equal(n.draft.rev, 'A');
+    await subs.setRevisionScheme({ first_release: 'ORIGINAL' }, actor);
+  });
+});
+
+describe('Drawing revisions of Finished parts', () => {
+  let p; let sa;
+
+  it('a Finished part starts at its first release; others have no revisions', async () => {
+    [p] = await materials.createBulk({ rows: [part('Shaft', `${tag}-SH`, 'FINISHED')] }, actor);
+    const r = await materials.revisions(p.id);
+    assert.equal(r.revisable, true);
+    assert.deepEqual(r.items.map((x) => [x.seq, x.status]), [[1, 'RELEASED']]);
+    assert.equal(r.items[0].rev, made.cfg.examples[0]);
+    assert.equal((await materials.revisions(m2.id)).revisable, false, 'bought-out: none');
+    await assert.rejects(materials.newRevision(m2.id, actor), { name: 'ConflictError' });
+  });
+
+  it('a change goes through a draft revision, released with a note; the part takes its values', async () => {
+    await assert.rejects(materials.update(p.id, { technical_spec: 'changed directly' }, actor), { name: 'ConflictError' }, 'not edited directly');
+    const kept = await materials.update(p.id, { remarks: 'other fields still edit' }, actor);
+    assert.equal(kept.remarks, 'other fields still edit');
+    const d = await materials.newRevision(p.id, actor);
+    assert.equal(d.status, 'DRAFT');
+    assert.equal(d.technical_spec, 's', 'a copy of the current one');
+    await assert.rejects(materials.newRevision(p.id, actor), { name: 'ConflictError' }, 'one draft at a time');
+    await materials.saveRevisionDraft(p.id, d.id, { technical_spec: 'Ø45 h6' }, actor);
+    assert.equal((await materials.getById(p.id)).technical_spec, 's', 'a draft changes nothing yet');
+    await assert.rejects(materials.releaseRevision(p.id, d.id, {}, actor), { name: 'ValidationError' }, 'a change note is needed');
+    const after = await materials.releaseRevision(p.id, d.id, { change_note: 'Diameter raised' }, actor);
+    assert.equal(after.technical_spec, 'Ø45 h6');
+    const revs = (await materials.revisions(p.id)).items;
+    assert.deepEqual(revs.map((x) => x.status), ['RELEASED', 'SUPERSEDED']);
+    await assert.rejects(materials.saveRevisionDraft(p.id, d.id, { technical_spec: 'x' }, actor), { name: 'ConflictError' }, 'released: locked');
+  });
+
+  it('a subassembly line holds the part at a revision until a new draft moves it on', async () => {
+    const [orig, revA] = (await materials.revisions(p.id)).items.reverse();
+    // A line added now holds the current revision.
+    sa = await newSub('Spindle unit', `${tag}-SU`, [line(p, 1)]);
+    let lines = (await subs.getRevision(sa.id, sa.current.id)).items;
+    assert.equal(lines[0].part.held.id, revA.id);
+    // Holding an older revision is refused; the current one is fine.
+    const d = await subs.newRevision(sa.id, actor);
+    await assert.rejects(subs.saveDraft(sa.id, d.id, { items: [line(p, 1, { part_revision_id: orig.id })] }, actor), { name: 'ValidationError' });
+    await subs.discardDraft(sa.id, d.id, actor);
+    // The part moves on: the line keeps its revision and shows the newer one.
+    const d2 = await materials.newRevision(p.id, actor);
+    await materials.saveRevisionDraft(p.id, d2.id, { material: 'EN24' }, actor);
+    await materials.releaseRevision(p.id, d2.id, { change_note: 'Material change' }, actor);
+    lines = (await subs.getRevision(sa.id, sa.current.id)).items;
+    assert.equal(lines[0].part.held.id, revA.id);
+    assert.equal(lines[0].part.newer, true);
+    const d3 = await subs.newRevision(sa.id, actor);
+    assert.equal(d3.items[0].part.held.id, revA.id, 'a new draft still holds it');
+    const moved = await subs.saveDraft(sa.id, d3.id, { items: [line(p, 1, { part_revision_id: d2.id })] }, actor);
+    assert.equal(moved.items[0].part.held.id, d2.id, 'moved to the current revision');
+    const c = await subs.compare(sa.id, sa.current.id, d3.id);
+    assert.equal(c.changed[0].held.to.id, d2.id);
+  });
+
+  it('a subassembly\'s item has its subassembly\'s revisions, not its own', async () => {
+    assert.equal((await materials.revisions(sa.material.id)).revisable, false);
+    await assert.rejects(materials.newRevision(sa.material.id, actor), { name: 'ConflictError' });
   });
 });
 

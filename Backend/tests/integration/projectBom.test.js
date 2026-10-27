@@ -136,6 +136,9 @@ describe('Project BOM', () => {
     assert.ok(byTag.has(`${top}-${C}/2-${fx.bracket.imm_code}/1`) && byTag.has(`${top}-${C}/2-${fx.bracket.imm_code}/2`), 'Finished brackets are pieces');
     assert.equal(Number(byTag.get(`${top}-${fx.bolt.imm_code}`).quantity), 8);
     assert.equal(byTag.get(`${top}-${C}/1`).rev, fx.coil.current.rev, 'the revision it was exploded at');
+    const firstRelease = (await subs.getRevisionScheme()).examples[0];
+    assert.equal(byTag.get(`${top}-${C}/2-${fx.bracket.imm_code}/1`).rev, firstRelease, 'a Finished part: its drawing revision');
+    assert.equal(byTag.get(`${top}-${C}/1-${fx.tube.imm_code}`).rev, null, 'bought-out: no revision');
     assert.equal(byTag.get(`${top}-${C}/1`).parent_tag, top);
   });
 
@@ -153,6 +156,13 @@ describe('Project BOM', () => {
     await materials.update(fx.tube.id, { technical_spec: 'Tube spec v2' }, actor);
     const items = (await boms.tags(made.project, rev1.id, fx.m2.id)).items;
     assert.equal(items.find((i) => i.material_id === fx.tube.id).technical_spec, 'Tube spec v1');
+    // A new drawing revision of a part doesn't change the locked tags either.
+    const d = await materials.newRevision(fx.bracket.id, actor);
+    await materials.saveRevisionDraft(fx.bracket.id, d.id, { technical_spec: 'Bracket spec v2' }, actor);
+    await materials.releaseRevision(fx.bracket.id, d.id, { change_note: 'Thicker plate' }, actor);
+    const bracket = items.find((i) => i.material_id === fx.bracket.id);
+    assert.equal(bracket.technical_spec, 'Bracket spec v1');
+    assert.notEqual(bracket.rev, d.rev);
     await assert.rejects(boms.saveDraft(made.project, rev1.id, { lines: [] }, actor), { name: 'ConflictError' }, 'locked: no changes');
     await assert.rejects(projects.removeMachine(made.project, fx.m1.id, actor), { name: 'ConflictError' }, 'a machine on a locked BOM stays');
   });

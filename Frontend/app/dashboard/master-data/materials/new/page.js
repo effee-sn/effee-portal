@@ -6,7 +6,6 @@ import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost } from '@/lib/api';
 import SearchableSelect from '@/components/SearchableSelect';
-import AsyncSearchSelect from '@/components/AsyncSearchSelect';
 import { TableSkeleton } from '@/components/Skeleton';
 import { MATERIAL_TYPES, formatImmCode, unitFromText } from '@/lib/materialOptions';
 
@@ -15,8 +14,9 @@ import { MATERIAL_TYPES, formatImmCode, unitFromText } from '@/lib/materialOptio
  *
  * A grid, one material per row. Each row picks its IMM code prefix (searchable);
  * the code itself is generated on save, so the grid only shows what it will
- * be. The drawing no. is optional and, when given, is picked from the
- * subassemblies' drawing numbers. Every row needs a unit of measure. Rows left
+ * be. The drawing no. is optional free text, one material each: a number
+ * another material uses, or an earlier row repeats, is marked before saving.
+ * Every row needs a unit of measure. Rows left
  * completely empty are ignored. Rows can also be pasted from Excel. Before
  * saving, rows that look like materials already in the master (or like each
  * other) are pointed out, and can still be saved. Everything is saved
@@ -54,9 +54,8 @@ export default function NewMaterialsPage() {
   const [defaultUnit, setDefaultUnit] = useState('');
   // Rows that look like existing materials (or each other), found on save; null = not checked.
   const [dupes, setDupes] = useState(null);
-  // Drawing numbers known to be subassemblies' (picked ones, and pasted ones checked with the server).
-  const [knownDrawings, setKnownDrawings] = useState(() => new Set());
-  const [checkedDrawings, setCheckedDrawings] = useState(() => new Set());
+  // Drawing numbers other materials already use (lower-cased → that material), checked with the server.
+  const [takenDrawings, setTakenDrawings] = useState(() => new Map());
   const [rows, setRows] = useState(() => Array.from({ length: 5 }, () => blank()));
   const [defaultPrefix, setDefaultPrefix] = useState('');
   const [showPaste, setShowPaste] = useState(false);
@@ -82,22 +81,19 @@ export default function NewMaterialsPage() {
     value: String(p.id), label: p.prefix, sub: `next ${p.preview}${p.description ? ` · ${p.description}` : ''}`,
   })), [activePrefixes]);
 
-  const fetchDrawings = (q, skip) => apiGet(`/materials/drawing-options?q=${encodeURIComponent(q)}&skip=${skip}`, { silent: true }).then((r) => r.data);
-  const pickDrawing = (key, v) => {
-    if (v) setKnownDrawings((s) => new Set(s).add(v));
-    set(key, 'drawing_no', v || '');
-  };
-  // A drawing no. (e.g. pasted) the server says isn't a subassembly's.
-  const unknownDrawing = (r) => Boolean(r.drawing_no) && checkedDrawings.has(r.drawing_no) && !knownDrawings.has(r.drawing_no);
-
-  // Pasted drawing numbers are checked against the subassemblies in one call.
+  const drawingKey = (s) => String(s || '').trim().toLowerCase();
+  // Typed (when the cell is left) and pasted drawing numbers are checked in one call.
   const checkDrawings = async (nos) => {
-    const list = [...new Set(nos.filter(Boolean))];
+    const list = [...new Set(nos.map((n) => String(n || '').trim()).filter(Boolean))];
     if (!list.length) return;
     try {
-      const r = await apiGet(`/materials/drawing-options?nos=${encodeURIComponent(list.join(','))}`, { silent: true });
-      setKnownDrawings((s) => { const n = new Set(s); (r.data.known || []).forEach((k) => n.add(k)); return n; });
-      setCheckedDrawings((s) => { const n = new Set(s); list.forEach((k) => n.add(k)); return n; });
+      const r = await apiGet(`/materials/drawing-check?nos=${encodeURIComponent(list.join(','))}`, { silent: true });
+      setTakenDrawings((m) => {
+        const n = new Map(m);
+        list.forEach((k) => n.delete(drawingKey(k)));
+        (r.data.taken || []).forEach((t) => n.set(drawingKey(t.drawing_no), t));
+        return n;
+      });
     } catch { /* the server checks on save anyway */ }
   };
 
@@ -146,7 +142,16 @@ export default function NewMaterialsPage() {
 
   const filled = rows.filter((r) => !isEmpty(r));
   const missing = (r, f) => tried && !isEmpty(r) && !String(r[f] || '').trim();
-  const invalidCount = filled.filter((r) => REQUIRED.some((f) => !String(r[f] || '').trim()) || unknownDrawing(r)).length;
+  /** Why a row's drawing no. can't be used: another material has it, or an earlier row repeats it. */
+  const drawingIssue = (r) => {
+    const k = drawingKey(r.drawing_no);
+    if (!k) return null;
+    const t = takenDrawings.get(k);
+    if (t) return `Already used by ${t.imm_code}`;
+    const first = filled.find((x) => drawingKey(x.drawing_no) === k);
+    return first && first !== r ? `Same as row ${rows.indexOf(first) + 1}` : null;
+  };
+  const invalidCount = filled.filter((r) => REQUIRED.some((f) => !String(r[f] || '').trim()) || drawingIssue(r)).length;
 
   // Row number on screen of the n-th filled row.
   const rowNo = (n) => rows.indexOf(filled[n]) + 1;
@@ -156,7 +161,7 @@ export default function NewMaterialsPage() {
   const save = async (anyway = false) => {
     setTried(true); setError('');
     if (!filled.length) { setError('Fill in at least one material.'); return; }
-    if (invalidCount) { setError(`${invalidCount} row(s) need attention: a missing required field, or a drawing no. that isn't a subassembly's (marked in red).`); return; }
+    if (invalidCount) { setError(`${invalidCount} row(s) need attention: a missing required field, or a drawing no. already used or repeated (marked in red).`); return; }
     setSaving(true);
     try {
       if (!anyway) {
@@ -241,7 +246,7 @@ export default function NewMaterialsPage() {
             Copy rows from Excel with these columns, in this order:{' '}
             <b>Drawing no. · Item name · Description · Technical specification · Material type · Material · Unit · Remarks</b>.
             Material type: Finished, Bought-out or Consumables. Unit: its code or name (e.g. Nos, kg, Metre). A drawing no.
-            must be a subassembly&apos;s (or left empty). The prefix and unit chosen above fill in what a pasted row leaves out.
+            is optional and can&apos;t be one another material already has. The prefix and unit chosen above fill in what a pasted row leaves out.
             An Excel export of the materials list, without its first column (IMM code) and last (Status), pastes straight back in.
           </p>
           <textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={5} className="ams-input font-mono text-xs" placeholder="Paste here (Ctrl+V)…" />
@@ -299,11 +304,11 @@ export default function NewMaterialsPage() {
                   <SearchableSelect options={prefixOptions} value={r.prefix_id} onChange={(v) => set(r.key, 'prefix_id', v)} placeholder="Choose prefix…" />
                   {previews[i] && <p className="text-[11px] text-gray-500 mt-1 font-mono">→ {previews[i]}</p>}
                 </td>
-                <td className={`px-2 py-2 ${unknownDrawing(r) ? 'rounded ring-1 ring-red-400' : ''}`}>
-                  <AsyncSearchSelect value={r.drawing_no} onChange={(v) => pickDrawing(r.key, v)} fetchPage={fetchDrawings}
-                    getValue={(d) => d.drawing_no} describe={(d) => ({ label: d.drawing_no, sub: d.name })}
-                    placeholder="None" searchPlaceholder="Search drawing no. or name…" invalid={unknownDrawing(r)} />
-                  {unknownDrawing(r) && <p className="text-[11px] text-red-600 mt-1">{r.drawing_no} {r.drawing_no} isn&apos;t a subassembly&apos;s</p>}
+                <td className="px-2 py-2">
+                  <input aria-label={`Row ${i + 1} drawing no.`} value={r.drawing_no} onChange={(e) => set(r.key, 'drawing_no', e.target.value)}
+                    onBlur={(e) => checkDrawings([e.target.value])} maxLength={100} placeholder="None"
+                    className={`${cell} font-mono ${drawingIssue(r) ? 'border-red-400 bg-red-50' : 'border-gray-300'}`} />
+                  {drawingIssue(r) && <p className="text-[11px] text-red-600 mt-1">{drawingIssue(r)}</p>}
                 </td>
                 <td className="px-2 py-2">
                   <input aria-label={`Row ${i + 1} item name`} value={r.item_name} onChange={(e) => set(r.key, 'item_name', e.target.value)} maxLength={191}

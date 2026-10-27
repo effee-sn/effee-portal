@@ -81,6 +81,18 @@ const duplicatesBody = z.object({
   })).min(1).max(200),
 });
 
+// ── Drawing revisions (Finished parts) ──────────────────────────────────────
+const revisionParam = z.object({
+  id: z.coerce.number().int().positive(),
+  revId: z.coerce.number().int().positive(),
+});
+const revisionDraftBody = z.object({
+  description: requiredText('Description', 5000),
+  technical_spec: requiredText('Technical specification', 5000),
+  material: requiredText('Material', 191),
+}).partial().refine((d) => Object.values(d).some((v) => v !== undefined), { message: 'Nothing to update' });
+const revisionReleaseBody = z.object({ change_note: z.string().trim().max(5000, 'At most 5000 characters').optional().nullable() });
+
 const historyQuery = z.object({ page: z.coerce.number().int().min(1).optional(), limit: z.coerce.number().int().min(1).max(100).optional() });
 
 // ── Units of measure ─────────────────────────────────────────────────────────
@@ -96,13 +108,11 @@ const updateUnitBody = z.object(unitFields).partial().refine(
   (d) => Object.values(d).some((v) => v !== undefined), { message: 'Nothing to update' },
 );
 
-const drawingOptionsQuery = z.object({
-  q: z.string().max(100).optional(),
-  skip: z.coerce.number().int().min(0).max(100000).optional(),
+const drawingCheckQuery = z.object({
   nos: z.string().max(20000).optional(),
 });
 
 module.exports = {
-  drawingOptionsQuery, duplicatesBody, historyQuery, createUnitBody, updateUnitBody,
+  drawingCheckQuery, duplicatesBody, revisionParam, revisionDraftBody, revisionReleaseBody, historyQuery, createUnitBody, updateUnitBody,
   TYPES, idParam, createPrefixBody, updatePrefixBody, bulkCreateBody, updateMaterialBody, listMaterialsQuery,
 };
