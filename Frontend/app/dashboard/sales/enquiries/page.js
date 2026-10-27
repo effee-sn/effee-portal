@@ -395,8 +395,8 @@ export default function EnquiriesPage() {
                     </td>
                     <td className="px-3 py-3 text-gray-600">{e.owner?.name || '—'}</td>
                     <td className="px-3 py-3 text-gray-700 tabular-nums text-right whitespace-nowrap"
-                      title={(e.stage === 'WON' ? e.order_value : e.expected_value) != null ? `Entered as ${formatMoney(e.stage === 'WON' ? e.order_value : e.expected_value, e.currency_code, e.currency?.symbol)}` : undefined}>
-                      {money.formatterFor(e.display_currency).format(e.display_value)}
+                      title={(e.stage === 'WON' ? e.order_value : e.expected_value) != null ? `${money.formatterFor(e.display_currency).format(e.display_value)} · entered as ${formatMoney(e.stage === 'WON' ? e.order_value : e.expected_value, e.currency_code, e.currency?.symbol)}` : undefined}>
+                      {money.formatterFor(e.display_currency).compact(e.display_value)}
                     </td>
                     <td className="px-3 py-3 text-gray-500 tabular-nums text-center">{e._count?.activities ?? 0}</td>
                   </tr>

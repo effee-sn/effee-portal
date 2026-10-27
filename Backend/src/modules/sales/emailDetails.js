@@ -26,12 +26,22 @@ const NEXT_STEP = Object.freeze({
 
 const stageName = (s) => STAGE[s] || s;
 
-/** "₹4,20,000.00" / "$50,000.00" — the enquiry's own currency. */
+/** Decimal places a currency uses (2 for most; 0 for JPY, KRW …). */
+function fractionDigits(code) {
+  try { return new Intl.NumberFormat('en', { style: 'currency', currency: code }).resolvedOptions().maximumFractionDigits; }
+  catch { return 2; } // a code Intl doesn't know
+}
+
+/**
+ * "₹4,20,000.00" / "$500,000.00" — the enquiry's own currency. Rupees use
+ * Indian grouping (lakh, crore); every other currency thousands and millions.
+ */
 function money(value, code = 'INR', symbol) {
   if (value === null || value === undefined || value === '') return null;
   const n = Number(value);
   if (Number.isNaN(n)) return null;
-  const digits = n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const d = fractionDigits(code);
+  const digits = n.toLocaleString(code === 'INR' ? 'en-IN' : 'en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
   return symbol ? `${symbol}${digits}` : `${code} ${digits}`;
 }
 

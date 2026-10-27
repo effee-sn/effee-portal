@@ -91,7 +91,7 @@ function PipelineChart({ pipeline, money }) {
         <li key={r.value}>
           <Link href={`/dashboard/sales/enquiries?stage=${r.value}`}
             title={`${r.label}: ${r.count} open ${r.count === 1 ? 'enquiry' : 'enquiries'} · ${money.format(r.value)} expected`}
-            className="grid grid-cols-[7.5rem_minmax(0,1fr)_5.5rem] items-center gap-3 px-2 py-1.5 rounded-md hover:bg-gray-50">
+            className="grid grid-cols-[7.5rem_minmax(0,1fr)_9rem] items-center gap-3 px-2 py-1.5 rounded-md hover:bg-gray-50">
             <span className={`text-xs truncate ${r.count ? 'text-gray-700' : 'text-gray-400'}`}>{r.label}</span>
             <span className="relative h-2.5 rounded-sm bg-gray-100">
               {r.count > 0 && (

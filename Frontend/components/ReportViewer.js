@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { apiGet, downloadFile } from '@/lib/api';
 import { formatMoney } from '@/lib/money';
+import { useDisplayCurrency } from '@/lib/displayCurrency';
 import { REPORT_PRESETS, presetRange } from '@/lib/periods';
 import { ALL_STAGES, ENQUIRY_TYPES } from '@/lib/salesOptions';
 import useSalesConfig from '@/lib/useSalesConfig';
@@ -14,7 +15,8 @@ import { TableSkeleton } from '@/components/Skeleton';
  * Renders any MIS report from `GET /reports/:module/:key`: filters, a sortable
  * table with a totals row, Excel / CSV export and a print view. The report's
  * column metadata (type, link, hint) drives all formatting, so a new report
- * needs no new UI.
+ * needs no new UI. Money columns follow the currency chosen in the top bar
+ * (the server converts; ₹ by default).
  */
 
 const fmtDate = (v) => {
@@ -24,12 +26,13 @@ const fmtDate = (v) => {
 };
 const fmtNum = (v, digits = 0) => Number(v).toLocaleString('en-IN', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
-function formatCell(col, value, row) {
+/** @param {{ format: (v: unknown) => string }} [money]  the report currency's formatter */
+function formatCell(col, value, row, money) {
   if (value === null || value === undefined || value === '') return '';
   switch (col.type) {
     case 'date':   return fmtDate(value);
     case 'int':    return typeof value === 'number' ? fmtNum(value) : value;
-    case 'inr':    return `₹${fmtNum(value, 2)}`;
+    case 'inr':    return money ? money.format(value) : `₹${fmtNum(value, 2)}`;
     case 'amount': return formatMoney(value, row?.currency || 'INR');
     case 'pct':    return `${fmtNum(value, 1)}%`;
     case 'rate':   return fmtNum(value, 4);
@@ -57,13 +60,18 @@ export default function ReportViewer({ module, reportKey, canExport }) {
   const [company, setCompany] = useState('');
   const salesConfig = useSalesConfig();
 
+  // The money columns in the top bar's currency.
+  const dc = useDisplayCurrency();
+  const money = dc.formatterFor(data?.currency || 'INR');
+
   const query = useMemo(() => {
     const p = new URLSearchParams();
+    if (dc.code !== 'INR') p.set('currency', dc.code);
     if (range.from) p.set('from', range.from);
     if (range.to) p.set('to', range.to);
     for (const [k, v] of Object.entries(filters)) if (v) p.set(k, v);
     return p.toString();
-  }, [range, filters]);
+  }, [range, filters, dc.code]);
   const url = `/reports/${module}/${reportKey}?${query}`;
 
   useEffect(() => {
@@ -239,8 +247,8 @@ export default function ReportViewer({ module, reportKey, canExport }) {
                     {data.columns.map((c) => (
                       <td key={c.key} className={`px-3 py-2 ${NUMERIC.has(c.type) ? 'text-right tabular-nums whitespace-nowrap' : ''} ${c.type === 'date' ? 'whitespace-nowrap' : ''}`}>
                         {c.link === 'enquiry' && r.id
-                          ? <Link href={`/dashboard/sales/enquiries/${r.id}`} className="font-mono text-xs text-blue-600 hover:underline">{formatCell(c, r[c.key], r)}</Link>
-                          : formatCell(c, r[c.key], r)}
+                          ? <Link href={`/dashboard/sales/enquiries/${r.id}`} className="font-mono text-xs text-blue-600 hover:underline">{formatCell(c, r[c.key], r, money)}</Link>
+                          : formatCell(c, r[c.key], r, money)}
                       </td>
                     ))}
                   </tr>
@@ -251,7 +259,7 @@ export default function ReportViewer({ module, reportKey, canExport }) {
                   <tr className="border-t-2 border-gray-300 bg-gray-50 font-semibold text-gray-900">
                     {data.columns.map((c) => (
                       <td key={c.key} className={`px-3 py-2.5 ${NUMERIC.has(c.type) ? 'text-right tabular-nums whitespace-nowrap' : 'whitespace-nowrap'}`}>
-                        {formatCell(c, data.totals[c.key], null)}
+                        {formatCell(c, data.totals[c.key], null, money)}
                       </td>
                     ))}
                   </tr>

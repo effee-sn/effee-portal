@@ -1,8 +1,7 @@
 'use client';
 
 import { createContext, useContext, useMemo, useSyncExternalStore } from 'react';
-import useCurrencies, { formatMoney } from './money';
-import { compactINR } from '@/components/DashboardKit';
+import useCurrencies, { formatMoney, shortMoney } from './money';
 
 /**
  * The currency money is shown in, portal-wide — chosen once in the top navbar
@@ -32,14 +31,9 @@ const subscribe = (cb) => {
   return () => { window.removeEventListener(EVENT, cb); window.removeEventListener('storage', cb); };
 };
 
-/** Compact amount in a foreign currency for tiles: $1.2M, €850K. */
-function compactForeign(n, symbol, code) {
-  const s = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
-  return symbol ? `${symbol}${s}` : `${code} ${s}`;
-}
-
 /**
- * Formatters for amounts already in a currency.
+ * Formatters for amounts already in a currency: `format` the full figure,
+ * `compact` the short one in words (₹38.18 Lakh, €3.82 Million).
  * @param {string} code @param {string} [symbol]
  */
 export function formatterFor(code = 'INR', symbol) {
@@ -48,7 +42,7 @@ export function formatterFor(code = 'INR', symbol) {
   return {
     code,
     format: (v) => (blank(v) ? '—' : formatMoney(Number(v), code, isInr ? '₹' : symbol)),
-    compact: (v) => (blank(v) ? '—' : isInr ? compactINR(Number(v)) : compactForeign(Number(v), symbol, code)),
+    compact: (v) => (blank(v) ? '—' : shortMoney(Number(v), code, isInr ? '₹' : symbol)),
   };
 }
 

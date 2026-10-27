@@ -1,6 +1,6 @@
 const { salesReportsRepository } = require('./sales.reports.repository');
 const { salesConfigService } = require('../sales/config.service');
-const { loadRates, toInr, paise } = require('../master/fx');
+const { loadRates, paise, displayConverter } = require('../master/fx');
 const { STAGE_AGING_DAYS } = require('../sales/followup.service');
 
 /**
@@ -8,9 +8,11 @@ const { STAGE_AGING_DAYS } = require('../sales/followup.service');
  *
  * Each report declares its columns (with a type the viewer and the Excel
  * export both understand), which filters apply, and a `build(filter)` that
- * returns `{ rows, totals }`. Money columns of type `inr` are rupees: open
- * amounts at the current rate, won orders and sent offers at their locked
- * rate. `amount` columns are in the row's own currency (see its `currency`).
+ * returns `{ rows, totals }`. Money columns of type `inr` are in the report's
+ * currency — rupees, or the one chosen in the top bar (`f.conv`, see
+ * master/fx displayConverter): an amount already in it as entered; else open
+ * amounts at today's rate, won orders and sent offers at the rate of their
+ * day. `amount` columns are in the row's own currency (see its `currency`).
  *
  * Column types: text · date · int · inr · amount · pct · rate
  *
@@ -40,6 +42,7 @@ function createSalesReports(repository, config = salesConfigService) {
    * @param {'customer_id'|'application_id'} dim
    */
   async function breakdown(f, dim, names) {
+    const conv = f.conv ?? await displayConverter();
     const [rates, raised, open, offers, won, lost] = await Promise.all([
       loadRates(), repository.raisedBy(f, dim), repository.openBy(f, dim), repository.offersSent(f),
       repository.won(f), repository.lost(f),
@@ -51,15 +54,15 @@ function createSalesReports(repository, config = salesConfigService) {
       return groups.get(k);
     };
     for (const r of raised) { const x = g(r[dim]); x.raised = r._count._all; x.last_raised = day(r._max.created_at); }
-    for (const r of open) { const x = g(r[dim]); x.open += r._count._all; x.open_inr += toInr(r._sum.expected_value, r.currency_code, rates); }
+    for (const r of open) { const x = g(r[dim]); x.open += r._count._all; x.open_inr += conv.convert(r._sum.expected_value, r.currency_code, rates); }
     // Offers: the last priced offer sent per enquiry in the period.
     const lastOffer = new Map();
     for (const o of offers) lastOffer.set(o.enquiry_id, o);
     for (const o of lastOffer.values()) {
       const x = g(o.enquiry[dim]); x.offers += 1;
-      x.offered_inr += toInr(o.offer_value, o.enquiry.currency_code, rates, o.offer_fx_rate);
+      x.offered_inr += conv.convert(o.offer_value, o.enquiry.currency_code, rates, o.offer_fx_rate, o.sent_at);
     }
-    for (const e of won) { const x = g(e[dim]); x.won += 1; x.won_inr += toInr(e.order_value, e.currency_code, rates, e.order_fx_rate); }
+    for (const e of won) { const x = g(e[dim]); x.won += 1; x.won_inr += conv.convert(e.order_value, e.currency_code, rates, e.order_fx_rate, e.won_at); }
     for (const e of lost) g(e[dim]).lost += 1;
 
     const label = await names([...groups.keys()]);
@@ -123,6 +126,7 @@ function createSalesReports(repository, config = salesConfigService) {
         { key: 'win_rate', label: 'Win rate %', type: 'pct' },
       ],
       async build(f) {
+        const conv = f.conv ?? await displayConverter();
         const [rates, raised, offers, won, lost] = await Promise.all([
           loadRates(), repository.raisedDates(f), repository.offersSent(f), repository.won(f), repository.lost(f),
         ]);
@@ -139,11 +143,11 @@ function createSalesReports(repository, config = salesConfigService) {
         for (const e of raised) if (at[monthKey(e.created_at)]) at[monthKey(e.created_at)].raised += 1;
         for (const o of lastOfferPerMonth(offers)) {
           const m = at[monthKey(o.sent_at)];
-          if (m) { m.offers += 1; m.offered_inr += toInr(o.offer_value, o.enquiry.currency_code, rates, o.offer_fx_rate); }
+          if (m) { m.offers += 1; m.offered_inr += conv.convert(o.offer_value, o.enquiry.currency_code, rates, o.offer_fx_rate, o.sent_at); }
         }
         for (const e of won) {
           const m = at[monthKey(e.won_at)];
-          if (m) { m.won += 1; m.won_inr += toInr(e.order_value, e.currency_code, rates, e.order_fx_rate); }
+          if (m) { m.won += 1; m.won_inr += conv.convert(e.order_value, e.currency_code, rates, e.order_fx_rate, e.won_at); }
         }
         for (const e of lost) if (at[monthKey(e.lost_at)]) at[monthKey(e.lost_at)].lost += 1;
         const rows = months.map(({ key: _k, ...m }) => ({
@@ -187,6 +191,7 @@ function createSalesReports(repository, config = salesConfigService) {
         { key: 'expected_close', label: 'Expected close', type: 'date' },
       ],
       async build(f) {
+        const conv = f.conv ?? await displayConverter();
         const [rates, probability, rows] = await Promise.all([loadRates(), config.probabilityMap(), repository.register(f)]);
         const now = Date.now();
         const out = rows.map((e) => {
@@ -194,8 +199,8 @@ function createSalesReports(repository, config = salesConfigService) {
           const amount = won ? e.order_value : e.expected_value;
           // No amount entered → blank, not ₹0.
           const valueInr = amount === null ? null : won
-            ? toInr(e.order_value, e.currency_code, rates, e.order_fx_rate)
-            : toInr(e.expected_value, e.currency_code, rates);
+            ? conv.convert(e.order_value, e.currency_code, rates, e.order_fx_rate, e.won_at)
+            : conv.convert(e.expected_value, e.currency_code, rates);
           const p = probability[e.stage] ?? 0;
           const closed = won || e.stage === 'LOST';
           return {
@@ -250,6 +255,7 @@ function createSalesReports(repository, config = salesConfigService) {
         { key: 'days_to_close', label: 'Days to close', type: 'int' },
       ],
       async build(f) {
+        const conv = f.conv ?? await displayConverter();
         const [rates, won] = await Promise.all([loadRates(), repository.won(f)]);
         const offers = Object.fromEntries(
           (await repository.finalOffers(won.map((e) => e.id))).map((o) => [o.enquiry_id, Number(o.offer_value)])
@@ -271,7 +277,7 @@ function createSalesReports(repository, config = salesConfigService) {
             currency: e.currency_code,
             order_value: order,
             rate,
-            order_inr: paise(order * rate),
+            order_inr: paise(conv.convert(order, e.currency_code, rates, rate, e.won_at)),
             final_offer: offer,
             discount: offer ? Math.round(((offer - order) / offer) * 1000) / 10 : null,
             days_to_close: Math.round((e.won_at.getTime() - e.created_at.getTime()) / DAY_MS),
@@ -312,6 +318,7 @@ function createSalesReports(repository, config = salesConfigService) {
         { key: 'value_inr', label: 'Value lost (₹)', type: 'inr', hint: 'At the current rate' },
       ],
       async build(f) {
+        const conv = f.conv ?? await displayConverter();
         const [rates, lost] = await Promise.all([loadRates(), repository.lost(f)]);
         const rows = lost.map((e) => ({
           id: e.id,
@@ -326,7 +333,7 @@ function createSalesReports(repository, config = salesConfigService) {
           went_to: e.lost_to,
           currency: e.currency_code,
           value: num(e.expected_value),
-          value_inr: e.expected_value === null ? null : paise(toInr(e.expected_value, e.currency_code, rates)),
+          value_inr: e.expected_value === null ? null : paise(conv.convert(e.expected_value, e.currency_code, rates)),
         }));
         return { rows, totals: { ref_no: `Total · ${rows.length}`, value_inr: sum(rows, 'value_inr') } };
       },
@@ -354,6 +361,7 @@ function createSalesReports(repository, config = salesConfigService) {
         { key: 'outcome', label: 'Enquiry now', type: 'text' },
       ],
       async build(f) {
+        const conv = f.conv ?? await displayConverter();
         const [rates, offers] = await Promise.all([loadRates(), repository.offers(f)]);
         const names = await repository.userNames(offers.map((o) => o.sent_by));
         const rows = offers.map((o) => ({
@@ -367,7 +375,7 @@ function createSalesReports(repository, config = salesConfigService) {
           currency: o.enquiry.currency_code,
           price: num(o.offer_value),
           price_inr: o.offer_value === null ? null
-            : paise(toInr(o.offer_value, o.enquiry.currency_code, rates, o.sent_at ? o.offer_fx_rate : null)),
+            : paise(conv.convert(o.offer_value, o.enquiry.currency_code, rates, o.sent_at ? o.offer_fx_rate : null, o.sent_at)),
           sent_on: day(o.sent_at),
           sent_by: o.sent_by ? names[o.sent_by] ?? null : null,
           owner: o.enquiry.owner?.name ?? null,
@@ -400,6 +408,7 @@ function createSalesReports(repository, config = salesConfigService) {
         { key: 'activities', label: 'Follow-ups logged', type: 'int', hint: 'Calls, meetings, visits and emails they logged in the period' },
       ],
       async build(f) {
+        const conv = f.conv ?? await displayConverter();
         const [rates, raised, open, offers, won, lost, activities] = await Promise.all([
           loadRates(), repository.raisedByOwner(f), repository.openByOwner(f), repository.offersSent(f),
           repository.won(f), repository.lost(f), repository.activitiesByLogger(f),
@@ -410,9 +419,9 @@ function createSalesReports(repository, config = salesConfigService) {
           return people.get(id);
         };
         for (const r of raised) row(r.owner_id).raised = r._count._all;
-        for (const r of open) { const p = row(r.owner_id); p.open += r._count._all; p.open_inr += toInr(r._sum.expected_value, r.currency_code, rates); }
+        for (const r of open) { const p = row(r.owner_id); p.open += r._count._all; p.open_inr += conv.convert(r._sum.expected_value, r.currency_code, rates); }
         for (const o of offers) row(o.enquiry.owner_id).offers += 1;
-        for (const e of won) { const p = row(e.owner_id); p.won += 1; p.won_inr += toInr(e.order_value, e.currency_code, rates, e.order_fx_rate); }
+        for (const e of won) { const p = row(e.owner_id); p.won += 1; p.won_inr += conv.convert(e.order_value, e.currency_code, rates, e.order_fx_rate, e.won_at); }
         for (const e of lost) row(e.owner_id).lost += 1;
         // Follow-ups count for whoever logged them — only for people already
         // in the table (field owners), so internal reviewers don't add rows.
@@ -531,6 +540,7 @@ function createSalesReports(repository, config = salesConfigService) {
         { key: 'temperature', label: 'Temperature', type: 'text' },
       ],
       async build(f) {
+        const conv = f.conv ?? await displayConverter();
         const [rates, open] = await Promise.all([loadRates(), repository.openEnquiries(f)]);
         const last = await repository.lastActivity(open.map((e) => e.id));
         const now = Date.now();
@@ -556,7 +566,7 @@ function createSalesReports(repository, config = salesConfigService) {
               age: Math.floor((now - e.created_at.getTime()) / DAY_MS),
               currency: e.currency_code,
               value: num(e.expected_value),
-              value_inr: e.expected_value === null ? null : paise(toInr(e.expected_value, e.currency_code, rates)),
+              value_inr: e.expected_value === null ? null : paise(conv.convert(e.expected_value, e.currency_code, rates)),
               temperature: e.current_temperature ? TEMP[e.current_temperature] : null,
             };
           })

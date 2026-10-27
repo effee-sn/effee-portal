@@ -17,7 +17,7 @@ if (!process.env.DATABASE_URL) { env.unavailable = true; env.reason = 'DATABASE_
 else if ((process.env.NODE_ENV || '') === 'production') { env.unavailable = true; env.reason = 'refusing to run in production'; }
 const it = (name, fn) => test(name, async (t) => (env.unavailable ? t.skip(env.reason) : fn(t)));
 
-let prisma; let fx; let enquiries; let analytics;
+let prisma; let fx; let enquiries; let analytics; let reports;
 const CODE = 'XTE'; // a test currency, removed afterwards
 const DAY = 864e5;
 const lastMonth = new Date(Date.now() - 35 * DAY);
@@ -31,6 +31,7 @@ before(async () => {
   fx = require('../../src/modules/master/fx');
   ({ enquiryService: enquiries } = require('../../src/modules/sales/enquiry.service'));
   ({ analyticsService: analytics } = require('../../src/modules/sales/analytics.service'));
+  ({ reportsService: reports } = require('../../src/modules/reports/reports.service'));
 
   await prisma.currencyRate.deleteMany({ where: { currency_code: CODE } });
   await prisma.currency.deleteMany({ where: { code: CODE } });
@@ -97,6 +98,22 @@ describe('Showing amounts in another currency', () => {
     assert.equal(page.order_value_display, 10000);
     // Viewed in INR it is still its rupee value at the locked rate.
     assert.equal((await enquiries.getById(made.eurWon.id, sys)).order_value_display, 1050000);
+  });
+
+  it('MIS reports follow the chosen currency — titles, values and the filter line', async () => {
+    const q = { customer_id: made.customer };
+    const inr = await reports.run('sales', 'enquiry-register', q, sys);
+    const eur = await reports.run('sales', 'enquiry-register', { ...q, currency: CODE }, sys);
+    assert.equal(inr.currency, 'INR');
+    assert.equal(eur.currency, CODE);
+    assert.equal(eur.columns.find((c) => c.key === 'value_inr').label, `Value (${CODE})`);
+    const v = (r, id) => r.rows.find((x) => x.id === id).value_inr;
+    assert.equal(v(inr, made.won.id), 1000, 'INR: as before');
+    assert.equal(v(eur, made.open.id), 9.09, 'open: today\'s rate');
+    assert.equal(v(eur, made.won.id), 10, 'won last month: that day\'s rate');
+    assert.equal(v(eur, made.eurOpen.id), 10000, 'in the chosen currency: as entered');
+    assert.equal(v(eur, made.eurWon.id), 10000);
+    assert.match(eur.filters, new RegExp(`Amounts in ${CODE}`));
   });
 
   it('the dashboard adds each order at its own day\'s rate', async () => {

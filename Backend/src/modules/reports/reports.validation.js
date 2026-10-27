@@ -23,6 +23,8 @@ const reportQuery = z.object({
   enquiry_type: blankToUndefined(z.enum(['GENERATED', 'INCOMING']).optional()),
   stage: blankToUndefined(z.enum(STAGES).optional()),
   format: blankToUndefined(z.enum(['xlsx', 'csv']).optional()),
+  // Show the money columns in this currency (the top bar's); default ₹.
+  currency: blankToUndefined(z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/, 'A 3-letter currency code').optional()),
 }).refine((q) => !q.from || !q.to || q.from <= q.to, { message: '"From" must be on or before "To"', path: ['from'] })
   .refine(
     (q) => !q.from || !q.to || (q.to.getTime() - q.from.getTime()) <= 5 * 366 * 24 * 60 * 60 * 1000,

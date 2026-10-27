@@ -1,6 +1,7 @@
 const prisma = require('../../lib/prisma');
 const { salesReports } = require('./sales.reports');
 const { toXlsx, toCsv } = require('./report.export');
+const { displayConverter } = require('../master/fx');
 const { settingsService } = require('../settings/settings.service');
 const { auditService } = require('../audit/audit.service');
 const { NotFoundError, ForbiddenError } = require('../../core');
@@ -41,7 +42,7 @@ function toFilter(q) {
   return {
     from, to,
     ownerId: q.owner_id, type: q.enquiry_type, applicationId: q.application_id,
-    customerId: q.customer_id, stage: q.stage,
+    customerId: q.customer_id, stage: q.stage, currency: q.currency,
   };
 }
 
@@ -60,6 +61,7 @@ async function describe(f) {
   if (application) parts.push(`Application: ${application.name}`);
   if (customer) parts.push(`Customer: ${customer.name}`);
   if (f.stage) parts.push(`Stage: ${f.stage.replace(/_/g, ' ').toLowerCase()}`);
+  if (f.conv && f.conv.code !== 'INR') parts.push(`Amounts in ${f.conv.code} (open at today's rate; won and sent at the rate of their day)`);
   return parts.join(' · ');
 }
 
@@ -80,7 +82,12 @@ const reportsService = {
     const report = moduleFor(moduleKey, actor).reports.find(reportKey);
     if (!report) throw new NotFoundError('Report');
     const f = toFilter(query);
+    // The money columns in the chosen currency (₹ when none / INR).
+    f.conv = await displayConverter(f.currency);
     const [result, filters] = await Promise.all([report.build(f), describe(f)]);
+    const code = f.conv.code;
+    const columns = code === 'INR' ? report.columns
+      : report.columns.map((c) => (c.type === 'inr' ? { ...c, label: c.label.replace('(₹)', `(${code})`) } : c));
     return {
       module: moduleKey,
       key: report.key,
@@ -90,7 +97,8 @@ const reportsService = {
       filters,
       period: { from: f.from, to: new Date(f.to.getTime() - 1) },
       generated_at: new Date(),
-      columns: report.columns,
+      currency: code,
+      columns,
       rows: result.rows,
       totals: result.totals ?? null,
       notes: result.notes ?? [],

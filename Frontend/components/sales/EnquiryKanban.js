@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { apiGet } from '@/lib/api';
 import { ALL_STAGES, STAGE_STYLE, TEMPERATURE_STYLE, isAging, stageAgeDays } from '@/lib/salesOptions';
-import { formatMoney } from '@/lib/money';
+import { formatMoney, shortMoney } from '@/lib/money';
 
 /**
  * The enquiries as a Kanban board: one column per stage, New to Lost.
@@ -99,9 +99,9 @@ export default function EnquiryKanban({ search, appId, onOpen, version = 0, mone
                     <div className="flex items-center gap-2 mt-1.5 text-xs">
                       <span className="text-gray-500 truncate">{e.handler?.name || e.owner?.name || '—'}</span>
                       <span className="ml-auto tabular-nums text-gray-700 whitespace-nowrap"
-                        title={money ? `Entered as ${formatMoney(e.stage === 'WON' ? e.order_value : e.expected_value, e.currency_code, e.currency?.symbol)}` : undefined}>
-                        {money ? money.formatterFor(e.display_currency).format(e.display_value)
-                          : formatMoney(e.stage === 'WON' ? e.order_value : e.expected_value, e.currency_code, e.currency?.symbol)}
+                        title={money ? `${money.formatterFor(e.display_currency).format(e.display_value)} · entered as ${formatMoney(e.stage === 'WON' ? e.order_value : e.expected_value, e.currency_code, e.currency?.symbol)}` : undefined}>
+                        {money ? money.formatterFor(e.display_currency).compact(e.display_value)
+                          : shortMoney(e.stage === 'WON' ? e.order_value : e.expected_value, e.currency_code, e.currency?.symbol)}
                       </span>
                     </div>
                   </button>

@@ -1,18 +1,15 @@
 import Link from 'next/link';
 import { STAGE_STYLE } from '@/lib/salesOptions';
+import { shortMoney } from '@/lib/money';
 
 /**
  * Shared building blocks for the dashboards (home and Sales → Dashboard), so
  * both read as one product: same cards, figures, chips and skeletons.
  */
 
-/** Indian compact currency for tiles: ₹4.5 Cr, ₹12.3 L, ₹85 K. */
+/** Rupees, short, in words for tiles: ₹4.5 Crore, ₹12.3 Lakh, ₹85 Thousand. */
 export function compactINR(value) {
-  const n = Number(value) || 0;
-  if (n >= 1e7) return `₹${(n / 1e7).toFixed(n >= 1e8 ? 0 : 1)} Cr`;
-  if (n >= 1e5) return `₹${(n / 1e5).toFixed(n >= 1e6 ? 0 : 1)} L`;
-  if (n >= 1e3) return `₹${Math.round(n / 1e3)} K`;
-  return `₹${Math.round(n)}`;
+  return shortMoney(Number(value) || 0, 'INR', '₹');
 }
 
 /** A headline figure in a module snapshot. */

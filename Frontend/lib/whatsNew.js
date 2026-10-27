@@ -12,6 +12,30 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.6.3',
+    date: '2026-10-27',
+    items: [
+      {
+        icon: 'spark',
+        title: 'Foreign amounts in thousands and millions',
+        text: 'Amounts in dollars, euros and other currencies are now written the international way — €3,818,181.82 — while rupee amounts stay in lakh and crore (₹38,18,181.82).',
+        perm: 'SALES_VIEW',
+      },
+      {
+        icon: 'grid',
+        title: 'Amounts in Lakh, Crore and Million',
+        text: 'Dashboards and the enquiry list now show amounts short and in words — ₹38.18 Lakh, ₹12.5 Crore, €3.82 Million. Hover for the full figure; the enquiry page shows it in full.',
+        perm: 'SALES_VIEW',
+      },
+      {
+        icon: 'grid',
+        title: 'Reports in the top-bar currency',
+        text: 'The Sales MIS reports now show their money columns in the currency picked in the top bar — on screen and in the Excel export. Won orders and sent offers keep the rate of their day.',
+        perm: 'REPORT_VIEW',
+      },
+    ],
+  },
+  {
     version: '1.6.1',
     date: '2026-10-27',
     items: [

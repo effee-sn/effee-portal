@@ -82,7 +82,7 @@ function createSalesReportsRepository(db) {
         select: {
           id: true, ref_no: true, title: true, created_at: true, enquiry_type: true, stage: true, stage_since: true,
           expected_value: true, expected_close: true, currency_code: true, current_temperature: true,
-          order_value: true, order_fx_rate: true,
+          order_value: true, order_fx_rate: true, won_at: true,
           customer: { select: { name: true } }, application: { select: { name: true } },
           owner: person, handler: person,
         },

@@ -10,9 +10,16 @@ import { apiGet } from '@/lib/api';
  * a foreign amount as "$50,000.00" with its rupee value beside it.
  */
 
+/** Decimal places a currency uses (2 for most; 0 for JPY, KRW …). */
+function fractionDigits(code) {
+  try { return new Intl.NumberFormat('en', { style: 'currency', currency: code }).resolvedOptions().maximumFractionDigits; }
+  catch { return 2; } // a code Intl doesn't know
+}
+
 /**
- * Formats an amount in a currency: "$50,000.00", "₹4,20,000.00".
- * Uses Indian digit grouping throughout, and the master's symbol when given.
+ * Formats an amount in a currency: "₹4,20,000.00", "$500,000.00", "¥5,000".
+ * Rupees use Indian grouping (lakh, crore); every other currency thousands and
+ * millions, with its own decimal places. The master's symbol when given.
  * @param {unknown} value
  * @param {string} [code] 3-letter currency code (default INR)
  * @param {string} [symbol] symbol from the currency master
@@ -21,13 +28,41 @@ export function formatMoney(value, code = 'INR', symbol) {
   if (value === null || value === undefined || value === '') return '—';
   const n = Number(value);
   if (Number.isNaN(n)) return '—';
-  const digits = n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const locale = code === 'INR' ? 'en-IN' : 'en-US';
+  const d = fractionDigits(code);
+  const digits = n.toLocaleString(locale, { minimumFractionDigits: d, maximumFractionDigits: d });
   if (symbol) return `${symbol}${digits}`;
   try {
-    return n.toLocaleString('en-IN', { style: 'currency', currency: code, maximumFractionDigits: 2 });
+    return n.toLocaleString(locale, { style: 'currency', currency: code, minimumFractionDigits: d, maximumFractionDigits: d });
   } catch {
     return `${code} ${digits}`; // a code Intl doesn't know
   }
+}
+
+// The scales a short amount is read in: rupees in lakh and crore, others in millions and billions.
+const SCALES = Object.freeze({
+  INR: [[1e7, 'Crore'], [1e5, 'Lakh'], [1e3, 'Thousand']],
+  OTHER: [[1e9, 'Billion'], [1e6, 'Million'], [1e3, 'Thousand']],
+});
+
+/**
+ * A short amount in words, for tiles and lists: "₹38.18 Lakh", "₹12.5 Crore",
+ * "€3.82 Million", "$45 Thousand" (up to 2 decimals); under a thousand, the
+ * whole amount ("₹950"). The full figure belongs on the detail page.
+ * @param {unknown} value @param {string} [code] @param {string} [symbol]
+ */
+export function shortMoney(value, code = 'INR', symbol) {
+  if (value === null || value === undefined || value === '') return '—';
+  const n = Number(value);
+  if (Number.isNaN(n)) return '—';
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  const prefix = symbol || (code === 'INR' ? '₹' : `${code} `);
+  const num = (x) => x.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  for (const [size, word] of code === 'INR' ? SCALES.INR : SCALES.OTHER) {
+    if (abs >= size) return `${sign}${prefix}${num(abs / size)} ${word}`;
+  }
+  return `${sign}${prefix}${num(Math.round(abs))}`;
 }
 
 const TTL_MS = 60 * 1000;

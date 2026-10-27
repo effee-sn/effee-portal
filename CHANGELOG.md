@@ -13,6 +13,22 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.6.3] — 2026-10-27
+
+### Fixed — Sales: foreign amounts use international digit grouping
+
+- Amounts in a currency other than INR are now grouped in **thousands and millions** — €3,818,181.82, $5,000,000.00 — instead of lakh and crore (€38,18,181.82). Rupee amounts keep Indian grouping (₹38,18,181.82). Each currency shows its own number of decimals (2 for most; none for e.g. JPY and KRW). Applies everywhere money is shown in its own or the top-bar currency (enquiry list, Kanban and page, offers, dashboards) and to the amounts in notification emails.
+
+### Changed — Short amounts in words on dashboards and lists
+
+- **Dashboards** (home and Sales → Dashboard) and the **enquiry list and Kanban** show amounts short, in words: rupees in **Thousand / Lakh / Crore** (₹38.18 Lakh, ₹12.5 Crore), other currencies in **Thousand / Million / Billion** (€3.82 Million, $2.5 Billion) — up to 2 decimals (was ₹38.2 L, €3.8M). The full figure shows on hover, and the **enquiry page** keeps the full figures.
+
+### Changed — MIS reports follow the top-bar currency
+
+- The money columns of the **Sales MIS reports** (open, offered, won and lost values, the register's value and weighted value, order and offer values) are now shown in the currency chosen in the top bar, by the same rule as the Sales screens: an amount already in that currency as entered; open amounts at today's rate; won orders and sent offers at the rate of their day. Column titles say the currency (e.g. "Won value (EUR)"), the filter line says "Amounts in EUR …", and the Excel / CSV export follows. With INR chosen, reports are exactly as before. The "Rate (₹)" column stays in rupees.
+
+---
+
 ## [1.6.2] — 2026-10-27
 
 ### Fixed — Sales: the enquiry list fills the screen
