@@ -8,6 +8,7 @@ import usePermissions from '@/lib/usePermissions';
 import useNav from '@/lib/useNav';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
+import { SideCard, SideRow, KeyFacts, TabBar } from '@/components/DetailSide';
 import AsyncSearchSelect from '@/components/AsyncSearchSelect';
 import { MATERIAL_TYPE_LABEL, formatImmCode, revName } from '@/lib/materialOptions';
 
@@ -732,7 +733,7 @@ function SubassemblyEditor() {
   // ── New (or copy) ──────────────────────────────────────────────────────────
   if (isNew) {
     return (
-      <form onSubmit={create} className="space-y-3 pb-10">
+      <form onSubmit={create} className="space-y-4 p-4 pb-10">
         <div className="bg-white rounded border border-gray-200 px-4 py-3 flex items-center gap-3 flex-wrap">
           <Link href={SUBS} className="text-sm text-gray-500 hover:text-gray-800">← Subassemblies</Link>
           <h1 className="text-base font-semibold text-gray-900">{copyFrom ? 'New subassembly (copy)' : 'New subassembly'}</h1>
@@ -764,52 +765,49 @@ function SubassemblyEditor() {
     { key: 'used', label: `Used in (${sub.used_in.length})` },
   ];
 
+  const chip = 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium';
+  const currentLines = sub.revisions.find((r) => r.status === 'RELEASED')?.line_count ?? sub.revisions[0]?.line_count ?? 0;
+
   return (
-    <div className="space-y-3 pb-10">
-      <div className="bg-white rounded border border-gray-200 px-4 py-3 flex items-center gap-3 flex-wrap">
+    <div className="space-y-4 p-4 pb-10">
+      {/* Header: the drawing, its revision state, and what can be done with it */}
+      <header className="bg-white rounded border border-gray-200 px-5 py-4">
         <Link href={SUBS} className="text-sm text-gray-500 hover:text-gray-800">← Subassemblies</Link>
-        <h1 className="text-base font-semibold text-gray-900">{sub.name}</h1>
-        <span className="font-mono text-xs text-gray-500">{sub.drawing_no}</span>
-        {sub.current ? <span className="text-xs text-gray-600">Current: <b>{revName(sub.current.rev)}</b></span> : <span className="text-xs text-amber-700">Not released yet</span>}
-        {sub.draft && <span className="text-xs text-amber-700">· Draft {revName(sub.draft.rev)} open</span>}
-        <div className="flex-1" />
-        {canCreate && <Link href={`${SUBS}/new?copy=${id}`} className="btn-secondary px-3 py-1.5" title="Start a new subassembly with these lines">Copy</Link>}
-        {canEdit && !sub.draft && sub.current && (
-          <button type="button" onClick={startRevision} disabled={busy} className="btn-secondary px-3 py-1.5">New revision</button>
-        )}
-        {has('SUBASSEMBLY_DELETE') && (
-          <button type="button" onClick={remove} disabled={busy || sub.used_in.length > 0} className="btn-danger px-3 py-1.5 disabled:opacity-40"
-            title={sub.used_in.length ? 'Used on other subassemblies' : undefined}>Delete</button>
-        )}
-      </div>
+        <div className="flex items-start gap-4 mt-2 flex-wrap">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-sm font-semibold text-gray-500">{sub.drawing_no}</span>
+              {sub.current
+                ? <span className={`${chip} bg-[var(--ams-primary-mid)] text-[var(--ams-primary)]`} title="Current revision">{revName(sub.current.rev)}</span>
+                : <span className={`${chip} bg-amber-50 text-amber-800`}>Not released yet</span>}
+              {sub.draft && <span className={`${chip} bg-amber-50 text-amber-800`}>Draft {revName(sub.draft.rev)} open</span>}
+              <span className={`${chip} bg-indigo-50 text-indigo-700`}>Subassembly</span>
+            </div>
+            <h1 className="text-2xl font-semibold text-gray-900 mt-1 break-words">{sub.name}</h1>
+            <KeyFacts items={[
+              ['IMM code', sub.material ? <Link key="imm" href={`/dashboard/master-data/materials/${sub.material.id}`} className="hover:underline">{sub.material.imm_code}</Link> : null, true],
+              ['Department', sub.department ? `${sub.department.name}${sub.department.dept_no != null ? ` · no. ${sub.department.dept_no}` : ''}` : null],
+              ['Lines', `${currentLines} in ${sub.current ? revName(sub.current.rev) : 'the draft'}`],
+              ['Used in', `${sub.used_in.length} subassembl${sub.used_in.length === 1 ? 'y' : 'ies'}`],
+            ]} />
+          </div>
+          <div className="flex gap-2 shrink-0 flex-wrap">
+            {canCreate && <Link href={`${SUBS}/new?copy=${id}`} className="btn-secondary px-3 py-1.5" title="Start a new subassembly with these lines">Copy</Link>}
+            {canEdit && !sub.draft && sub.current && (
+              <button type="button" onClick={startRevision} disabled={busy} className="btn-primary px-3 py-1.5">New revision</button>
+            )}
+            {has('SUBASSEMBLY_DELETE') && (
+              <button type="button" onClick={remove} disabled={busy || sub.used_in.length > 0} className="btn-danger px-3 py-1.5 disabled:opacity-40"
+                title={sub.used_in.length ? 'Used on other subassemblies' : undefined}>Delete</button>
+            )}
+          </div>
+        </div>
+      </header>
 
       {banner}
 
-      <form onSubmit={saveDetails} className="bg-white rounded border border-gray-200 px-4 py-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {detailFields(!canEdit)}
-        {sub.material ? (
-          <div className="sm:col-span-2 flex items-center gap-2 text-sm flex-wrap">
-            <span className={`${label} mb-0`}>IMM code</span>
-            <Link href={`/dashboard/master-data/materials/${sub.material.id}`} className="font-mono font-semibold text-gray-800 hover:underline">{sub.material.imm_code}</Link>
-            <span className="text-gray-500">· Finished · counted in {sub.material.uom?.code} · the same across revisions</span>
-          </div>
-        ) : canEdit ? (
-          <>
-            <p className="sm:col-span-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2.5 py-2">
-              This subassembly was made before subassemblies had their own IMM code — give it one, then save the details.
-            </p>
-            <ItemChooser item={item} setItem={(v) => { setItem(v); setError(''); }} setup={setup} />
-          </>
-        ) : null}
-        {canEdit && (
-          <div className="sm:col-span-2 flex justify-end">
-            <button type="submit" disabled={busy || Boolean(form.name === sub.name && form.drawing_no === sub.drawing_no && form.department_id === (sub.department ? String(sub.department.id) : '') && sub.material)}
-              className="btn-secondary px-4 py-1.5 disabled:opacity-40">Save details</button>
-          </div>
-        )}
-      </form>
-
-      <div className="bg-white rounded border border-gray-200">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+      <div className="lg:col-span-2 bg-white rounded border border-gray-200 min-w-0">
         {/* The revision on screen, and what can be done with it. */}
         <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-3 flex-wrap">
           <label htmlFor="rev-pick" className="text-sm text-gray-600">Revision</label>
@@ -841,14 +839,7 @@ function SubassemblyEditor() {
           <p className="px-4 py-2 text-sm text-gray-700 bg-gray-50 border-b border-gray-200"><span className="text-gray-500">Change note:</span> {revision.change_note}</p>
         )}
 
-        <div className="flex gap-1 px-4 border-b border-gray-200 overflow-x-auto" role="tablist">
-          {tabs.map((t) => (
-            <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)}
-              className={`px-3 py-2.5 text-sm -mb-px border-b-2 whitespace-nowrap cursor-pointer ${tab === t.key ? 'border-[var(--ams-primary)] text-gray-800 font-medium' : 'border-transparent text-gray-500 hover:text-gray-800'}`}>
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <TabBar tabs={tabs} active={tab} onPick={setTab} />
 
         {!revision ? <TableSkeleton cols={5} rows={4} /> : (
           <>
@@ -886,7 +877,7 @@ function SubassemblyEditor() {
                     {sub.revisions.map((r) => (
                       <tr key={r.id} onClick={() => { if (!dirty || window.confirm('Leave this draft without saving its changes?')) { setRevId(r.id); setTab('lines'); } }}
                         className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${r.id === revId ? 'bg-gray-50' : ''}`}>
-                        <td className="px-4 py-2.5 font-mono font-semibold text-gray-800">{r.rev}</td>
+                        <td className="px-4 py-2.5 font-semibold text-gray-800 whitespace-nowrap">{revName(r.rev)}</td>
                         <td className="px-3 py-2.5"><StatusChip status={r.status} /></td>
                         <td className="px-3 py-2.5 text-gray-700 max-w-md">{r.status === 'DRAFT' ? <span className="text-gray-400">being drafted{r.created_by_name ? ` by ${r.created_by_name}` : ''}</span> : r.change_note}</td>
                         <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{r.released_at ? `${when(r.released_at)}${r.released_by_name ? ` · ${r.released_by_name}` : ''}` : '—'}</td>
@@ -930,6 +921,52 @@ function SubassemblyEditor() {
             )}
           </>
         )}
+      </div>
+
+      {/* Right: details (edited here), revision and record — on every tab */}
+      <aside className="space-y-4">
+        <form onSubmit={saveDetails} className="bg-white rounded border border-gray-200">
+          <div className="px-4 py-2.5 border-b border-gray-100">
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Details</h2>
+          </div>
+          <div className="px-4 py-3 space-y-3">
+            {detailFields(!canEdit)}
+            {sub.material ? (
+              <div className="text-sm">
+                <span className={label}>IMM code</span>
+                <Link href={`/dashboard/master-data/materials/${sub.material.id}`} className="font-mono font-semibold text-gray-800 hover:underline">{sub.material.imm_code}</Link>
+                <p className="text-xs text-gray-500 mt-0.5">Finished · counted in {sub.material.uom?.code} · the same across revisions</p>
+              </div>
+            ) : canEdit ? (
+              <>
+                <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2.5 py-2">
+                  This subassembly was made before subassemblies had their own IMM code — give it one, then save the details.
+                </p>
+                <ItemChooser item={item} setItem={(v) => { setItem(v); setError(''); }} setup={setup} />
+              </>
+            ) : null}
+            {canEdit && (
+              <div className="flex justify-end">
+                <button type="submit" disabled={busy || Boolean(form.name === sub.name && form.drawing_no === sub.drawing_no && form.department_id === (sub.department ? String(sub.department.id) : '') && sub.material)}
+                  className="btn-secondary px-4 py-1.5 disabled:opacity-40">Save details</button>
+              </div>
+            )}
+          </div>
+        </form>
+
+        <SideCard title="Revision"
+          action={<button type="button" onClick={() => setTab('history')} className="text-xs text-[var(--ams-primary)] hover:underline cursor-pointer">All revisions</button>}>
+          <SideRow name="Current">{sub.current ? revName(sub.current.rev) : 'Not released yet'}</SideRow>
+          {sub.current?.released_at && <SideRow name="Released">{`${when(sub.current.released_at)}${sub.current.released_by_name ? ` · ${sub.current.released_by_name}` : ''}`}</SideRow>}
+          <SideRow name="Draft">{sub.draft ? `${revName(sub.draft.rev)} open` : 'None'}</SideRow>
+          <SideRow name="Revisions">{String(sub.revisions.length)}</SideRow>
+        </SideCard>
+
+        <SideCard title="Record">
+          <SideRow name="Created">{when(sub.created_at)}</SideRow>
+          <SideRow name="Last changed">{when(sub.updated_at)}</SideRow>
+        </SideCard>
+      </aside>
       </div>
 
       {releasing && revision && <ReleaseModal sub={sub} draft={revision} onClose={() => setReleasing(false)} onRelease={release} />}

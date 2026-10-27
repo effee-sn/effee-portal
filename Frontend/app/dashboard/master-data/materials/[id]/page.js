@@ -7,6 +7,7 @@ import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
+import { SideCard, SideRow, KeyFacts, TabBar } from '@/components/DetailSide';
 import { MATERIAL_TYPES, MATERIAL_TYPE_LABEL, revName } from '@/lib/materialOptions';
 
 /**
@@ -275,14 +276,16 @@ function Revisions({ material, canEdit, canApprove, onReleased }) {
   );
 }
 
-function Field({ name, children, wide = false }) {
+/** A labelled block of text on the Details tab. */
+function Field({ name, children, big = false }) {
   return (
-    <div className={wide ? 'sm:col-span-2' : ''}>
+    <div>
       <dt className={label}>{name}</dt>
-      <dd className="text-sm text-gray-800 whitespace-pre-wrap break-words">{children || <span className="text-gray-400">—</span>}</dd>
+      <dd className={`${big ? 'text-[15px] leading-relaxed' : 'text-sm'} text-gray-800 whitespace-pre-wrap break-words`}>{children || <span className="text-gray-400">—</span>}</dd>
     </div>
   );
 }
+
 
 function WhereUsed({ data }) {
   if (!data) return <TableSkeleton cols={3} rows={3} />;
@@ -462,31 +465,41 @@ export default function MaterialPage() {
   const tabs = [
     { key: 'details', label: 'Details' },
     ...(revisable ? [{ key: 'revisions', label: 'Revisions' }] : []),
-    { key: 'used', label: `Where used${used ? ` (${usedCount})` : ''}` },
+    { key: 'used', label: `Where used${used ? ` (${new Set(used.subassemblies.map((s) => s.id)).size})` : ''}` },
     { key: 'history', label: 'History' },
   ];
 
+  // Distinct subassemblies using it (a current and a draft revision of one count once).
+  const usedOn = used ? [...new Map(used.subassemblies.map((s) => [s.id, s])).values()] : [];
+  const chip = 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium';
+
   return (
-    <div className="bg-white rounded border border-gray-200 max-w-5xl">
-      <div className="px-5 py-4 border-b border-gray-200">
+    <div className="space-y-4 p-4 pb-8">
+      {/* Header: who it is, its state, and what can be done with it */}
+      <header className="bg-white rounded border border-gray-200 px-5 py-4">
         <Link href="/dashboard/master-data/materials" className="text-sm text-gray-500 hover:text-gray-800">← Materials</Link>
-        <div className="flex items-start gap-3 mt-2 flex-wrap">
+        <div className="flex items-start gap-4 mt-2 flex-wrap">
           <div className="min-w-0 flex-1">
-            <p className="font-mono text-sm font-semibold text-gray-500">{material.imm_code}</p>
-            <h1 className="text-lg font-semibold text-gray-800 break-words">{material.item_name}</h1>
-            <div className="flex items-center gap-2 mt-1 flex-wrap text-xs">
-              <span className={`inline-flex px-2 py-0.5 rounded font-medium ${material.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                {material.is_active ? 'Active' : 'Inactive'}
-              </span>
-              {material.subassembly && (
-                <Link href={`/dashboard/master-data/subassemblies/${material.subassembly.id}`} className="inline-flex px-2 py-0.5 rounded font-medium bg-indigo-50 text-indigo-700 hover:underline">
-                  Subassembly — open it
-                </Link>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-sm font-semibold text-gray-500">{material.imm_code}</span>
+              <span className={`${chip} ${material.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{material.is_active ? 'Active' : 'Inactive'}</span>
+              <span className={`${chip} bg-gray-100 text-gray-700`}>{MATERIAL_TYPE_LABEL[material.material_type]}</span>
+              {revisable && currentRev && <span className={`${chip} bg-[var(--ams-primary-mid)] text-[var(--ams-primary)]`} title="Current drawing revision">{revName(currentRev.rev)}</span>}
+              {revisable && draftRev && (
+                <button type="button" onClick={() => setTab('revisions')} className={`${chip} bg-amber-50 text-amber-800 hover:underline cursor-pointer`}>Draft {revName(draftRev.rev)} open</button>
               )}
-              {revisable && currentRev && <span className="inline-flex px-2 py-0.5 rounded font-medium bg-gray-100 text-gray-700" title="Current drawing revision">{revName(currentRev.rev)}</span>}
-              {revisable && draftRev && <span className="inline-flex px-2 py-0.5 rounded font-medium bg-amber-50 text-amber-800">Draft {revName(draftRev.rev)} open</span>}
-              <span className="text-gray-500">{MATERIAL_TYPE_LABEL[material.material_type]} · {material.material} · counted in {material.uom?.code}</span>
+              {material.subassembly && (
+                <Link href={`/dashboard/master-data/subassemblies/${material.subassembly.id}`} className={`${chip} bg-indigo-50 text-indigo-700 hover:underline`}>Subassembly — open it</Link>
+              )}
             </div>
+            <h1 className="text-2xl font-semibold text-gray-900 mt-1 break-words">{material.item_name}</h1>
+            {/* Key facts at a glance */}
+            <KeyFacts items={[
+              ['Drawing no.', material.drawing_no, true],
+              ['Material', material.material],
+              ['Unit', material.uom ? `${material.uom.code} — ${material.uom.name}` : null],
+              ['Used on', used ? `${usedOn.length} subassembl${usedOn.length === 1 ? 'y' : 'ies'}` : '…'],
+            ]} />
           </div>
           <div className="flex gap-2 shrink-0">
             {canEdit && <button type="button" onClick={() => setEditing(true)} className="btn-primary px-4 py-1.5">Edit</button>}
@@ -497,39 +510,89 @@ export default function MaterialPage() {
           </div>
         </div>
         {error && <p className="mt-3 px-3 py-2 rounded text-sm border bg-red-50 border-red-200 text-red-700">{error}</p>}
-      </div>
+      </header>
 
-      <div className="flex gap-1 px-5 border-b border-gray-200" role="tablist">
-        {tabs.map((t) => (
-          <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)}
-            className={`px-3 py-2.5 text-sm -mb-px border-b-2 cursor-pointer ${tab === t.key ? 'border-[var(--ams-primary)] text-gray-800 font-medium' : 'border-transparent text-gray-500 hover:text-gray-800'}`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+        {/* Left: the tabs */}
+        <div className="lg:col-span-2 bg-white rounded border border-gray-200 min-w-0">
+          <TabBar tabs={tabs} active={tab} onPick={setTab} />
 
-      <div className="px-5 py-5">
-        {tab === 'details' && (
-          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-            <Field name="IMM code"><span className="font-mono">{material.imm_code}</span></Field>
-            <Field name="Drawing no.">{material.drawing_no}</Field>
-            <Field name="Item name">{material.item_name}</Field>
-            <Field name="Material type">{MATERIAL_TYPE_LABEL[material.material_type]}</Field>
-            <Field name="Material">{material.material}</Field>
-            <Field name="Unit of measure">{material.uom ? `${material.uom.code} — ${material.uom.name}` : null}</Field>
-            <Field name="Description" wide>{material.description}</Field>
-            <Field name="Technical specification" wide>{material.technical_spec}</Field>
-            <Field name="Remarks" wide>{material.remarks}</Field>
-            <Field name="Added">{when(material.created_at)}</Field>
-            <Field name="Last changed">{when(material.updated_at)}</Field>
-          </dl>
-        )}
-        {tab === 'revisions' && revisable && (
-          <Revisions material={material} canEdit={canEdit} canApprove={canApprove}
-            onReleased={(m) => setMaterial(m)} />
-        )}
-        {tab === 'used' && <WhereUsed data={used} />}
-        {tab === 'history' && <History key={material.updated_at} materialId={material.id} units={units} />}
+          <div className="px-5 py-5">
+            {tab === 'details' && (
+              <div className="space-y-6">
+                <section>
+                  <h2 className="text-sm font-semibold text-gray-800 mb-3">Specification{revisable && currentRev && <span className="ml-2 text-xs font-normal text-gray-500">as in {revName(currentRev.rev)}</span>}</h2>
+                  <dl className="space-y-4">
+                    <Field name="Description" big>{material.description}</Field>
+                    <Field name="Technical specification" big>{material.technical_spec}</Field>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <Field name="Material">{material.material}</Field>
+                      <Field name="Unit of measure">{material.uom ? `${material.uom.code} — ${material.uom.name}` : null}</Field>
+                    </div>
+                  </dl>
+                  {revisable && <p className="mt-3 text-xs text-gray-500">The description, specification and material change through a new revision (Revisions tab).</p>}
+                </section>
+                <section className="border-t border-gray-100 pt-5">
+                  <h2 className="text-sm font-semibold text-gray-800 mb-3">Notes</h2>
+                  <dl><Field name="Remarks">{material.remarks}</Field></dl>
+                </section>
+              </div>
+            )}
+            {tab === 'revisions' && revisable && (
+              <Revisions material={material} canEdit={canEdit} canApprove={canApprove}
+                onReleased={(m) => setMaterial(m)} />
+            )}
+            {tab === 'used' && <WhereUsed data={used} />}
+            {tab === 'history' && <History key={material.updated_at} materialId={material.id} units={units} />}
+          </div>
+        </div>
+
+        {/* Right: the summary, on every tab */}
+        <aside className="space-y-4">
+          <SideCard title="Identification">
+            <SideRow name="IMM code" mono>{material.imm_code}</SideRow>
+            <SideRow name="Prefix" mono>{material.prefix?.prefix}</SideRow>
+            <SideRow name="Drawing no." mono>{material.drawing_no}</SideRow>
+            <SideRow name="Type">{MATERIAL_TYPE_LABEL[material.material_type]}</SideRow>
+            <SideRow name="Unit">{material.uom?.code}</SideRow>
+            <SideRow name="Status">{material.is_active ? 'Active' : 'Inactive'}</SideRow>
+          </SideCard>
+
+          {revisable && (
+            <SideCard title="Drawing revision"
+              action={<button type="button" onClick={() => setTab('revisions')} className="text-xs text-[var(--ams-primary)] hover:underline cursor-pointer">All revisions</button>}>
+              <SideRow name="Current">{currentRev ? revName(currentRev.rev) : null}</SideRow>
+              <SideRow name="Draft">{draftRev ? `${revName(draftRev.rev)} open` : 'None'}</SideRow>
+            </SideCard>
+          )}
+
+          <SideCard title="Usage"
+            action={usedOn.length > 0 && <button type="button" onClick={() => setTab('used')} className="text-xs text-[var(--ams-primary)] hover:underline cursor-pointer">Details</button>}>
+            {material.subassembly && (
+              <SideRow name="Item of">
+                <Link href={`/dashboard/master-data/subassemblies/${material.subassembly.id}`} className="text-[var(--ams-primary)] hover:underline">its subassembly</Link>
+              </SideRow>
+            )}
+            {!used ? <p className="text-sm text-gray-400">Loading…</p> : usedOn.length === 0 ? (
+              <p className="text-sm text-gray-500">Not on any subassembly yet.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {usedOn.slice(0, 5).map((s) => (
+                  <li key={s.id} className="flex items-baseline justify-between gap-3 text-sm">
+                    <Link href={`/dashboard/master-data/subassemblies/${s.id}`} className="font-mono text-xs font-semibold text-gray-800 hover:underline shrink-0">{s.drawing_no}</Link>
+                    <span className="text-gray-600 truncate text-right">{s.name}</span>
+                  </li>
+                ))}
+                {usedOn.length > 5 && <li className="text-xs text-gray-500">and {usedOn.length - 5} more</li>}
+              </ul>
+            )}
+          </SideCard>
+
+          <SideCard title="Record">
+            <SideRow name="Added">{when(material.created_at)}</SideRow>
+            <SideRow name="Last changed">{when(material.updated_at)}</SideRow>
+          </SideCard>
+        </aside>
       </div>
 
       {editing && (
