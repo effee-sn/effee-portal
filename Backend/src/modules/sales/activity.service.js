@@ -4,7 +4,7 @@ const { auditService } = require('../audit/audit.service');
 const { notificationService } = require('../notification/notification.service');
 const config = require('../../config/env');
 const { zonedTime } = require('../../lib/timezone');
-const { NotFoundError, ForbiddenError } = require('../../core');
+const { NotFoundError, ForbiddenError, ConflictError } = require('../../core');
 const { assertActivityAccess, isHandler, assertCanSeeEnquiry } = require('./access');
 const { stageName } = require('./emailDetails');
 
@@ -128,6 +128,9 @@ function createActivityService(repository) {
       });
       const activity = await repository.create(data);
       if (dto.temperature !== undefined) await rollUpTemperature(enquiryId);
+      // This entry is the follow-up having happened: the same person's earlier
+      // open follow-ups on the enquiry are done.
+      await repository.closeEarlierFollowUps(activity);
 
       await auditService.record({
         action: auditService.Action.CREATE,
@@ -235,6 +238,7 @@ function createActivityService(repository) {
       assertActivityAccess('delete', actor, before);
 
       await repository.softDelete(id, actor?.id ?? null);
+      await repository.reopenFollowUpsDoneBy(id);
       await rollUpTemperature(before.enquiry_id);
 
       await auditService.record({
@@ -244,6 +248,29 @@ function createActivityService(repository) {
         actor,
         changes: { enquiry_id: before.enquiry_id, subject: before.subject, soft_deleted: true },
       });
+    },
+
+    /**
+     * Marks a follow-up done without a new entry (e.g. handled by someone else,
+     * no longer needed): the person who added it, or Sales → Edit.
+     * @param {number} id @param {{ note?: string|null }} dto
+     */
+    async markFollowUpDone(id, dto, actor) {
+      const before = await repository.findById(id);
+      if (!before) throw new NotFoundError('Activity');
+      const enquiry = await loadEnquiry(before.enquiry_id);
+      assertCanSeeEnquiry(enquiry, actor);
+      const mayClose = actor?.is_system || (actor?.id != null && actor.id === before.created_by) || actor?.permissions?.includes('SALES_EDIT');
+      if (!mayClose) throw new ForbiddenError('Only the person who added this follow-up (or Sales → Edit) can mark it done');
+      if (!before.follow_up_at || before.follow_up_ended) throw new ConflictError('This entry has no follow-up to mark done');
+      if (before.follow_up_done_at) throw new ConflictError('This follow-up is already done');
+      const note = (dto?.note || '').trim();
+      const activity = await repository.markFollowUpDone(id, actor?.id ?? null, note);
+      await auditService.record({
+        action: auditService.Action.UPDATE, entity: 'EnquiryActivity', entityId: id, actor,
+        changes: { follow_up_done: { from: false, to: true }, ...(note ? { note } : {}) },
+      });
+      return mapRow(activity);
     },
   };
 }

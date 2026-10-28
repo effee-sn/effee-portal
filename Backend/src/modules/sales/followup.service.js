@@ -82,6 +82,7 @@ async function runDueFollowupReminders(now = new Date()) {
     where: {
       deleted_at: null,
       follow_up_ended: false,
+      follow_up_done_at: null,
       reminded_at: null,
       follow_up_at: { not: null },
       enquiry: { deleted_at: null, stage: { notIn: ['WON', 'LOST'] } },

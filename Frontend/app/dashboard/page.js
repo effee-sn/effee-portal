@@ -134,6 +134,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   const canSales    = me?.is_system || can('SALES_VIEW');
+  // Sales → Follow-ups (everyone's, or only the ones you added).
+  const followupsPage = me?.is_system || can('SALES_FOLLOWUP_VIEW') || can('SALES_FOLLOWUP_VIEW_OWN');
   const canService  = me?.is_system || can('SERVICE_VIEW');
   const canProjects = me?.is_system || can('PROJECT_VIEW');
 
@@ -183,9 +185,9 @@ export default function DashboardPage() {
           {showSalesWork && (
             <>
               <AttentionTile icon="alert" tone="critical" label="Follow-ups overdue" value={w.followups_overdue ?? 0}
-                href="#followups" hint="Past their date" />
+                href={followupsPage ? '/dashboard/sales/followups?tab=overdue' : '#followups'} hint="Past their date" />
               <AttentionTile icon="clock" tone="warning" label="Follow-ups due today" value={w.followups_today ?? 0}
-                href="#followups" />
+                href={followupsPage ? '/dashboard/sales/followups?tab=today' : '#followups'} />
               <AttentionTile icon="briefcase" label="Enquiries with you" value={w.enquiries_with_me ?? 0}
                 href="/dashboard/sales/enquiries" />
               <AttentionTile icon="pause" tone="warning" label="Your stalled enquiries" value={w.stalled ?? 0}

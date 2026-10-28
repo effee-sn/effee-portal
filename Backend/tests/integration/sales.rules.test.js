@@ -1377,3 +1377,113 @@ describe('Sales MIS reports', () => {
     assert.equal(r.rows[0].over_by, 10 - r.rows[0].limit);
   });
 });
+
+describe('Sales rules: follow-ups are done once acted on', () => {
+  const DAY = 864e5;
+  const at = (d) => new Date(Date.now() + d * DAY);
+  const row = (id) => prisma.enquiryActivity.findUnique({
+    where: { id },
+    select: { follow_up_done_at: true, follow_up_done_reason: true, follow_up_done_activity_id: true, follow_up_done_note: true },
+  });
+
+  it('a later entry by the same person closes their earlier follow-up; another person\'s stays open', async () => {
+    const e = await newEnquiry();
+    const a1 = await log(e.id, fx.field, { activity_at: at(-2), follow_up_at: at(-1) });
+    const b1 = await log(e.id, fx.field2, { activity_at: at(-2), follow_up_at: at(1) });
+    const a2 = await log(e.id, fx.field, { activity_at: at(0), follow_up_at: at(3) });
+    const r1 = await row(a1.id);
+    assert.equal(r1.follow_up_done_reason, 'FOLLOWED_UP');
+    assert.equal(r1.follow_up_done_activity_id, a2.id);
+    assert.equal(r1.follow_up_done_at.getTime(), new Date(a2.activity_at).getTime(), 'done at the time of the entry that did it');
+    assert.equal((await row(b1.id)).follow_up_done_at, null, 'someone else\'s follow-up stays open');
+    assert.equal((await row(a2.id)).follow_up_done_at, null, 'the new one is open');
+
+    await log(e.id, fx.field, { activity_at: at(-5) });
+    assert.equal((await row(a2.id)).follow_up_done_at, null, 'a back-dated entry doesn\'t close a later follow-up');
+    await log(e.id, fx.field, { type: 'MEETING', subject: 'review', is_review: true, activity_at: at(1) });
+    assert.equal((await row(a2.id)).follow_up_done_at, null, 'a review doesn\'t close a customer follow-up');
+
+    await activityService.remove(a2.id, admin(fx.field));
+    assert.equal((await row(a1.id)).follow_up_done_at, null, 'deleting the entry that did it reopens it');
+  });
+
+  it('marked done by hand: the person who added it, or Sales → Edit; with a note', async () => {
+    const e = await newEnquiry();
+    const a = await log(e.id, fx.field, { activity_at: at(-2), follow_up_at: at(-1) });
+    await assert.rejects(activityService.markFollowUpDone(a.id, {}, actor(fx.field2, ['SALES_VIEW', 'SALES_CREATE'])), { name: 'ForbiddenError' });
+    const done = await activityService.markFollowUpDone(a.id, { note: 'handled on the phone' }, actor(fx.field, ['SALES_VIEW', 'SALES_CREATE']));
+    assert.equal(done.follow_up_done_reason, 'MANUAL');
+    assert.equal((await row(a.id)).follow_up_done_note, 'handled on the phone');
+    await assert.rejects(activityService.markFollowUpDone(a.id, {}, actor(fx.field)), { name: 'ConflictError' }, 'already done');
+    const b = await log(e.id, fx.field2, { activity_at: at(-2), follow_up_at: at(-1) });
+    await activityService.markFollowUpDone(b.id, {}, actor(fx.internal)); // Sales → Edit
+    assert.equal((await row(b.id)).follow_up_done_reason, 'MANUAL');
+  });
+
+  it('won or lost: the open follow-ups close with the enquiry', async () => {
+    const e = await newEnquiry();
+    const a = await log(e.id, fx.field, { follow_up_at: at(2) });
+    await enquiryService.lose(e.id, { lost_reason: 'Not feasible' }, actor(fx.field));
+    assert.equal((await row(a.id)).follow_up_done_reason, 'CLOSED');
+  });
+});
+
+describe('Sales rules: the follow-ups page', () => {
+  const DAY = 864e5;
+  const at = (d) => new Date(Date.now() + d * DAY);
+
+  it('tabs with counts; Follow-ups → View sees everyone\'s, own only the ones they added', async () => {
+    const { followupsService } = require('../../src/modules/sales/followups.service');
+    const title = `TEST FUP ${suffix}`;
+    const e = await newEnquiry('GENERATED', fx.field, { title });
+    await log(e.id, fx.field, { activity_at: at(-3), follow_up_at: at(-2) }); // overdue
+    await log(e.id, fx.field2, { activity_at: at(-1), follow_up_at: at(0) }); // today
+    await log(e.id, fx.internal, { activity_at: at(-1), follow_up_at: at(3) }); // upcoming
+    const d = await log(e.id, fx.analyst, { activity_at: at(-1), follow_up_at: at(1) });
+    await activityService.markFollowUpDone(d.id, {}, actor(fx.analyst)); // done
+
+    const all = await followupsService.list({ search: title, tab: 'overdue' }, admin(fx.field));
+    assert.deepEqual(all.counts, { overdue: 1, today: 1, upcoming: 1, done: 1 });
+    assert.equal(all.scope, 'all');
+    assert.equal(all.items[0].status, 'OVERDUE');
+    assert.equal(all.items[0].days_overdue, 2);
+    assert.equal(all.items[0].created_by_name, fx.field.name);
+    assert.equal((await followupsService.list({ search: title, tab: 'done' }, admin(fx.field))).items[0].status, 'DONE');
+    const byField2 = await followupsService.list({ search: title, added_by: fx.field2.id }, actor(fx.internal, ['SALES_FOLLOWUP_VIEW']));
+    assert.deepEqual(byField2.counts, { overdue: 0, today: 1, upcoming: 0, done: 0 }, 'filtered by who added it');
+
+    const own = await followupsService.list({ search: title, added_by: fx.field2.id }, actor(fx.field, ['SALES_FOLLOWUP_VIEW_OWN']));
+    assert.equal(own.scope, 'own');
+    assert.deepEqual(own.counts, { overdue: 1, today: 0, upcoming: 0, done: 0 }, 'only their own, whatever the filter');
+    await assert.rejects(followupsService.list({}, actor(fx.field, ['SALES_VIEW'])), { name: 'ForbiddenError' });
+  });
+});
+
+describe('Sales rules: a follow-up date without a time', () => {
+  it('stays a day (reminded that morning), not a time at midnight', async () => {
+    const e = await newEnquiry();
+    const a = await log(e.id, fx.field, { follow_up_at: '2099-01-02' });
+    const r = await prisma.enquiryActivity.findUnique({ where: { id: a.id }, select: { follow_up_timed: true } });
+    assert.equal(r.follow_up_timed, false);
+    const t = await log(e.id, fx.field2, { follow_up_at: new Date('2099-01-02T10:30:00Z') });
+    assert.equal((await prisma.enquiryActivity.findUnique({ where: { id: t.id }, select: { follow_up_timed: true } })).follow_up_timed, true);
+  });
+});
+
+describe('Sales rules: a Super Admin clears old follow-ups at once', () => {
+  const DAY = 864e5;
+  const at = (d) => new Date(Date.now() + d * DAY);
+
+  it('marks several done with one note; nobody else can', async () => {
+    const { followupsService } = require('../../src/modules/sales/followups.service');
+    const e = await newEnquiry();
+    const a = await log(e.id, fx.field, { activity_at: at(-9), follow_up_at: at(-8) });
+    const b = await log(e.id, fx.field2, { activity_at: at(-9), follow_up_at: at(-7) });
+    await assert.rejects(followupsService.markDone({ ids: [a.id] }, actor(fx.field, ['SALES_FOLLOWUP_VIEW', 'SALES_EDIT'])), { name: 'ForbiddenError' });
+    const r = await followupsService.markDone({ ids: [a.id, b.id, a.id], note: 'old follow-ups cleared' }, admin(fx.internal));
+    assert.equal(r.done, 2);
+    const rows = await prisma.enquiryActivity.findMany({ where: { id: { in: [a.id, b.id] } }, select: { follow_up_done_reason: true, follow_up_done_note: true } });
+    assert.ok(rows.every((x) => x.follow_up_done_reason === 'MANUAL' && x.follow_up_done_note === 'old follow-ups cleared'));
+    assert.equal((await followupsService.markDone({ ids: [a.id] }, admin(fx.internal))).done, 0, 'already done: left as is');
+  });
+});

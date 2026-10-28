@@ -63,6 +63,8 @@ export const AREAS = [
       { label: 'Dashboard', href: '/dashboard/sales',           perm: 'SALES_VIEW', exact: true },
       // All enquiries (Sales → View) or only your own (Sales own → View).
       { label: 'Enquiries', href: '/dashboard/sales/enquiries', perm: null, anyPerm: ['SALES_VIEW', 'SALES_VIEW_OWN'] },
+      // Everyone's follow-ups (Follow-ups → View) or only the ones you added (Follow-ups own → View).
+      { label: 'Follow-ups', href: '/dashboard/sales/followups', perm: null, anyPerm: ['SALES_FOLLOWUP_VIEW', 'SALES_FOLLOWUP_VIEW_OWN'] },
       { label: 'Configuration', href: '/dashboard/sales/config', perm: 'SALES_CONFIG_VIEW' },
     ],
   },

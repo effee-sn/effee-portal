@@ -165,7 +165,9 @@ export default function EnquiryReviews({ enquiryId, canCreate, canEdit = canCrea
             {r.follow_up_ended ? (
               <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium">No future review</span>
             ) : r.follow_up_at ? (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium">Next review: {fmtDateTime(r.follow_up_at)}</span>
+              r.follow_up_done_at
+                ? <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">Next review: {fmtDateTime(r.follow_up_at)} · held</span>
+                : <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium">Next review: {fmtDateTime(r.follow_up_at)}</span>
             ) : null}
           </div>
           <LoggedBy item={r} />

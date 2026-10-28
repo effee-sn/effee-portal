@@ -26,9 +26,17 @@ function createActivityRepository(db) {
     follow_up_ended: true,
     needs_negotiation: true,
     is_review: true,
+    follow_up_done_at: true,
+    follow_up_done_by: true,
+    follow_up_done_activity_id: true,
+    follow_up_done_reason: true,
+    follow_up_done_note: true,
     created_at: true,
     created_by: true,
   });
+
+  // A follow-up still waiting to be acted on.
+  const openFollowUp = Object.freeze({ deleted_at: null, follow_up_at: { not: null }, follow_up_ended: false, follow_up_done_at: null });
 
   const active = (where = {}) => ({ ...where, deleted_at: null });
 
@@ -88,6 +96,54 @@ function createActivityRepository(db) {
 
     update(id, data) {
       return db.enquiryActivity.update({ where: { id }, data, select: activitySelect });
+    },
+
+    /**
+     * A new entry is the follow-up having happened: the earlier open follow-ups
+     * of the same person on the enquiry (reviews and customer interactions
+     * apart) are done by it, at its time.
+     * @param {{ id: number, enquiry_id: number, created_by: number|null, is_review: boolean, activity_at: Date }} activity
+     */
+    closeEarlierFollowUps(activity) {
+      return db.enquiryActivity.updateMany({
+        where: {
+          ...openFollowUp,
+          enquiry_id: activity.enquiry_id,
+          created_by: activity.created_by,
+          is_review: activity.is_review,
+          id: { not: activity.id },
+          OR: [{ activity_at: { lt: activity.activity_at } }, { activity_at: activity.activity_at, id: { lt: activity.id } }],
+        },
+        data: {
+          follow_up_done_at: activity.activity_at, follow_up_done_by: activity.created_by,
+          follow_up_done_activity_id: activity.id, follow_up_done_reason: 'FOLLOWED_UP',
+        },
+      });
+    },
+
+    /** The follow-ups an entry had done open again (the entry was deleted). @param {number} activityId */
+    reopenFollowUpsDoneBy(activityId) {
+      return db.enquiryActivity.updateMany({
+        where: { follow_up_done_activity_id: activityId, follow_up_done_reason: 'FOLLOWED_UP' },
+        data: { follow_up_done_at: null, follow_up_done_by: null, follow_up_done_activity_id: null, follow_up_done_reason: null },
+      });
+    },
+
+    /** A follow-up marked done by hand. */
+    markFollowUpDone(id, actorId, note) {
+      return db.enquiryActivity.update({
+        where: { id },
+        data: { follow_up_done_at: new Date(), follow_up_done_by: actorId, follow_up_done_reason: 'MANUAL', follow_up_done_note: note || null },
+        select: activitySelect,
+      });
+    },
+
+    /** An enquiry won or lost: its open follow-ups close with it. */
+    closeFollowUpsOfEnquiry(enquiryId, at = new Date()) {
+      return db.enquiryActivity.updateMany({
+        where: { ...openFollowUp, enquiry_id: enquiryId },
+        data: { follow_up_done_at: at, follow_up_done_reason: 'CLOSED' },
+      });
     },
 
     softDelete(id, actorId = null) {

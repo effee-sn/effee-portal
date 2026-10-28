@@ -22,7 +22,7 @@ const optionalDate = z.preprocess(
 const followUpAt = z.preprocess(
   (v) => (v === '' || v === null ? undefined : v),
   z.union([
-    z.string().regex(/^d{4}-d{2}-d{2}$/, 'Use a valid date'),
+    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a valid date'),
     z.coerce.date({ invalid_type_error: 'Use a valid date and time' }),
   ]).optional()
 );
@@ -95,7 +95,11 @@ const updateActivityBody = z.object({
   { message: 'At least one field must be provided' }
 );
 
+// Marking a follow-up done by hand: an optional note ("handled by Pramod").
+const followUpDoneBody = z.object({ note: z.string().trim().max(500, 'At most 500 characters').optional().nullable() });
+
 module.exports = {
+  followUpDoneBody,
   MEDIUMS,
   TEMPS,
   enquiryIdParam,

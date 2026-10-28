@@ -133,6 +133,24 @@ export function isAging(stage, stageSince) {
 }
 
 /** Formats a number as Indian-rupee currency for display. */
+/**
+ * How a follow-up that was acted on reads: "Done · followed up 27 Oct, 11:59 AM
+ * · 1 day late", "Marked done 28 Oct — handled on the phone", or "Closed —
+ * enquiry won or lost". Null while it is still open.
+ * @param {{ follow_up_at?: string, follow_up_done_at?: string|null, follow_up_done_reason?: string|null, follow_up_done_note?: string|null }} a
+ */
+export function followUpDoneText(a) {
+  if (!a?.follow_up_done_at) return null;
+  const done = new Date(a.follow_up_done_at);
+  const date = (d) => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  const time = (d) => d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+  if (a.follow_up_done_reason === 'CLOSED') return 'Closed — enquiry won or lost';
+  if (a.follow_up_done_reason === 'MANUAL') return `Marked done ${date(done)}${a.follow_up_done_note ? ` — ${a.follow_up_done_note}` : ''}`;
+  const day = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x.getTime(); };
+  const late = a.follow_up_at ? Math.round((day(done) - day(a.follow_up_at)) / 864e5) : 0;
+  return `Done · followed up ${date(done)}, ${time(done)}${late > 0 ? ` · ${late} day${late === 1 ? '' : 's'} late` : ''}`;
+}
+
 export function formatINR(value) {
   if (value === null || value === undefined || value === '') return '—';
   const n = Number(value);

@@ -678,7 +678,7 @@ export default function EnquiryDetailPage() {
             <div className="space-y-4 min-w-0">
               {showReviews && <EnquiryReviews enquiryId={enquiry.id} canCreate={canLogActivity} canEdit={canEditActivity} canDelete={canDeleteActivity} owns={owns} editableAt={editableAt} users={users} onChanged={load} />}
               <div id="activity">
-                <EnquiryActivities enquiryId={enquiry.id} canCreate={canLogActivity} canEdit={canEditActivity} canDelete={canDeleteActivity} owns={owns} editableAt={editableAt} users={users} stage={enquiry.stage} onChanged={load} />
+                <EnquiryActivities enquiryId={enquiry.id} canCreate={canLogActivity} canEdit={canEditActivity} canDelete={canDeleteActivity} owns={owns} editableAt={editableAt} canMarkDone={(a) => !isClosed && (owns(a) || hasEditPerm)} users={users} stage={enquiry.stage} onChanged={load} />
               </div>
             </div>
           </div>

@@ -202,6 +202,7 @@ function createAnalyticsRepository(db) {
       const where = {
         deleted_at: null,
         follow_up_ended: false,
+        follow_up_done_at: null,
         follow_up_at: { not: null, lt: startOfToday },
         enquiry: open(f),
         OR: [{ is_review: false }, { is_review: true, enquiry: { stage: 'REVIEW' } }],

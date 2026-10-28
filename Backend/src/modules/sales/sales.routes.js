@@ -14,8 +14,10 @@ const {
 } = require('./enquiry.controller');
 
 const activityValidation = require('./activity.validation');
+const followupsValidation = require('./followups.validation');
+const { listFollowups, markFollowupsDone } = require('./followups.controller');
 const {
-  listActivities, createActivity, updateActivity, deleteActivity,
+  listActivities, createActivity, updateActivity, deleteActivity, markFollowUpDone,
 } = require('./activity.controller');
 
 const attachmentValidation = require('./attachment.validation');
@@ -172,6 +174,22 @@ router.delete(
   asyncHandler(deleteEnquiry)
 );
 
+// ── Follow-ups (Sales → Follow-ups): everyone's, or only the ones you added ─────
+router.get(
+  '/followups',
+  authorize('SALES_FOLLOWUP_VIEW', 'SALES_FOLLOWUP_VIEW_OWN'),
+  validate({ query: followupsValidation.listQuery }),
+  asyncHandler(listFollowups)
+);
+
+// Super Admin only (checked in the service): mark several follow-ups done at once.
+router.post(
+  '/followups/mark-done',
+  authorize('SALES_FOLLOWUP_VIEW', 'SALES_FOLLOWUP_VIEW_OWN'),
+  validate({ body: followupsValidation.markDoneBody }),
+  asyncHandler(markFollowupsDone)
+);
+
 // ── Enquiry activities (interactions + follow-ups) ────────────────────────────
 router.get(
   '/enquiries/:enquiryId/activities',
@@ -195,6 +213,14 @@ router.put(
   authorize('SALES_ACTIVITY_EDIT'),
   validate({ params: activityValidation.activityIdParam, body: activityValidation.updateActivityBody }),
   asyncHandler(updateActivity)
+);
+
+// Mark a follow-up done (the person who added it, or Sales → Edit — checked in the service).
+router.post(
+  '/activities/:id/follow-up-done',
+  authorize(...SEE),
+  validate({ params: activityValidation.activityIdParam, body: activityValidation.followUpDoneBody }),
+  asyncHandler(markFollowUpDone)
 );
 
 router.delete(

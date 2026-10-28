@@ -23,6 +23,11 @@ const updateActivity = async (req, res) => {
   ApiResponse.ok(res, activity);
 };
 
+/** `POST /sales/activities/:id/follow-up-done` — mark its follow-up done. */
+const markFollowUpDone = async (req, res) => {
+  ApiResponse.ok(res, await activityService.markFollowUpDone(req.params.id, req.body, requestContext(req)));
+};
+
 /** `DELETE /sales/activities/:id` */
 const deleteActivity = async (req, res) => {
   await activityService.remove(req.params.id, requestContext(req));
@@ -30,6 +35,7 @@ const deleteActivity = async (req, res) => {
 };
 
 module.exports = {
+  markFollowUpDone,
   listActivities,
   createActivity,
   updateActivity,

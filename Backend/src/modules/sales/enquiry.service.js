@@ -1,4 +1,5 @@
 const { enquiryRepository } = require('./enquiry.repository');
+const { activityRepository } = require('./activity.repository');
 const { workflowRepository } = require('./workflow.repository');
 const { auditService } = require('../audit/audit.service');
 const { notificationService } = require('../notification/notification.service');
@@ -550,6 +551,8 @@ function createEnquiryService(repository) {
       };
       const enquiry = await repository.update(id, data);
       await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'WON', changed_by: actor?.id ?? null });
+      // Its open follow-ups close with it.
+      await activityRepository.closeFollowUpsOfEnquiry(id);
 
       await auditService.record({
         action: auditService.Action.UPDATE,
@@ -597,6 +600,7 @@ function createEnquiryService(repository) {
       };
       const enquiry = await repository.update(id, data);
       await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'LOST', changed_by: actor?.id ?? null });
+      await activityRepository.closeFollowUpsOfEnquiry(id);
 
       await auditService.record({
         action: auditService.Action.UPDATE,

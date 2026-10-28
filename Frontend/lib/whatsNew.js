@@ -6,11 +6,29 @@
  * which is the full technical record. Keep 3–5 items per release; a release
  * with nothing visible to users can have no entry (no popup).
  *
- * `perm`: show the item only to users holding that permission (null = all).
+ * `perm`: show the item only to users holding that permission — or any of a list (null = all).
  */
 
-/** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|null }> }>} */
+/** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|string[]|null }> }>} */
 export const RELEASES = [
+  {
+    version: '1.7.0',
+    date: '2026-10-28',
+    items: [
+      {
+        icon: 'grid',
+        title: 'Sales → Follow-ups',
+        text: 'All your follow-ups in one place — Overdue, Today, Upcoming and Done — as a list or a month calendar. Open the enquiry, reschedule, or mark a follow-up done right from the list.',
+        perm: ['SALES_FOLLOWUP_VIEW', 'SALES_FOLLOWUP_VIEW_OWN'],
+      },
+      {
+        icon: 'spark',
+        title: 'Follow-ups close when you follow up',
+        text: 'Logging a new activity now marks your earlier follow-up on that enquiry as done — no more false "overdue". An open follow-up can also be marked done by hand, and they close when the enquiry is won or lost.',
+        perm: 'SALES_VIEW',
+      },
+    ],
+  },
   {
     version: '1.6.3',
     date: '2026-10-27',
@@ -261,6 +279,6 @@ export function compareVersions(a, b) {
 export function releasesFor(can, { after = null, upTo }) {
   return RELEASES
     .filter((r) => compareVersions(r.version, upTo) <= 0 && (after == null || compareVersions(r.version, after) > 0))
-    .map((r) => ({ ...r, items: r.items.filter((i) => !i.perm || can(i.perm)) }))
+    .map((r) => ({ ...r, items: r.items.filter((i) => !i.perm || [].concat(i.perm).some(can)) }))
     .filter((r) => r.items.length > 0);
 }

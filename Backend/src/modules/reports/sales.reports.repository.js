@@ -225,7 +225,7 @@ function createSalesReportsRepository(db) {
       const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
       return db.enquiryActivity.findMany({
         where: {
-          deleted_at: null, follow_up_ended: false, follow_up_at: { not: null, lt: startOfToday },
+          deleted_at: null, follow_up_ended: false, follow_up_done_at: null, follow_up_at: { not: null, lt: startOfToday },
           enquiry: { ...base(f), stage: { notIn: ['WON', 'LOST'] } },
           OR: [{ is_review: false }, { is_review: true, enquiry: { stage: 'REVIEW' } }],
         },

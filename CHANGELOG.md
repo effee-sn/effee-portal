@@ -13,6 +13,31 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.7.0] — 2026-10-28
+
+### Added — Sales → Follow-ups
+
+- A new page, **Sales → Follow-ups**, shows every customer follow-up in one place, in four tabs with counts: **Overdue** (how many days), **Today**, **Upcoming** and **Done**. Each row: the date and time and how (call, meeting, Teams, site visit, email), the enquiry (ref, title, customer — a link), what the follow-up is for and the activity it came from, the stage, temperature, **who added it** and who has the enquiry now. A done follow-up shows how it was done and the outcome of the entry that did it.
+- **Filters**: search (enquiry ref, title, customer, subject), added by, stage and medium. A **calendar** view shows a month with each day's follow-ups, coloured by state.
+- From a row: **Open** the enquiry, **Reschedule** (your own follow-up — a new day, with or without a time) or **Mark done**.
+- **Super Admin — clear old follow-ups at once**: tick follow-ups on the Overdue, Today or Upcoming tab (or all on the page; 50, 100 or 200 rows a page) and **Mark selected done**, with one optional note (e.g. "old follow-ups cleared").
+- **Who sees what** — two new permissions: **Follow-ups → View** (everyone's follow-ups) and **Follow-ups own → View** (only the ones you added). The update gives them to the roles that see all enquiries / only their own today; change them per role in Roles.
+- The home dashboard's **Follow-ups overdue / due today** now count the follow-ups **you added** (was: on the enquiries you hold), and open the Follow-ups page on that tab.
+
+### Fixed — Sales: a follow-up is done once it is acted on
+
+- Logging a new activity on an enquiry now marks **your own earlier follow-ups** on it as **done** — the new entry is the follow-up having happened. Someone else's follow-up on the same enquiry stays open (it's their task); reviews and customer interactions are kept apart. Before, the old follow-up stayed "overdue" forever, inflated the dashboard's "Follow-ups overdue" count and could still be reminded.
+- The timeline shows a done follow-up as **"✓ Done · followed up 27 Oct, 11:59 AM"**, with **"· 2 days late"** when it happened after its date; a done review reads "· held".
+- **Mark done**: an open follow-up can be closed without a new entry (e.g. handled by someone else, no longer needed) — by the person who added it, or with Sales → Edit — with an optional note.
+- When an enquiry is **won or lost**, its open follow-ups close with it.
+- Deleting an entry opens again the follow-ups it had done. Existing data: follow-ups already followed up by the same person, and those on won / lost enquiries, are marked done by the update (database migration).
+
+### Fixed — Sales: a follow-up date without a time
+
+- A follow-up given a **date but no time** was saved as a timed one at 5:30 AM (and reminded before it) since 12 Oct 2026 — the date-only check never matched. It is a day again, reminded that morning (09:00); the update corrects the ones saved that way.
+
+---
+
 ## [1.6.3] — 2026-10-27
 
 ### Fixed — Sales: foreign amounts use international digit grouping

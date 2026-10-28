@@ -50,13 +50,16 @@ function createDashboardRepository(db) {
       const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
       const endOfToday = new Date(startOfToday.getTime() + DAY_MS);
 
-      // Follow-ups/reviews due by end of today on enquiries this user holds. A
-      // review's next date only matters while the enquiry is still at Review.
+      // The follow-ups/reviews this user added that are due by end of today and
+      // not done yet (as on Sales → Follow-ups). A review's next date only
+      // matters while the enquiry is still at Review.
       const dueWhere = {
         deleted_at: null,
+        created_by: user.id,
         follow_up_ended: false,
+        follow_up_done_at: null,
         follow_up_at: { not: null, lt: endOfToday },
-        enquiry: heldBy(user.id),
+        enquiry: { deleted_at: null, stage: { notIn: ['WON', 'LOST'] } },
         OR: [{ is_review: false }, { is_review: true, enquiry: { stage: 'REVIEW' } }],
       };
 

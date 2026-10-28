@@ -1153,6 +1153,15 @@ model EnquiryActivity {
   // When the reminders were (re)armed — the follow-up was scheduled or moved.
   // An earlier reminder whose time had already passed by then is skipped.
   reminders_armed_at   DateTime?
+  // The follow-up (follow_up_at) was done: FOLLOWED_UP — the same person
+  // logged a later entry (follow_up_done_activity_id; done_at = its time);
+  // MANUAL — marked done, with an optional note; CLOSED — the enquiry was won
+  // or lost. A done follow-up is never overdue and never reminds.
+  follow_up_done_at          DateTime?
+  follow_up_done_by          Int?
+  follow_up_done_activity_id Int?
+  follow_up_done_reason      String?   @db.VarChar(20)
+  follow_up_done_note        String?   @db.Text
 
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
