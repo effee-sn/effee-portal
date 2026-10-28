@@ -7,17 +7,19 @@ import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
+import FollowupCalendar, { calendarRange } from '@/components/FollowupCalendar';
 import {
   ALL_STAGES, ACTIVITY_MEDIUMS, MEDIUM_LABEL, STAGE_STYLE, TEMPERATURE_STYLE, followUpDoneText,
 } from '@/lib/salesOptions';
 
 /**
  * Sales → Follow-ups: every customer follow-up in one place — Overdue, Today,
- * Upcoming and Done — as a list or a month calendar. Follow-ups → View shows
+ * Upcoming and Done — as a list or a calendar (Day, Work week, Week, Month —
+ * like Teams; see FollowupCalendar). Follow-ups → View shows
  * everyone's; Follow-ups own → View only the ones you added. From a row: open
- * the enquiry, mark the follow-up done (the person who added it, or Sales →
- * Edit) or move it to another day (your own entry, as on the enquiry). A Super
- * Admin can tick several and mark them done at once — to clear old ones.
+ * the enquiry or move the follow-up to another day (your own entry, as on the
+ * enquiry). A follow-up is closed by logging the next activity; only a Super
+ * Admin can tick several and mark them done — for odd cases.
  */
 
 const ENQ = '/dashboard/sales/enquiries';
@@ -85,53 +87,6 @@ function RescheduleModal({ item, onClose, onSaved }) {
   );
 }
 
-/** One month: each day with its follow-ups (status-coloured). */
-function MonthCalendar({ month, items, onMonth }) {
-  const first = new Date(month.getFullYear(), month.getMonth(), 1);
-  const start = new Date(first); start.setDate(1 - ((first.getDay() + 6) % 7)); // weeks start on Monday
-  const days = Array.from({ length: 42 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d; });
-  const byDay = new Map();
-  for (const f of items) {
-    const k = ymd(new Date(f.follow_up_at));
-    if (!byDay.has(k)) byDay.set(k, []);
-    byDay.get(k).push(f);
-  }
-  const tone = { OVERDUE: 'bg-red-50 text-red-700 border-red-200', TODAY: 'bg-amber-50 text-amber-800 border-amber-200', UPCOMING: 'bg-blue-50 text-blue-700 border-blue-200', DONE: 'bg-gray-50 text-gray-500 border-gray-200 line-through' };
-  const today = ymd(new Date());
-  return (
-    <div className="p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <button type="button" onClick={() => onMonth(-1)} className="btn-secondary px-2.5 py-1" aria-label="Previous month">‹</button>
-        <h2 className="text-sm font-semibold text-gray-800 w-36 text-center">{first.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</h2>
-        <button type="button" onClick={() => onMonth(1)} className="btn-secondary px-2.5 py-1" aria-label="Next month">›</button>
-        <button type="button" onClick={() => onMonth(0)} className="btn-secondary px-2.5 py-1 text-xs">This month</button>
-      </div>
-      <div className="grid grid-cols-7 border-l border-t border-gray-200 text-xs">
-        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => <div key={d} className="px-2 py-1.5 border-r border-b border-gray-200 bg-gray-50 font-medium text-gray-500">{d}</div>)}
-        {days.map((d) => {
-          const k = ymd(d);
-          const list = byDay.get(k) || [];
-          const inMonth = d.getMonth() === first.getMonth();
-          return (
-            <div key={k} className={`min-h-[96px] px-1.5 py-1 border-r border-b border-gray-200 ${inMonth ? 'bg-white' : 'bg-gray-50/60'}`}>
-              <p className={`text-[11px] mb-1 ${k === today ? 'font-bold text-[var(--ams-primary)]' : inMonth ? 'text-gray-600' : 'text-gray-300'}`}>{d.getDate()}</p>
-              <div className="space-y-1">
-                {list.slice(0, 4).map((f) => (
-                  <Link key={f.id} href={`${ENQ}/${f.enquiry.id}`} title={`${f.enquiry.ref_no} · ${f.subject}${f.created_by_name ? ` · added by ${f.created_by_name}` : ''}`}
-                    className={`block truncate rounded border px-1 py-0.5 hover:opacity-80 ${tone[f.status]}`}>
-                    {f.follow_up_timed ? `${time(f.follow_up_at)} ` : ''}{f.enquiry.ref_no}
-                  </Link>
-                ))}
-                {list.length > 4 && <p className="text-[10px] text-gray-500">+{list.length - 4} more</p>}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function FollowupsBoard() {
   useAuth();
   const params = useSearchParams();
@@ -139,13 +94,13 @@ function FollowupsBoard() {
   const has = (code) => me?.is_system || can(code);
   const viewAll = has('SALES_FOLLOWUP_VIEW');
   const canView = viewAll || has('SALES_FOLLOWUP_VIEW_OWN');
-  const canEditAny = has('SALES_EDIT');
   const isAdmin = Boolean(me?.is_system);
 
   // ?tab=today etc. (from the dashboard's tiles); Overdue by default.
   const [tab, setTab] = useState(() => (TABS.some((t) => t.key === params.get('tab')) ? params.get('tab') : 'overdue'));
   const [view, setView] = useState('list');
-  const [month, setMonth] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; });
+  const [calMode, setCalMode] = useState('workweek');
+  const [anchor, setAnchor] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; });
   const [filters, setFilters] = useState({ search: '', added_by: '', stage: '', medium: '' });
   const [applied, setApplied] = useState('');
   const [page, setPage] = useState(1);
@@ -165,13 +120,17 @@ function FollowupsBoard() {
     if (filters.stage) p.set('stage', filters.stage);
     if (filters.medium) p.set('medium', filters.medium);
     if (view === 'calendar') {
-      const last = new Date(month.getFullYear(), month.getMonth() + 1, 0);
-      p.set('tab', 'all'); p.set('from', ymd(new Date(month.getFullYear(), month.getMonth(), -6))); p.set('to', ymd(new Date(last.getFullYear(), last.getMonth(), last.getDate() + 7))); p.set('limit', '500');
+      // The days on screen, a day either side (the API reads dates in UTC);
+      // the calendar keeps only what falls on its days.
+      const { start, end } = calendarRange(calMode, anchor);
+      const from = new Date(start); from.setDate(from.getDate() - 1);
+      const to = new Date(end); to.setDate(to.getDate() + 1);
+      p.set('tab', 'all'); p.set('from', ymd(from)); p.set('to', ymd(to)); p.set('limit', '500');
     } else {
       p.set('tab', tab); p.set('page', String(page)); p.set('limit', String(pageSize));
     }
     return p.toString();
-  }, [applied, filters.added_by, filters.stage, filters.medium, view, month, tab, page, pageSize]);
+  }, [applied, filters.added_by, filters.stage, filters.medium, view, calMode, anchor, tab, page, pageSize]);
 
   useEffect(() => {
     if (permLoading || !canView) return undefined;
@@ -190,12 +149,6 @@ function FollowupsBoard() {
   const reload = useCallback(() => setVersion((v) => v + 1), []);
   const setFilter = (k, v) => { setFilters((f) => ({ ...f, [k]: v })); setPage(1); };
 
-  const markDone = async (f) => {
-    const note = window.prompt('Mark this follow-up done? Add a note if you like (e.g. "handled by Pramod").', '');
-    if (note === null) return;
-    try { await apiPost(`/sales/activities/${f.id}/follow-up-done`, { note }); reload(); }
-    catch (e) { setError(e.message); }
-  };
   const mine = (f) => me?.is_system || (me?.id != null && f.created_by === me.id);
 
   // Super Admin: tick follow-ups and mark them all done with one note.
@@ -230,11 +183,11 @@ function FollowupsBoard() {
       <header className="flex items-end justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Follow-ups</h1>
-          <p className="text-sm text-gray-500">{viewAll ? 'Everyone’s customer follow-ups' : 'The follow-ups you added'} — a follow-up is done once a later activity is logged, it is marked done, or the enquiry is won or lost.</p>
+          <p className="text-sm text-gray-500">{viewAll ? 'Everyone’s customer follow-ups' : 'The follow-ups you added'} — a follow-up is done once the next activity is logged on the enquiry, or the enquiry is won or lost.</p>
         </div>
         <div className="flex rounded border border-gray-300 overflow-hidden text-sm" role="group" aria-label="View">
           {['list', 'calendar'].map((v) => (
-            <button key={v} type="button" onClick={() => setView(v)} aria-pressed={view === v}
+            <button key={v} type="button" onClick={() => { if (v !== view) { setView(v); setData(null); } }} aria-pressed={view === v}
               className={`px-3 py-1.5 cursor-pointer capitalize ${view === v ? 'bg-[var(--ams-primary)] text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>{v}</button>
           ))}
         </div>
@@ -278,8 +231,8 @@ function FollowupsBoard() {
 
       <div className="bg-white rounded border border-gray-200">
         {!data ? <TableSkeleton cols={7} rows={6} /> : view === 'calendar' ? (
-          <MonthCalendar month={month} items={items}
-            onMonth={(n) => setMonth((m) => (n === 0 ? (() => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; })() : new Date(m.getFullYear(), m.getMonth() + n, 1)))} />
+          <FollowupCalendar mode={calMode} anchor={anchor} items={items} onMode={setCalMode} onAnchor={setAnchor}
+            canReschedule={mine} onReschedule={setMoving} />
         ) : items.length === 0 ? (
           <p className="py-16 text-center text-sm text-gray-400">No {TABS.find((t) => t.key === tab)?.label.toLowerCase()} follow-ups{applied || filters.added_by || filters.stage || filters.medium ? ' match your filters' : ''}.</p>
         ) : (
@@ -355,9 +308,6 @@ function FollowupsBoard() {
                         <Link href={`${ENQ}/${f.enquiry.id}`} className="text-xs text-[var(--ams-primary)] hover:underline">Open</Link>
                         {open && mine(f) && (
                           <button type="button" onClick={() => setMoving(f)} className="ml-3 text-xs text-gray-600 hover:text-gray-900 underline cursor-pointer">Reschedule</button>
-                        )}
-                        {open && (mine(f) || canEditAny) && (
-                          <button type="button" onClick={() => markDone(f)} className="ml-3 text-xs text-gray-600 hover:text-gray-900 underline cursor-pointer">Mark done</button>
                         )}
                       </td>
                     </tr>

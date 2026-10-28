@@ -1407,17 +1407,15 @@ describe('Sales rules: follow-ups are done once acted on', () => {
     assert.equal((await row(a1.id)).follow_up_done_at, null, 'deleting the entry that did it reopens it');
   });
 
-  it('marked done by hand: the person who added it, or Sales → Edit; with a note', async () => {
+  it('marked done by hand: Super Admin only (everyone else logs the next activity); with a note', async () => {
     const e = await newEnquiry();
     const a = await log(e.id, fx.field, { activity_at: at(-2), follow_up_at: at(-1) });
-    await assert.rejects(activityService.markFollowUpDone(a.id, {}, actor(fx.field2, ['SALES_VIEW', 'SALES_CREATE'])), { name: 'ForbiddenError' });
-    const done = await activityService.markFollowUpDone(a.id, { note: 'handled on the phone' }, actor(fx.field, ['SALES_VIEW', 'SALES_CREATE']));
+    await assert.rejects(activityService.markFollowUpDone(a.id, {}, actor(fx.field)), { name: 'ForbiddenError' }, 'not the person who added it');
+    await assert.rejects(activityService.markFollowUpDone(a.id, {}, actor(fx.internal)), { name: 'ForbiddenError' }, 'not Sales → Edit');
+    const done = await activityService.markFollowUpDone(a.id, { note: 'left the company' }, admin(fx.field));
     assert.equal(done.follow_up_done_reason, 'MANUAL');
-    assert.equal((await row(a.id)).follow_up_done_note, 'handled on the phone');
-    await assert.rejects(activityService.markFollowUpDone(a.id, {}, actor(fx.field)), { name: 'ConflictError' }, 'already done');
-    const b = await log(e.id, fx.field2, { activity_at: at(-2), follow_up_at: at(-1) });
-    await activityService.markFollowUpDone(b.id, {}, actor(fx.internal)); // Sales → Edit
-    assert.equal((await row(b.id)).follow_up_done_reason, 'MANUAL');
+    assert.equal((await row(a.id)).follow_up_done_note, 'left the company');
+    await assert.rejects(activityService.markFollowUpDone(a.id, {}, admin(fx.field)), { name: 'ConflictError' }, 'already done');
   });
 
   it('won or lost: the open follow-ups close with the enquiry', async () => {
@@ -1440,7 +1438,7 @@ describe('Sales rules: the follow-ups page', () => {
     await log(e.id, fx.field2, { activity_at: at(-1), follow_up_at: at(0) }); // today
     await log(e.id, fx.internal, { activity_at: at(-1), follow_up_at: at(3) }); // upcoming
     const d = await log(e.id, fx.analyst, { activity_at: at(-1), follow_up_at: at(1) });
-    await activityService.markFollowUpDone(d.id, {}, actor(fx.analyst)); // done
+    await activityService.markFollowUpDone(d.id, {}, admin(fx.analyst)); // done
 
     const all = await followupsService.list({ search: title, tab: 'overdue' }, admin(fx.field));
     assert.deepEqual(all.counts, { overdue: 1, today: 1, upcoming: 1, done: 1 });
@@ -1519,13 +1517,13 @@ describe('Sales rules: the daily overdue follow-ups email', () => {
     // "The next day": drop today's claim rather than move the clock, so other
     // tests' upcoming follow-ups don't turn overdue and join the count.
     const nextDay = () => prisma.followupDigest.deleteMany({ where: { id: { gt: lastClaim } } });
-    await activityService.markFollowUpDone(a.id, {}, actor(fx.field2));
+    await activityService.markFollowUpDone(a.id, {}, admin(fx.field2));
     await nextDay();
     await runOverdueFollowupDigest(noon);
     got = await emails(fx.field2);
     assert.equal(got.length, 2, 'again the next day');
     assert.equal(got[1].title, '1 overdue follow-up', 'only what is still open');
-    await activityService.markFollowUpDone(b.id, {}, actor(fx.field2));
+    await activityService.markFollowUpDone(b.id, {}, admin(fx.field2));
     await nextDay();
     await runOverdueFollowupDigest(noon);
     assert.equal((await emails(fx.field2)).length, 2, 'none once all are done');

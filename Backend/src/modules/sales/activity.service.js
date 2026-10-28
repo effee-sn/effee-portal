@@ -251,17 +251,17 @@ function createActivityService(repository) {
     },
 
     /**
-     * Marks a follow-up done without a new entry (e.g. handled by someone else,
-     * no longer needed): the person who added it, or Sales → Edit.
+     * Marks a follow-up done without a new entry — Super Admin only, for odd
+     * cases (e.g. a follow-up left by someone who has left). Everyone else
+     * closes a follow-up by logging what happened next on the enquiry.
      * @param {number} id @param {{ note?: string|null }} dto
      */
     async markFollowUpDone(id, dto, actor) {
+      if (!actor?.is_system) throw new ForbiddenError('A follow-up is closed by logging the next activity on the enquiry');
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Activity');
       const enquiry = await loadEnquiry(before.enquiry_id);
       assertCanSeeEnquiry(enquiry, actor);
-      const mayClose = actor?.is_system || (actor?.id != null && actor.id === before.created_by) || actor?.permissions?.includes('SALES_EDIT');
-      if (!mayClose) throw new ForbiddenError('Only the person who added this follow-up (or Sales → Edit) can mark it done');
       if (!before.follow_up_at || before.follow_up_ended) throw new ConflictError('This entry has no follow-up to mark done');
       if (before.follow_up_done_at) throw new ConflictError('This follow-up is already done');
       const note = (dto?.note || '').trim();

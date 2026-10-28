@@ -12,6 +12,24 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|string[]|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.7.2',
+    date: '2026-10-28',
+    items: [
+      {
+        icon: 'spark',
+        title: 'Follow-ups close only by following up',
+        text: 'The "Mark done" option on follow-ups is gone. To close a follow-up, log what happened on the enquiry — with the next follow-up date if there is one. Winning or losing the enquiry still closes them all.',
+        perm: 'SALES_VIEW',
+      },
+      {
+        icon: 'grid',
+        title: 'A new follow-ups calendar',
+        text: 'The Follow-ups calendar now looks like Teams — Day, Work week, Week and Month, with your follow-ups at their times. Click one to see the details, open the enquiry or reschedule.',
+        perm: ['SALES_FOLLOWUP_VIEW', 'SALES_FOLLOWUP_VIEW_OWN'],
+      },
+    ],
+  },
+  {
     version: '1.7.1',
     date: '2026-10-28',
     items: [

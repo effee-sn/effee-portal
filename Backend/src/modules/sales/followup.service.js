@@ -21,7 +21,7 @@ const MEDIUM = Object.freeze({ CALL: 'Call', MEETING: 'Meeting', TEAMS: 'Teams',
  *   - **Stage aging** — an enquiry has sat in one stage past its threshold.
  *   - **Overdue follow-ups** — every morning, each person gets one email
  *     listing their follow-ups whose day has passed and that are not done yet,
- *     until each is followed up, marked done or its enquiry closes.
+ *     until each is followed up or its enquiry closes.
  *
  * Both go to the enquiry's *current handler* (the person who must act now),
  * falling back to the owner. Each reminder is *claimed* with a conditional
@@ -241,7 +241,7 @@ async function runStageAgingReminders() {
  * The daily overdue email: from the morning time (FOLLOWUP_REMINDER.DAY_TIME,
  * 09:00 in APP_TIMEZONE) each person with follow-ups past their day and not
  * done gets one email — and a notification — listing them, every day until each
- * is followed up, marked done or its enquiry is won or lost. It goes to the
+ * is followed up (the next activity is logged) or its enquiry is won or lost. It goes to the
  * person who added the follow-up; to whoever holds the enquiry when that user
  * is no longer active. One per person per day: a FollowupDigest row is claimed
  * before sending, so a second worker (PM2 cluster) or a later sweep skips it.
@@ -313,14 +313,14 @@ async function runOverdueFollowupDigest(now = new Date()) {
       userIds: [userId],
       type: notificationService.Type.FOLLOWUP_OVERDUE,
       title: `${n} overdue follow-up${n === 1 ? '' : 's'}`,
-      body: `${list[0].enquiry.ref_no}${n > 1 ? ` and ${n - 1} more` : ''} — past their date and not done yet. Log what happened, or mark them done.`,
+      body: `${list[0].enquiry.ref_no}${n > 1 ? ` and ${n - 1} more` : ''} — past their date and not done yet. Log what happened on each enquiry.`,
       entityType: null,
       entityId: null,
       link: '/dashboard/sales/followups?tab=overdue',
       actorId: null,
       email: {
         eyebrow: 'Sales · Overdue follow-ups',
-        intro: `You have ${n} follow-up${n === 1 ? '' : 's'} past ${n === 1 ? 'its' : 'their'} date and not done yet. Log what happened on the enquiry (that closes it), or mark it done if it is no longer needed. This reminder comes every morning until they are done.`,
+        intro: `You have ${n} follow-up${n === 1 ? '' : 's'} past ${n === 1 ? 'its' : 'their'} date and not done yet. Log what happened on each enquiry, with the next follow-up date if there is one — that closes it. This reminder comes every morning until they are done.`,
         details: rows,
         actionLabel: 'Open follow-ups',
         reason: "You're receiving this because you added these follow-ups in the portal.",

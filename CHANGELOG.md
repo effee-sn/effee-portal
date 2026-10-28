@@ -13,6 +13,24 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.7.2] — 2026-10-28
+
+### Changed — Sales: follow-ups close only by following up
+
+- **Mark done** is removed from the Follow-ups page and from the enquiry timeline. A follow-up now closes only when the next activity is logged on the enquiry (by the person who added it), or when the enquiry is won or lost — so nobody can close one without recording what happened. The old follow-ups had already been cleared.
+- Only a **Super Admin** can still mark follow-ups done, with **Mark selected done** on the Follow-ups page, for odd cases (e.g. follow-ups left by someone who has left). The server refuses everyone else, including Sales → Edit.
+- The daily overdue email and the Follow-ups page no longer mention marking done.
+- Follow-ups already marked done keep their history.
+
+### Changed — Follow-ups calendar, like Teams
+
+- The calendar on **Sales → Follow-ups** is redesigned in the style of the Teams calendar, with **Today**, **‹ ›**, the date range and four views: **Day**, **Work week** (the default), **Week** and **Month**.
+- Day / Work week / Week show an **hour grid**: each timed follow-up is a block at its time (enquiry ref, time, how, customer, what it's for); follow-ups with a day but no time sit in an **All day** strip on top; follow-ups at the same time sit side by side; today's column is highlighted with a red line at the current time. It opens at 8 AM.
+- **Month** shows six weeks with up to three follow-ups a day and "+N more"; clicking a day (or "+N more") opens it in Day view.
+- Colours by state: red overdue, amber today, blue upcoming, green done, with a legend.
+- Clicking a follow-up opens a **card** with its details (when, enquiry, customer, stage, temperature, the activity it came from, who added it, who has the enquiry now) and **Open enquiry** / **Reschedule** (your own open follow-up).
+- The search and filters apply to the calendar as before.
+
 ## [1.7.1] — 2026-10-28
 
 ### Added — Sales: overdue follow-ups emailed every day until done

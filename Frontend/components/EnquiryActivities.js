@@ -247,7 +247,7 @@ function ActivityModal({ enquiryId, activity, users, stage, onClose, onSaved }) 
 // canCreate: log (until Won / Lost: View + Create, or View while holding it). canEdit: your own entries
 // (Sales activity → Edit); canDelete: Sales → Delete. owns(activity): only whoever logged it may edit or delete it.
 // editableAt(activity): still in the stage it was logged in (an entry is fixed once the enquiry moves on).
-export default function EnquiryActivities({ enquiryId, canCreate, canEdit = canCreate, canDelete = canEdit, owns = () => true, editableAt = () => true, canMarkDone = () => false, users = [], stage, onChanged }) {
+export default function EnquiryActivities({ enquiryId, canCreate, canEdit = canCreate, canDelete = canEdit, owns = () => true, editableAt = () => true, users = [], stage, onChanged }) {
   const [items, setItems]     = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal]     = useState(null);
@@ -266,14 +266,6 @@ export default function EnquiryActivities({ enquiryId, canCreate, canEdit = canC
   useEffect(() => { load(); }, [load]);
 
   const onSaved = () => { load(); onChanged?.(); };
-
-  // A follow-up done without a new entry (handled by someone else, no longer needed).
-  const markDone = async (a) => {
-    const note = window.prompt('Mark this follow-up done? Add a note if you like (e.g. "handled by Pramod").', '');
-    if (note === null) return;
-    try { await apiPost(`/sales/activities/${a.id}/follow-up-done`, { note }); load(); onChanged?.(); }
-    catch (err) { alert(err.message); }
-  };
 
   const del = async (id) => {
     try { await apiDelete(`/sales/activities/${id}`); setConfirmDel(null); load(); onChanged?.(); }
@@ -328,12 +320,7 @@ export default function EnquiryActivities({ enquiryId, canCreate, canEdit = canC
                 <>
                   <span className={`inline-flex items-center px-1.5 py-0.5 rounded font-medium ${isOverdue(a.follow_up_at, a.follow_up_ended) ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
                     Next: {fmtDate(a.follow_up_at)}{a.follow_up_timed ? ` · ${fmtTime(a.follow_up_at)}` : ''}{a.next_medium ? ` · ${MEDIUM_LABEL[a.next_medium]}` : ''}{isOverdue(a.follow_up_at, a.follow_up_ended) ? ' · overdue' : ''}
-                  </span>
-                  {canMarkDone(a) && (
-                    <button type="button" onClick={() => markDone(a)} className="text-[11px] text-gray-500 hover:text-gray-800 underline cursor-pointer"
-                      title="Done without a new entry — e.g. handled by someone else, or no longer needed">Mark done</button>
-                  )}
-                </>
+                  </span>                </>
               ) : null}
               {a.next_action && <span className="text-gray-500">{a.next_action}</span>}
             </div>
