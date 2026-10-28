@@ -13,6 +13,16 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.7.1] — 2026-10-28
+
+### Added — Sales: overdue follow-ups emailed every day until done
+
+- Every morning (from 09:00, `FOLLOWUP_REMINDER.DAY_TIME` in `APP_TIMEZONE`) each person with overdue follow-ups gets **one email** (and a notification) listing them: enquiry ref, how many days overdue, what the follow-up is for and the customer — up to 15, then "and N more" — with a button to the Follow-ups page's Overdue tab. It comes **every day until each follow-up is done** (followed up, marked done, or the enquiry won/lost). Before, a missed follow-up was reminded once and then never again.
+- It goes to the person **who added** the follow-up; if that user is no longer active, to whoever holds the enquiry.
+- One email per person per day, even with several API workers (PM2 cluster): the day is claimed in a new `FollowupDigest` table before sending.
+
+**Upgrade:** one migration — run `npx prisma migrate deploy` in `Backend`.
+
 ## [1.7.0] — 2026-10-28
 
 ### Added — Sales → Follow-ups

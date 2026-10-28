@@ -12,6 +12,18 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|string[]|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.7.1',
+    date: '2026-10-28',
+    items: [
+      {
+        icon: 'spark',
+        title: 'A daily email for overdue follow-ups',
+        text: 'If a follow-up you added is past its date and not done, you get one email each morning listing them — until each is followed up, marked done, or the enquiry is won or lost.',
+        perm: 'SALES_VIEW',
+      },
+    ],
+  },
+  {
     version: '1.7.0',
     date: '2026-10-28',
     items: [

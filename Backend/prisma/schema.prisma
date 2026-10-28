@@ -1107,6 +1107,18 @@ enum ProjectStatus {
 /// One customer interaction on an enquiry - a call, meeting, Teams call, site
 /// visit or email - with its minutes (MOM) and an optional follow-up. Many per
 /// enquiry, shown as a chronological timeline.
+// The daily overdue follow-ups email: one per person per day (YYYY-MM-DD in
+// APP_TIMEZONE). Claiming the row is what makes a second worker skip it.
+model FollowupDigest {
+  id      Int      @id @default(autoincrement())
+  user_id Int
+  day     String   @db.VarChar(10)
+  count   Int      @default(0)
+  sent_at DateTime @default(now())
+
+  @@unique([user_id, day])
+}
+
 model EnquiryActivity {
   id           Int           @id @default(autoincrement())
   enquiry      Enquiry       @relation(fields: [enquiry_id], references: [id])

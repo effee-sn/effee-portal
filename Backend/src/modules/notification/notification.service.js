@@ -88,6 +88,7 @@ function createNotificationService(repository) {
     STAGE_AGING:                'STAGE_AGING',
     ACTIVITY_FOLLOWUP:          'ACTIVITY_FOLLOWUP',
     FOLLOWUP_DUE:               'FOLLOWUP_DUE',
+    FOLLOWUP_OVERDUE:           'FOLLOWUP_OVERDUE',
   });
 
   return {

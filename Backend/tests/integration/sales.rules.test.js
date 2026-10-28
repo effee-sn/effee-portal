@@ -1487,3 +1487,61 @@ describe('Sales rules: a Super Admin clears old follow-ups at once', () => {
     assert.equal((await followupsService.markDone({ ids: [a.id] }, admin(fx.internal))).done, 0, 'already done: left as is');
   });
 });
+
+describe('Sales rules: the daily overdue follow-ups email', () => {
+  it('one a day to the person who added them, until they are done', async () => {
+    const { runOverdueFollowupDigest } = require('../../src/modules/sales/followup.service');
+    const { zonedTime, localDay } = require('../../src/lib/timezone');
+    const config = require('../../src/config/env');
+    const tz = config.APP_TIMEZONE;
+    const DAY = 864e5;
+    const at = (d) => new Date(Date.now() + d * DAY);
+    const today = localDay(new Date(), tz);
+    const noon = zonedTime(today, '12:00', tz);
+    const emails = (u) => prisma.notification.findMany({ where: { user_id: u.id, type: 'FOLLOWUP_OVERDUE' }, orderBy: { id: 'asc' }, select: { title: true, link: true } });
+
+    // Each sweep claims the day per person; this test's claims are dropped again.
+    const lastClaim = (await prisma.followupDigest.findFirst({ orderBy: { id: 'desc' }, select: { id: true } }))?.id ?? 0;
+    const e1 = await newEnquiry(); const e2 = await newEnquiry();
+    const a = await log(e1.id, fx.field2, { activity_at: at(-6), follow_up_at: at(-4) });
+    const b = await log(e2.id, fx.field2, { activity_at: at(-6), follow_up_at: at(-3) });
+
+    await runOverdueFollowupDigest(zonedTime(today, '06:00', tz));
+    assert.equal((await emails(fx.field2)).length, 0, 'not before the morning time');
+    await runOverdueFollowupDigest(noon);
+    let got = await emails(fx.field2);
+    assert.equal(got.length, 1);
+    assert.equal(got[0].title, '2 overdue follow-ups');
+    assert.equal(got[0].link, '/dashboard/sales/followups?tab=overdue');
+    await runOverdueFollowupDigest(new Date(noon.getTime() + 60 * 60 * 1000));
+    assert.equal((await emails(fx.field2)).length, 1, 'once a day');
+
+    // "The next day": drop today's claim rather than move the clock, so other
+    // tests' upcoming follow-ups don't turn overdue and join the count.
+    const nextDay = () => prisma.followupDigest.deleteMany({ where: { id: { gt: lastClaim } } });
+    await activityService.markFollowUpDone(a.id, {}, actor(fx.field2));
+    await nextDay();
+    await runOverdueFollowupDigest(noon);
+    got = await emails(fx.field2);
+    assert.equal(got.length, 2, 'again the next day');
+    assert.equal(got[1].title, '1 overdue follow-up', 'only what is still open');
+    await activityService.markFollowUpDone(b.id, {}, actor(fx.field2));
+    await nextDay();
+    await runOverdueFollowupDigest(noon);
+    assert.equal((await emails(fx.field2)).length, 2, 'none once all are done');
+
+    // Added by someone no longer active → to whoever holds the enquiry.
+    const e3 = await newEnquiry('GENERATED', fx.field);
+    await log(e3.id, fx.internal, { activity_at: at(-6), follow_up_at: at(-4) });
+    await prisma.user.update({ where: { id: fx.internal.id }, data: { status: 'INACTIVE' } });
+    try {
+      const before = (await emails(fx.field)).length;
+      await nextDay();
+      await runOverdueFollowupDigest(noon);
+      assert.equal((await emails(fx.field)).length, before + 1);
+    } finally {
+      await prisma.user.update({ where: { id: fx.internal.id }, data: { status: 'ACTIVE' } });
+      await nextDay();
+    }
+  });
+});

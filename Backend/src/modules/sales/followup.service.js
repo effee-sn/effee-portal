@@ -2,7 +2,7 @@ const prisma = require('../../lib/prisma');
 const { notificationService } = require('../notification/notification.service');
 const { stageLabel } = require('./enquiry.service');
 const config = require('../../config/env');
-const { formatTime, localDay } = require('../../lib/timezone');
+const { formatTime, localDay, zonedTime } = require('../../lib/timezone');
 const { enquiryRows, NEXT_STEP } = require('./emailDetails');
 const { salesConfigService } = require('./config.service');
 const { dueReminder, lookahead } = require('./reminderPlan');
@@ -19,6 +19,9 @@ const MEDIUM = Object.freeze({ CALL: 'Call', MEETING: 'Meeting', TEAMS: 'Teams',
  *     its morning time (9:00 local) that day, plus the morning of any whole
  *     day set before it. Which reminder is due is decided in reminderPlan.
  *   - **Stage aging** — an enquiry has sat in one stage past its threshold.
+ *   - **Overdue follow-ups** — every morning, each person gets one email
+ *     listing their follow-ups whose day has passed and that are not done yet,
+ *     until each is followed up, marked done or its enquiry closes.
  *
  * Both go to the enquiry's *current handler* (the person who must act now),
  * falling back to the owner. Each reminder is *claimed* with a conditional
@@ -234,4 +237,98 @@ async function runStageAgingReminders() {
   return { checked: due.length, sent };
 }
 
-module.exports = { runDueFollowupReminders, runStageAgingReminders, STAGE_AGING_DAYS };
+/**
+ * The daily overdue email: from the morning time (FOLLOWUP_REMINDER.DAY_TIME,
+ * 09:00 in APP_TIMEZONE) each person with follow-ups past their day and not
+ * done gets one email — and a notification — listing them, every day until each
+ * is followed up, marked done or its enquiry is won or lost. It goes to the
+ * person who added the follow-up; to whoever holds the enquiry when that user
+ * is no longer active. One per person per day: a FollowupDigest row is claimed
+ * before sending, so a second worker (PM2 cluster) or a later sweep skips it.
+ *
+ * @param {Date} [now]
+ * @returns {Promise<{ people: number, sent: number }>}
+ */
+async function runOverdueFollowupDigest(now = new Date()) {
+  const tz = config.APP_TIMEZONE;
+  const today = localDay(now, tz);
+  if (now < zonedTime(today, config.FOLLOWUP_REMINDER.DAY_TIME, tz)) return { people: 0, sent: 0 };
+  const startOfToday = zonedTime(today, '00:00', tz);
+
+  const overdue = await prisma.enquiryActivity.findMany({
+    where: {
+      deleted_at: null,
+      is_review: false,
+      follow_up_ended: false,
+      follow_up_done_at: null,
+      follow_up_at: { not: null, lt: startOfToday },
+      enquiry: { deleted_at: null, stage: { notIn: ['WON', 'LOST'] } },
+    },
+    select: {
+      id: true, subject: true, next_action: true, next_medium: true, follow_up_at: true, follow_up_timed: true, created_by: true,
+      enquiry: { select: { id: true, ref_no: true, title: true, owner_id: true, handler_id: true, customer: { select: { name: true } } } },
+    },
+    orderBy: { follow_up_at: 'asc' },
+    take: 5000,
+  });
+  if (!overdue.length) return { people: 0, sent: 0 };
+
+  // To the person who added it while they are active; else whoever holds the enquiry.
+  const creators = [...new Set(overdue.map((a) => a.created_by).filter(Boolean))];
+  const active = new Set((await prisma.user.findMany({
+    where: { id: { in: creators }, deleted_at: null, status: 'ACTIVE' }, select: { id: true },
+  })).map((u) => u.id));
+  const byPerson = new Map();
+  for (const a of overdue) {
+    const to = active.has(a.created_by) ? a.created_by : (a.enquiry.handler_id ?? a.enquiry.owner_id);
+    if (!to) continue;
+    if (!byPerson.has(to)) byPerson.set(to, []);
+    byPerson.get(to).push(a);
+  }
+
+  const daysLate = (a) => {
+    const due = localDay(a.follow_up_at, tz);
+    return Math.round((zonedTime(today, '00:00', tz) - zonedTime(due, '00:00', tz)) / DAY_MS);
+  };
+  const SHOWN = 15;
+  let sent = 0;
+  for (const [userId, list] of byPerson) {
+    // Claim today's email for this person; someone else got here first → skip.
+    try {
+      await prisma.followupDigest.create({ data: { user_id: userId, day: today, count: list.length } });
+    } catch (err) {
+      if (err.code === 'P2002') continue;
+      throw err;
+    }
+    const n = list.length;
+    const rows = list.slice(0, SHOWN).map((a) => {
+      const d = daysLate(a);
+      return [
+        `${a.enquiry.ref_no} · ${d} day${d === 1 ? '' : 's'} overdue`,
+        `${a.next_action || a.subject}${a.next_medium ? ` (${MEDIUM[a.next_medium]})` : ''} — ${a.enquiry.customer?.name || a.enquiry.title}`,
+      ];
+    });
+    if (n > SHOWN) rows.push(['…', `and ${n - SHOWN} more`]);
+    await notificationService.notify({
+      userIds: [userId],
+      type: notificationService.Type.FOLLOWUP_OVERDUE,
+      title: `${n} overdue follow-up${n === 1 ? '' : 's'}`,
+      body: `${list[0].enquiry.ref_no}${n > 1 ? ` and ${n - 1} more` : ''} — past their date and not done yet. Log what happened, or mark them done.`,
+      entityType: null,
+      entityId: null,
+      link: '/dashboard/sales/followups?tab=overdue',
+      actorId: null,
+      email: {
+        eyebrow: 'Sales · Overdue follow-ups',
+        intro: `You have ${n} follow-up${n === 1 ? '' : 's'} past ${n === 1 ? 'its' : 'their'} date and not done yet. Log what happened on the enquiry (that closes it), or mark it done if it is no longer needed. This reminder comes every morning until they are done.`,
+        details: rows,
+        actionLabel: 'Open follow-ups',
+        reason: "You're receiving this because you added these follow-ups in the portal.",
+      },
+    });
+    sent += 1;
+  }
+  return { people: byPerson.size, sent };
+}
+
+module.exports = { runDueFollowupReminders, runStageAgingReminders, runOverdueFollowupDigest, STAGE_AGING_DAYS };
