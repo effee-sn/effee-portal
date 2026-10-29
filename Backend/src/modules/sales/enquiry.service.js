@@ -7,6 +7,8 @@ const { missingForStage, GATED_STAGES, manualFlow } = require('./stageGate');
 const { currencyService } = require('../master/currency.service');
 const { loadRates, toInr, paise, displayConverter } = require('../master/fx');
 const { NEXT_STEP, enquiryRows, money, sentence, stageName } = require('./emailDetails');
+const { salesEvent } = require('./flowEvents');
+const { resolveAssignee } = require('../flowengine/assignment');
 const { NotFoundError, ConflictError, ValidationError, ForbiddenError, buildSearchClause } = require('../../core');
 const {
   canReassign, assertFlowWork, assertDetailsEdit, assertCanWin, assertCanLose, enquiryScope, assertCanSeeEnquiry,
@@ -206,6 +208,17 @@ function createEnquiryService(repository) {
     return workflowRepository.internalUserId();
   }
 
+  /**
+   * Who holds the enquiry as it enters `stage`: what a Flow Builder flow says,
+   * else the built-in rule above (owner, or the Internal Sales handler).
+   * @param {string} stage @param {number} ownerId  the owner it will have
+   * @param {object|null} enquiry  the enquiry before the move (a partial one while it is being created)
+   */
+  function handlerFor(stage, ownerId, enquiry) {
+    return resolveAssignee({ module: 'SALES', stage, entity: enquiry ? { ...enquiry, owner_id: ownerId } : null }, async () =>
+      resolveHandler(stage, ownerId, phaseRole(stage) === 'INTERNAL' ? await internalHandlerId() : null));
+  }
+
   /** Notifies whoever the enquiry has just been handed to (never the actor). */
   function notifyHandoff(enquiry, handlerId, actor, note) {
     if (!handlerId || handlerId === actor?.id) return;
@@ -357,7 +370,7 @@ function createEnquiryService(repository) {
         stage: 'NEW',
         owner_id,
         // The raiser is both the field initiator (owner) and the first handler.
-        handler_id: resolveHandler('NEW', owner_id, null),
+        handler_id: await handlerFor('NEW', owner_id, { owner_id, created_by: actor?.id ?? null }),
         ref_no: await nextRefNo(),
         created_by: actor?.id ?? null,
         updated_by: actor?.id ?? null,
@@ -365,7 +378,7 @@ function createEnquiryService(repository) {
 
       const enquiry = await repository.create(data);
       await repository.recordStageEvent({
-        enquiry_id: enquiry.id, from_stage: null, to_stage: enquiry.stage, changed_by: actor?.id ?? null,
+        enquiry_id: enquiry.id, from_stage: null, to_stage: enquiry.stage, changed_by: actor?.id ?? null, handler_id: enquiry.handler_id ?? null,
       });
 
       await auditService.record({
@@ -377,6 +390,8 @@ function createEnquiryService(repository) {
       });
 
       notifyOwner(enquiry, actor);
+      await salesEvent('ENQUIRY_CREATED', enquiry.id, actor);
+      await salesEvent('STAGE_ENTERED', enquiry.id, actor, { from: null, to: enquiry.stage });
       return withMoney(enquiry);
     },
 
@@ -458,7 +473,7 @@ function createEnquiryService(repository) {
       if (stageChanged) {
         data.stage_since = new Date();
         // Hand the baton to whoever owns the new stage's phase.
-        data.handler_id = resolveHandler(dto.stage, data.owner_id ?? before.owner_id, await internalHandlerId());
+        data.handler_id = await handlerFor(dto.stage, data.owner_id ?? before.owner_id, before);
       } else if (ownerChanged && (before.handler_id ?? before.owner_id) === before.owner_id) {
         // Same rule as Reassign: when the field owner holds the baton, it
         // follows them to the new owner.
@@ -467,7 +482,7 @@ function createEnquiryService(repository) {
       const enquiry = await repository.update(id, data);
       if (stageChanged) {
         await repository.recordStageEvent({
-          enquiry_id: id, from_stage: before.stage, to_stage: dto.stage, changed_by: actor?.id ?? null,
+          enquiry_id: id, from_stage: before.stage, to_stage: dto.stage, changed_by: actor?.id ?? null, handler_id: enquiry.handler_id ?? null,
         });
         if (data.handler_id !== before.handler_id) notifyHandoff(enquiry, data.handler_id, actor);
       }
@@ -482,6 +497,7 @@ function createEnquiryService(repository) {
 
       // Notify a newly assigned owner.
       if (dto.owner_id !== undefined && dto.owner_id !== before.owner_id) notifyOwner(enquiry, actor);
+      if (stageChanged) await salesEvent('STAGE_ENTERED', id, actor, { from: before.stage, to: dto.stage });
       return withMoney(enquiry);
     },
 
@@ -500,12 +516,12 @@ function createEnquiryService(repository) {
       if (!before) throw new NotFoundError('Enquiry');
       if (before.stage === toStage) return before;
 
-      const handler_id = resolveHandler(toStage, before.owner_id, await internalHandlerId());
+      const handler_id = await handlerFor(toStage, before.owner_id, before);
       const enquiry = await repository.update(id, {
         stage: toStage, stage_since: new Date(), handler_id, updated_by: actor?.id ?? null,
       });
       await repository.recordStageEvent({
-        enquiry_id: id, from_stage: before.stage, to_stage: toStage, changed_by: actor?.id ?? null,
+        enquiry_id: id, from_stage: before.stage, to_stage: toStage, changed_by: actor?.id ?? null, handler_id,
       });
       if (handler_id !== before.handler_id) notifyHandoff(enquiry, handler_id, actor, note);
 
@@ -516,6 +532,7 @@ function createEnquiryService(repository) {
         actor,
         changes: { stage: { from: before.stage, to: toStage }, auto: true },
       });
+      await salesEvent('STAGE_ENTERED', id, actor, { from: before.stage, to: toStage, auto: true });
       return withMoney(enquiry);
     },
 
@@ -542,7 +559,7 @@ function createEnquiryService(repository) {
         order_date: dto.order_date ?? new Date(),
         won_declaration: dto.won_declaration ?? null,
         won_terms: dto.won_terms ?? null,
-        handler_id: resolveHandler('WON', before.owner_id, await internalHandlerId()),
+        handler_id: await handlerFor('WON', before.owner_id, before),
         // Clear any prior lost close-out.
         lost_at: null,
         lost_reason: null,
@@ -550,7 +567,7 @@ function createEnquiryService(repository) {
         updated_by: actor?.id ?? null,
       };
       const enquiry = await repository.update(id, data);
-      await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'WON', changed_by: actor?.id ?? null });
+      await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'WON', changed_by: actor?.id ?? null, handler_id: data.handler_id });
       // Its open follow-ups close with it.
       await activityRepository.closeFollowUpsOfEnquiry(id);
 
@@ -578,6 +595,8 @@ function createEnquiryService(repository) {
         },
       });
 
+      await salesEvent('ENQUIRY_WON', id, actor, { from: before.stage, order_value: Number(dto.order_value) });
+      await salesEvent('STAGE_ENTERED', id, actor, { from: before.stage, to: 'WON' });
       return withMoney(enquiry);
     },
 
@@ -595,11 +614,11 @@ function createEnquiryService(repository) {
         lost_at: new Date(),
         lost_reason: dto.lost_reason,
         lost_to: dto.lost_to ?? null,
-        handler_id: resolveHandler('LOST', before.owner_id, await internalHandlerId()),
+        handler_id: await handlerFor('LOST', before.owner_id, before),
         updated_by: actor?.id ?? null,
       };
       const enquiry = await repository.update(id, data);
-      await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'LOST', changed_by: actor?.id ?? null });
+      await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'LOST', changed_by: actor?.id ?? null, handler_id: data.handler_id });
       await activityRepository.closeFollowUpsOfEnquiry(id);
 
       await auditService.record({
@@ -622,6 +641,8 @@ function createEnquiryService(repository) {
         },
       });
 
+      await salesEvent('ENQUIRY_LOST', id, actor, { from: before.stage, lost_reason: dto.lost_reason, lost_to: dto.lost_to ?? null });
+      await salesEvent('STAGE_ENTERED', id, actor, { from: before.stage, to: 'LOST' });
       return withMoney(enquiry);
     },
 
@@ -637,14 +658,14 @@ function createEnquiryService(repository) {
       const data = {
         stage: 'FOLLOW_UP',
         stage_since: new Date(),
-        handler_id: before.owner_id, // Follow-up is the field initiator's phase
+        handler_id: await handlerFor('FOLLOW_UP', before.owner_id, before), // the field initiator's phase
         won_at: null, order_no: null, order_value: null, order_fx_rate: null, order_date: null,
         won_declaration: null, won_terms: null,
         lost_at: null, lost_reason: null, lost_to: null,
         updated_by: actor?.id ?? null,
       };
       const enquiry = await repository.update(id, data);
-      await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'FOLLOW_UP', changed_by: actor?.id ?? null });
+      await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'FOLLOW_UP', changed_by: actor?.id ?? null, handler_id: data.handler_id });
 
       await auditService.record({
         action: auditService.Action.UPDATE,
@@ -654,6 +675,8 @@ function createEnquiryService(repository) {
         changes: { stage: { from: before.stage, to: 'FOLLOW_UP' }, reopened: true },
       });
 
+      await salesEvent('ENQUIRY_REOPENED', id, actor, { from: before.stage });
+      await salesEvent('STAGE_ENTERED', id, actor, { from: before.stage, to: 'FOLLOW_UP' });
       return withMoney(enquiry);
     },
 
@@ -707,6 +730,10 @@ function createEnquiryService(repository) {
         },
       });
 
+      await salesEvent('ENQUIRY_REASSIGNED', id, actor, {
+        ...(data.owner_id !== undefined ? { owner: { from: before.owner_id, to: data.owner_id } } : {}),
+        ...(data.handler_id !== undefined ? { handler: { from: before.handler_id, to: data.handler_id } } : {}),
+      });
       return withMoney(enquiry);
     },
 

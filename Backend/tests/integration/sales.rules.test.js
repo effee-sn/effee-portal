@@ -174,6 +174,7 @@ after(async () => {
     await prisma.enquiryActivity.deleteMany({ where: { enquiry_id: { in: enquiryIds } } });
     await prisma.enquiryAttachment.deleteMany({ where: { enquiry_id: { in: enquiryIds } } });
     await prisma.enquiryStageEvent.deleteMany({ where: { enquiry_id: { in: enquiryIds } } });
+    await prisma.flowEvent.deleteMany({ where: { entity_type: 'Enquiry', entity_id: { in: enquiryIds.map(String) } } });
     await prisma.enquiry.deleteMany({ where: { id: { in: enquiryIds } } });
     if (ids.apps.length) await prisma.salesApplication.deleteMany({ where: { id: { in: ids.apps } } });
     if (fx.currency) {

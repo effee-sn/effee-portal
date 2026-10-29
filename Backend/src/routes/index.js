@@ -12,6 +12,7 @@ const notificationRoutes = require('../modules/notification/notification.routes'
 const serviceRoutes   = require('../modules/service/service.routes');
 const salesRoutes     = require('../modules/sales/sales.routes');
 const flowRoutes      = require('../modules/flow/flow.routes');
+const flowEngineRoutes = require('../modules/flowengine/flowengine.routes');
 const departmentRoutes = require('../modules/department/department.routes');
 const projectRoutes   = require('../modules/projects/project.routes');
 const masterRoutes    = require('../modules/master/master.routes');
@@ -38,6 +39,7 @@ router.use('/notifications', notificationRoutes);
 router.use('/service',     serviceRoutes);
 router.use('/sales',       salesRoutes);
 router.use('/flow',        flowRoutes);
+router.use('/flow-engine', flowEngineRoutes);
 router.use('/departments', departmentRoutes);
 router.use('/projects',    projectRoutes);
 router.use('/reports',     reportsRoutes);

@@ -7,6 +7,7 @@ const { zonedTime } = require('../../lib/timezone');
 const { NotFoundError, ForbiddenError, ConflictError } = require('../../core');
 const { assertActivityAccess, isHandler, assertCanSeeEnquiry } = require('./access');
 const { stageName } = require('./emailDetails');
+const { salesEvent } = require('./flowEvents');
 
 const MEDIUM = Object.freeze({ CALL: 'Call', MEETING: 'Meeting', TEAMS: 'Teams', SITE_VISIT: 'Site visit', EMAIL: 'Email' });
 
@@ -165,6 +166,9 @@ function createActivityService(repository) {
         link: `/dashboard/sales/enquiries/${enquiryId}`,
         actorId: actor?.id ?? null,
       });
+
+      // Reported before any stage move it causes, in the order it happened.
+      await salesEvent('ACTIVITY_LOGGED', enquiryId, actor, { activity_id: activity.id, type: activity.type, is_review: Boolean(activity.is_review) });
 
       // An Incoming enquiry moves to Contacted on its first logged (non-review)
       // activity — that activity is the contact, so it is recorded under

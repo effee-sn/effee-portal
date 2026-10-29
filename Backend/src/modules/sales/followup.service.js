@@ -6,6 +6,7 @@ const { formatTime, localDay, zonedTime } = require('../../lib/timezone');
 const { enquiryRows, NEXT_STEP } = require('./emailDetails');
 const { salesConfigService } = require('./config.service');
 const { dueReminder, lookahead } = require('./reminderPlan');
+const { salesEvent } = require('./flowEvents');
 
 const MEDIUM = Object.freeze({ CALL: 'Call', MEETING: 'Meeting', TEAMS: 'Teams', SITE_VISIT: 'Site visit', EMAIL: 'Email' });
 
@@ -231,6 +232,8 @@ async function runStageAgingReminders() {
         details: enquiryRows(e, [['Days in stage', String(days)], ['Next step', NEXT_STEP[e.stage]]]),
       },
     });
+    // Once per stage stay, like the reminder (the claim above guards it).
+    await salesEvent('STAGE_STALLED', e.id, null, { stage: e.stage, days });
     sent += 1;
   }
 

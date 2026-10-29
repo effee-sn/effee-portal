@@ -8,6 +8,7 @@ const { auditService } = require('../audit/audit.service');
 const { notificationService } = require('../notification/notification.service');
 const { loadRates } = require('../master/fx');
 const { money } = require('./emailDetails');
+const { salesEvent } = require('./flowEvents');
 const { NotFoundError, BadRequestError, ConflictError, ValidationError } = require('../../core');
 const { assertFullEdit, assertFlowWork, assertOwnItem, assertCanSeeEnquiry } = require('./access');
 
@@ -110,6 +111,7 @@ function createAttachmentService(repository) {
         },
       });
 
+      await salesEvent('DOCUMENT_UPLOADED', enquiryId, actor, { attachment_id: attachment.id, kind: dto.kind });
       return attachment;
     },
 
@@ -162,6 +164,14 @@ function createAttachmentService(repository) {
         actor,
         changes: { sent: { from: Boolean(before.sent_at), to: sent } },
       });
+      // Reported before the stage move it causes, in the order it happened.
+      if (sent) {
+        const value = before.offer_value === null ? null : Number(before.offer_value);
+        const rate = (await loadRates())[enquiry.currency_code] ?? 1;
+        await salesEvent('OFFER_SENT', before.enquiry_id, actor, {
+          attachment_id: id, offer_value: value, offer_value_inr: value === null ? null : Math.round(value * rate * 100) / 100, version: before.version,
+        });
+      }
 
       // Sending an offer moves the deal forward into a follow-up: the first
       // offer (Offer) → Follow-up; a revised offer (Negotiation) →

@@ -1195,9 +1195,13 @@ model EnquiryStageEvent {
   from_stage EnquiryStage?
   to_stage   EnquiryStage
   changed_by Int?
+  /// Who held the enquiry as it entered `to_stage` (a flow can send a later
+  /// stage back to that person). Null on rows recorded before it was kept.
+  handler_id Int?
   created_at DateTime      @default(now())
 
   @@index([enquiry_id])
+  @@index([enquiry_id, to_stage])
 }
 
 /// A document stored against an enquiry (intake format, concept, costing, or a
@@ -1315,4 +1319,139 @@ model QuotationItem {
 
   @@index([quotation_id])
   @@index([product_id])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Flow engine (Flow Builder → flows). A flow is drawn on a canvas — blocks and
+// arrows — and stored as JSON text (MariaDB: see AuditLog.changes). Publishing
+// freezes the canvas as a numbered FlowVersion; a run always uses the version
+// it started with. Modules report what happened as FlowEvent rows (an outbox),
+// which the engine claims and runs — so nothing is lost on a restart and
+// nothing runs twice when several API processes run.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model FlowDefinition {
+  id          Int     @id @default(autoincrement())
+  /// The module whose events the flow listens to: SALES (more later).
+  module      String  @db.VarChar(30)
+  name        String  @db.VarChar(150)
+  description String? @db.Text
+  /// DRAFT (never published) | ACTIVE | PAUSED
+  status      String  @default("DRAFT") @db.VarChar(10)
+  /// The canvas being edited (JSON: { nodes, edges }); published as a version.
+  draft_graph String? @db.LongText
+
+  /// The published version that runs (null until the first publish).
+  live_version_id Int?
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+  created_by Int?
+  updated_by Int?
+
+  versions FlowVersion[]
+  runs     FlowRun[]
+
+  @@index([module, status])
+  @@index([deleted_at])
+}
+
+model FlowVersion {
+  id      Int            @id @default(autoincrement())
+  flow    FlowDefinition @relation(fields: [flow_id], references: [id], onDelete: Cascade)
+  flow_id Int
+  version Int
+  /// The frozen canvas (JSON: { nodes, edges }).
+  graph   String         @db.LongText
+  /// The event that starts it (the trigger block's event), kept for lookup.
+  trigger String         @db.VarChar(60)
+
+  published_at DateTime @default(now())
+  published_by Int?
+
+  runs FlowRun[]
+
+  @@unique([flow_id, version])
+  @@index([trigger])
+}
+
+/// Outbox: what happened in a module, waiting for the engine.
+model FlowEvent {
+  id          Int     @id @default(autoincrement())
+  module      String  @db.VarChar(30)
+  /// e.g. STAGE_ENTERED, ENQUIRY_WON (see the module catalog).
+  type        String  @db.VarChar(60)
+  entity_type String  @db.VarChar(40)
+  entity_id   String  @db.VarChar(40)
+  /// JSON details of the event (e.g. { from, to }).
+  payload     String? @db.Text
+  actor_id    Int?
+  /// How many flow steps led to this event (loop guard), and which flow caused
+  /// it — a flow never starts itself.
+  depth          Int  @default(0)
+  origin_flow_id Int?
+
+  created_at   DateTime  @default(now())
+  claimed_at   DateTime?
+  processed_at DateTime?
+  attempts     Int       @default(0)
+  error        String?   @db.Text
+
+  @@index([processed_at, id])
+  @@index([created_at])
+}
+
+model FlowRun {
+  id          Int            @id @default(autoincrement())
+  flow        FlowDefinition @relation(fields: [flow_id], references: [id], onDelete: Cascade)
+  flow_id     Int
+  version     FlowVersion    @relation(fields: [version_id], references: [id], onDelete: Cascade)
+  version_id  Int
+  /// The outbox event that started it — one run per flow per event.
+  event_id    Int?
+  trigger     String         @db.VarChar(60)
+  entity_type String         @db.VarChar(40)
+  entity_id   String         @db.VarChar(40)
+  /// RUNNING | DONE | FAILED
+  status      String         @default("RUNNING") @db.VarChar(10)
+  error       String?        @db.Text
+  started_at  DateTime       @default(now())
+  ended_at    DateTime?
+
+  steps FlowRunStep[]
+
+  @@unique([flow_id, event_id])
+  @@index([flow_id, started_at])
+  @@index([entity_type, entity_id])
+}
+
+model FlowRunStep {
+  id         Int       @id @default(autoincrement())
+  run        FlowRun   @relation(fields: [run_id], references: [id], onDelete: Cascade)
+  run_id     Int
+  /// The canvas block it ran.
+  node_id    String    @db.VarChar(60)
+  node_type  String    @db.VarChar(30)
+  /// DONE | FAILED
+  status     String    @db.VarChar(10)
+  /// Which way it went on (the arrow it followed) and any result, as JSON.
+  output     String?   @db.Text
+  error      String?   @db.Text
+  started_at DateTime  @default(now())
+  ended_at   DateTime?
+
+  @@index([run_id])
+}
+
+/// "Turn by turn" assigning: who an Assign block gave the last record to, so
+/// the next goes to the following person.
+model FlowAssignState {
+  id           Int      @id @default(autoincrement())
+  flow_id      Int
+  node_id      String   @db.VarChar(60)
+  last_user_id Int?
+  updated_at   DateTime @updatedAt
+
+  @@unique([flow_id, node_id])
 }
