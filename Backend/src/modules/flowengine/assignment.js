@@ -42,7 +42,7 @@ async function walkInline(graph, ctx) {
  * @param {string} p.stage
  * @param {object|null} p.entity  the record before the move (with the owner it will have), or a partial one when new
  */
-async function assigneeFromFlows({ module, stage, entity }, repository = flowEngineRepository) {
+async function assigneeFromFlows({ module, stage, entity, dryRun = false }, repository = flowEngineRepository) {
   const catalog = catalogFor(module);
   if (!catalog) return null;
   const event = { type: 'STAGE_ENTERED', payload: { to: stage } };
@@ -54,7 +54,7 @@ async function assigneeFromFlows({ module, stage, entity }, repository = flowEng
     // The record as it will be: loaded fresh, with the new stage and owner.
     const loaded = entity?.id ? await catalog.loadEntity(entity.id) : null;
     const facts = { ...(loaded || {}), ...(entity?.id ? {} : entity || {}), owner_id: entity?.owner_id ?? loaded?.owner_id, stage };
-    const ctx = { mode: 'inline', module, event, facts, flow, version: { id: version.id, version: version.version }, helpers };
+    const ctx = { mode: 'inline', module, event, facts, flow, version: { id: version.id, version: version.version }, helpers, dryRun };
     await walkInline(graph, ctx);
     // One assigning flow per stage (publish enforces it): its answer, even "nobody", is final.
     if (ctx.assigned) return ctx.assigned.userId ? { userId: ctx.assigned.userId, departmentId: ctx.assigned.departmentId } : null;

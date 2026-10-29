@@ -20,12 +20,15 @@ function createHelpers(repository = flowEngineRepository) {
     return [...ids].sort((a, b) => (load.get(a) || 0) - (load.get(b) || 0) || a - b)[0];
   }
 
-  /** Of these people, the one after whoever this block gave the last record to. */
-  async function nextInTurn(flowId, nodeId, ids) {
+  /**
+   * Of these people, the one after whoever this block gave the last record to.
+   * A dry run (test run, preview) only looks — the turn is not taken.
+   */
+  async function nextInTurn(flowId, nodeId, ids, dryRun) {
     if (!ids.length) return null;
     const last = await repository.lastTurn(flowId, nodeId);
     const next = ids.find((id) => last === null || id > last) ?? ids[0];
-    await repository.saveTurn(flowId, nodeId, next);
+    if (!dryRun) await repository.saveTurn(flowId, nodeId, next);
     return next;
   }
 
@@ -54,11 +57,11 @@ function createHelpers(repository = flowEngineRepository) {
           // The head holds it — for good (HEAD), or until they pick a member (HEAD_PICKS).
           if (d.pick === 'HEAD' || d.pick === 'HEAD_PICKS') return firstActive(await repository.departmentHead(deptId));
           const members = await repository.departmentMembers(deptId);
-          return d.pick === 'TURN' ? nextInTurn(ctx.flow.id, node.id, members) : leastBusy(module, members);
+          return d.pick === 'TURN' ? nextInTurn(ctx.flow.id, node.id, members, ctx.dryRun) : leastBusy(module, members);
         }
         case 'ROLE': {
           const members = await repository.roleMembers(Number(d.role_id));
-          return d.pick === 'TURN' ? nextInTurn(ctx.flow.id, node.id, members) : leastBusy(module, members);
+          return d.pick === 'TURN' ? nextInTurn(ctx.flow.id, node.id, members, ctx.dryRun) : leastBusy(module, members);
         }
         default: return null;
       }

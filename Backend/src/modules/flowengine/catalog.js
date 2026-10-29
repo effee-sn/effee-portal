@@ -105,6 +105,10 @@ const CATALOGS = Object.freeze({
     /** Who held it when it last entered a stage (for "same person as at stage"). */
     heldAtStage: (id, stage) => require('../sales/flowFacts').handlerAtStage(id, stage),
     emailRows: (facts) => require('../sales/flowFacts').enquiryEmailRows(facts),
+    /** Open records at these stages (for "move current enquiries?"). */
+    openRecordsAt: (stages) => require('../sales/flowFacts').openEnquiriesAt(stages),
+    /** Hands an open record to who a flow now assigns (a flow change moving current work). */
+    applyAssignment: (id, assignment, actor, note) => require('../sales/enquiry.service').enquiryService.applyFlowAssignment(id, assignment, actor, note),
     linkFor: (id) => `/dashboard/sales/enquiries/${id}`,
     eyebrow: 'Sales',
   }),

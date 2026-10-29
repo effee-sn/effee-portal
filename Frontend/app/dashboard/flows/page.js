@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
 import SalesWorkflowCard from '@/components/SalesWorkflowCard';
+import FlowsList from '@/components/flowbuilder/FlowsList';
 
 // `ORIGINATING_HEAD` is a builder-only convenience: it maps to the backend's
 // DEPARTMENT_HEAD type with no fixed department, which the engine resolves to
@@ -298,13 +300,23 @@ function DeleteModal({ workflow, onClose, onDeleted }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function FlowBuilderPage() {
+  return (
+    <Suspense fallback={<TableSkeleton cols={4} rows={5} />}>
+      <FlowBuilder />
+    </Suspense>
+  );
+}
+
+function FlowBuilder() {
   useAuth();
   const { me, can, loading: permLoading } = usePermissions();
+  const params = useSearchParams();
 
   const [rows, setRows]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal]     = useState(null);
-  const [tab, setTab]         = useState('service');
+  // ?tab=sales (back from a flow's canvas) opens the Sales tab.
+  const [tab, setTab]         = useState(() => (params.get('tab') === 'sales' ? 'sales' : 'service'));
 
   // Step workflows belong to the service module; Sales uses its own handler
   // config (the Sales tab), not step workflows.
@@ -363,7 +375,18 @@ export default function FlowBuilderPage() {
         ))}
       </div>
 
-      {tab === 'sales' && <SalesWorkflowCard canEdit={me?.is_system || can('SALES_EDIT')} />}
+      {tab === 'sales' && (
+        <div className="space-y-4">
+          <section>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Setup</h2>
+            <SalesWorkflowCard canEdit={me?.is_system || can('SALES_EDIT')} />
+          </section>
+          <section>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Flows</h2>
+            <FlowsList module="SALES" isAdmin={Boolean(me?.is_system)} />
+          </section>
+        </div>
+      )}
 
       {tab === 'service' && (
       <div className="bg-white rounded border border-gray-200 overflow-hidden">

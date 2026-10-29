@@ -27,6 +27,9 @@ router.post('/flows/:id/publish', validate({ params: v.flowIdParam }), asyncHand
 router.post('/flows/:id/pause', validate({ params: v.flowIdParam }), asyncHandler(c.pauseFlow));
 router.post('/flows/:id/resume', validate({ params: v.flowIdParam }), asyncHandler(c.resumeFlow));
 router.get('/flows/:id/versions/:versionId', validate({ params: v.versionParam }), asyncHandler(c.getVersion));
+router.post('/flows/:id/test', validate({ params: v.flowIdParam, body: v.testFlowBody }), asyncHandler(c.testFlow));
+router.get('/flows/:id/affected', validate({ params: v.flowIdParam }), asyncHandler(c.getAffected));
+router.post('/flows/:id/move-current', validate({ params: v.flowIdParam, body: v.moveCurrentBody }), asyncHandler(c.moveCurrent));
 
 router.get('/runs', validate({ query: v.listRunsQuery }), asyncHandler(c.listRuns));
 router.get('/runs/:id', validate({ params: v.flowIdParam }), asyncHandler(c.getRun));

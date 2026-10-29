@@ -775,6 +775,36 @@ function createEnquiryService(repository) {
     },
 
     /**
+     * Hands an open enquiry to who a Flow Builder flow now assigns at its
+     * current stage — when a flow change is published and its author chooses
+     * to move the current enquiries too. Recorded like a reassign.
+     * @param {number} id
+     * @param {{ userId: number, departmentId: number|null }} assignment
+     * @param {object} actor
+     * @param {string} note  why, for the audit log and the hand-off notice
+     */
+    async applyFlowAssignment(id, { userId, departmentId }, actor, note) {
+      const before = await repository.findById(id);
+      if (!before) throw new NotFoundError('Enquiry');
+      if (before.stage === 'WON' || before.stage === 'LOST') throw new ConflictError('A closed enquiry is not moved');
+      const enquiry = await repository.update(id, {
+        handler_id: userId,
+        queue_department_id: departmentId || null,
+        queued_at: departmentId ? new Date() : null,
+        queue_reminded_at: null,
+        updated_by: actor?.id ?? null,
+      });
+      await repository.setStageHandler(id, before.stage, userId);
+      if (userId !== before.handler_id) notifyHandoff(enquiry, userId, actor, departmentId ? `${note} — ${QUEUED_NOTE}` : note);
+      await auditService.record({
+        action: auditService.Action.UPDATE, entity: 'Enquiry', entityId: id, actor,
+        changes: { handler_id: { from: before.handler_id, to: userId }, ...(departmentId ? { queue_department_id: departmentId } : {}), moved_by_flow_change: note },
+      });
+      await salesEvent('ENQUIRY_REASSIGNED', id, actor, { handler: { from: before.handler_id, to: userId }, by_flow_change: true });
+      return withMoney(enquiry);
+    },
+
+    /**
      * "Assign to my team": the enquiries waiting in the queues of the
      * departments the actor heads (every queue for a Super Admin), each with
      * the members it can go to.

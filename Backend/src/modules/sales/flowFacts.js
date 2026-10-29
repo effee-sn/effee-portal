@@ -83,6 +83,18 @@ async function handlerAtStage(enquiryId, stage) {
   return row?.handler_id ?? null;
 }
 
+/** Open enquiries at these stages, with who holds them — for "move current enquiries?" after a publish. */
+async function openEnquiriesAt(stages) {
+  return prisma.enquiry.findMany({
+    where: { deleted_at: null, stage: { in: stages } },
+    select: {
+      id: true, ref_no: true, title: true, stage: true, owner_id: true, handler_id: true, queue_department_id: true,
+      handler: { select: { name: true } }, customer: { select: { name: true } },
+    },
+    orderBy: { id: 'asc' },
+  });
+}
+
 /** The enquiry lines a flow's email shows. */
 function enquiryEmailRows(f) {
   return [
@@ -91,4 +103,4 @@ function enquiryEmailRows(f) {
   ];
 }
 
-module.exports = { loadEnquiryFacts, openEnquiryCounts, handlerAtStage, enquiryEmailRows, STAGE_LABEL };
+module.exports = { loadEnquiryFacts, openEnquiryCounts, handlerAtStage, openEnquiriesAt, enquiryEmailRows, STAGE_LABEL };

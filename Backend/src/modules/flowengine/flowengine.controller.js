@@ -76,7 +76,23 @@ const getRun = async (req, res) => {
   ApiResponse.ok(res, await flowEngineService.getRun(req.params.id));
 };
 
+/** `POST /flow-engine/flows/:id/test` */
+const testFlow = async (req, res) => {
+  ApiResponse.ok(res, await flowEngineService.test(req.params.id, req.body));
+};
+
+/** `GET /flow-engine/flows/:id/affected` */
+const getAffected = async (req, res) => {
+  ApiResponse.ok(res, await flowEngineService.affected(req.params.id));
+};
+
+/** `POST /flow-engine/flows/:id/move-current` */
+const moveCurrent = async (req, res) => {
+  ApiResponse.ok(res, await flowEngineService.moveCurrent(req.params.id, req.body, requestContext(req)));
+};
+
 module.exports = {
+  testFlow, getAffected, moveCurrent,
   getCatalog, listFlows, getFlow, createFlow, updateFlow, checkFlow, publishFlow, pauseFlow, resumeFlow, deleteFlow,
   getVersion, listRuns, getRun,
 };

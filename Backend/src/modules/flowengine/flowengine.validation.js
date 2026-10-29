@@ -58,6 +58,17 @@ const updateFlowBody = z.object({
   graph: graph.nullable().optional(),
 });
 
+// Test run: the record, the event's details (stage, values …), and which way an Approval goes.
+const testFlowBody = z.object({
+  entity_id: z.coerce.number().int().positive('Choose a record to try it on'),
+  payload: z.record(z.string(), z.unknown()).optional().default({}),
+  assume: z.enum(['approved', 'rejected']).optional(),
+});
+
+const moveCurrentBody = z.object({
+  entity_ids: z.array(z.coerce.number().int().positive()).min(1, 'Choose at least one').max(500),
+});
+
 module.exports = {
-  moduleParam, flowIdParam, versionParam, listFlowsQuery, listRunsQuery, createFlowBody, updateFlowBody,
+  moduleParam, flowIdParam, versionParam, listFlowsQuery, listRunsQuery, createFlowBody, updateFlowBody, testFlowBody, moveCurrentBody,
 };

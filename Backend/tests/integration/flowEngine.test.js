@@ -779,3 +779,87 @@ describe('Flow engine part 4: approvals', () => {
     });
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Part 5 — what the builder relies on: test run, moving current enquiries, attention.
+// ═════════════════════════════════════════════════════════════════════════════
+describe('Flow engine part 5: test run, current enquiries, attention', () => {
+  it('a test run says what each block would do — and changes nothing', async () => {
+    const e = await newEnquiry();
+    const f = await newFlow({
+      nodes: [
+        n('start', 'trigger', { event: 'STAGE_ENTERED' }),
+        n('sw', 'stage_switch', { cases: [{ id: 'r', label: 'Review', stages: ['REVIEW'] }] }),
+        n('turn', 'assign', { to: 'DEPARTMENT', department_id: fx.dept.id, pick: 'TURN' }),
+        n('tell', 'notify', { to: [{ who: 'OWNER' }], title: '{{ref_no}} is at {{event.to}}' }),
+        n('end', 'end', {}),
+      ],
+      edges: [a('start', 'sw'), a('sw', 'turn', 'r'), a('sw', 'end', 'other'), a('turn', 'tell'), a('tell', 'end')],
+    }, 'test run');
+    const before = await prisma.flowAssignState.count({ where: { flow_id: f.id } });
+    const notesBefore = await prisma.notification.count({ where: { entity_id: String(e.id) } });
+    const r = await flowEngineService.test(f.id, { entity_id: e.id, payload: { to: 'REVIEW' } });
+    assert.equal(r.starts, true);
+    assert.deepEqual(r.steps.map((s) => s.node_id), ['start', 'sw', 'turn', 'tell', 'end']);
+    assert.equal(r.steps[1].text, 'Review → “Review”');
+    assert.match(r.steps[2].text, /^Would go to FlowMemberOne/);
+    assert.match(r.steps[3].text, /^Would notify FlowField/);
+    assert.equal(r.steps[3].result.title, `${e.ref_no} is at Review`);
+    assert.equal(await prisma.flowAssignState.count({ where: { flow_id: f.id } }), before, 'turn by turn: no turn taken');
+    assert.equal(await prisma.notification.count({ where: { entity_id: String(e.id) } }), notesBefore, 'nothing sent');
+    assert.equal((await holder(e.id)), fx.field.id, 'nothing assigned');
+    const other = await flowEngineService.test(f.id, { entity_id: e.id, payload: { to: 'COSTING' } });
+    assert.deepEqual(other.steps.map((s) => s.node_id), ['start', 'sw', 'end']);
+  });
+
+  it('a test run of a “Before …” flow stops at the Approval, or follows the way you assume', async () => {
+    const e = await newEnquiry();
+    const f = await newFlow({
+      nodes: [n('start', 'trigger', { event: 'BEFORE_LOST' }), n('ok', 'approval', { to: [{ who: 'PERSON', id: fx.rev.id }] }), n('tell', 'notify', { to: [{ who: 'OWNER' }], title: 'Lost refused' }), n('end', 'end', {})],
+      edges: [a('start', 'ok'), a('ok', 'end', 'approved'), a('ok', 'tell', 'rejected'), a('tell', 'end')],
+    }, 'test approval');
+    const stop = await flowEngineService.test(f.id, { entity_id: e.id, payload: { lost_reason: 'x' } });
+    assert.deepEqual(stop.steps.map((s) => s.node_id), ['start', 'ok']);
+    assert.match(stop.steps[1].text, /^Would hold it for approval by FlowReviewer/);
+    const rejected = await flowEngineService.test(f.id, { entity_id: e.id, payload: {}, assume: 'rejected' });
+    assert.deepEqual(rejected.steps.map((s) => s.node_id), ['start', 'ok', 'tell', 'end']);
+    assert.equal((await prisma.approvalRequest.count({ where: { flow_id: f.id } })), 0, 'nothing asked');
+  });
+
+  it('after publishing, the current enquiries the new rule would move are listed — and moved only when chosen', async () => {
+    const waiting = await toReview(); // with Internal Sales (built-in rule)
+    const other = await toReview();
+    assert.equal(await holder(waiting.id), fx.internal.id);
+    await withFlow(assignAt(['REVIEW'], { to: 'PERSON', user_id: fx.rev.id }), async (f) => {
+      assert.equal(await holder(waiting.id), fx.internal.id, 'publishing moves nothing by itself');
+      const { items } = await flowEngineService.affected(f.id);
+      const mine = items.filter((x) => x.id === waiting.id || x.id === other.id);
+      assert.equal(mine.length, 2);
+      assert.equal(mine[0].next, `FlowReviewer ${suffix}`);
+      const r = await flowEngineService.moveCurrent(f.id, { entity_ids: [waiting.id] }, admin(fx.admin));
+      assert.equal(r.moved, 1);
+      assert.equal(await holder(waiting.id), fx.rev.id);
+      assert.equal(await holder(other.id), fx.internal.id, 'not chosen: left as it was');
+      assert.ok(await prisma.notification.findFirst({ where: { user_id: fx.rev.id, entity_id: String(waiting.id), type: 'ENQUIRY_ASSIGNED' } }));
+      assert.ok((await flowEngineService.affected(f.id)).items.every((x) => x.id !== waiting.id), 'now right: not listed again');
+    });
+  });
+
+  it('a live flow naming someone who has left is flagged', async () => {
+    const leaver = await prisma.user.create({ data: { name: `Gone ${suffix}`, email: `gone-${suffix}@flow.test`, password: 'x', role_id: fx.role.id }, select: { id: true } });
+    ids.users.push(leaver.id);
+    const graph = { nodes: [n('start', 'trigger', { event: 'ENQUIRY_WON' }), n('tell', 'notify', { to: [{ who: 'PERSON', id: leaver.id }], title: 'Won' })], edges: [a('start', 'tell')] };
+    const f = await newFlow(graph, 'attention');
+    await flowEngineService.publish(f.id, admin(fx.admin));
+    try {
+      assert.deepEqual((await flowEngineService.getById(f.id)).attention, []);
+      await prisma.user.update({ where: { id: leaver.id }, data: { status: 'INACTIVE' } });
+      const full = await flowEngineService.getById(f.id);
+      assert.match(full.attention[0], new RegExp(`^Gone ${suffix} is inactive`));
+      const listed = await flowEngineService.list({ module: 'SALES', skip: 0, take: 200 });
+      assert.ok(listed.items.find((x) => x.id === f.id).attention.length);
+    } finally {
+      await flowEngineService.pause(f.id, admin(fx.admin));
+    }
+  });
+});

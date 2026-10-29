@@ -2,6 +2,8 @@ const { flowEngineRepository } = require('./flowengine.repository');
 const { catalogFor, publicCatalog, MODULES } = require('./catalog');
 const { nodeType, NODE_TYPES } = require('./nodes');
 const { parseGraph, validateGraph, triggerNode, assignNodes } = require('./graph');
+const { assigneeFromFlows } = require('./assignment');
+const { simulate } = require('./simulate');
 const { auditService } = require('../audit/audit.service');
 const { NotFoundError, ConflictError, ValidationError } = require('../../core');
 
@@ -35,6 +37,19 @@ function createFlowEngineService(repository) {
   /** Problems with a flow's canvas, checked against its module's catalog. */
   function problems(flow, graph) {
     return validateGraph(graph, { catalog: catalogFor(flow.module), nodeType });
+  }
+
+  /** What needs fixing in a live version — people who left, departments / roles removed. */
+  async function attentionOf(live) {
+    const graph = live && parseGraph(live.graph);
+    if (!graph) return [];
+    const refs = graph.nodes.flatMap((n) => nodeType(n.type)?.refs?.(n.data || {}) || []);
+    const missing = await repository.missingRefs(refs);
+    if (!missing.length) return [];
+    const names = await repository.userNames(missing.filter((m) => m.kind === 'user').map((m) => m.id));
+    return missing.map((m) => (m.kind === 'user'
+      ? `${names.get(m.id) || `Person #${m.id}`} is inactive or removed — the built-in rule decides instead`
+      : `A ${m.kind} it names was removed`));
   }
 
   /** The stages an assigning flow covers: the ones its When block names, or all. */
@@ -86,13 +101,84 @@ function createFlowEngineService(repository) {
       const where = {};
       if (module) where.module = module;
       if (status) where.status = status;
-      return repository.findFlows({ where, skip, take });
+      const page = await repository.findFlows({ where, skip, take });
+      // What each starts on, and anything needing attention (e.g. someone named has left).
+      const items = await Promise.all(page.items.map(async (f) => {
+        const live = f.live_version_id ? await repository.findVersion(f.live_version_id) : null;
+        return { ...f, trigger: live?.trigger ?? null, live_version: live?.version ?? null, attention: await attentionOf(live) };
+      }));
+      return { ...page, items };
     },
 
     async getById(id) {
       const flow = await load(id);
       const versions = await repository.listVersions(id);
-      return { ...shape(flow), versions };
+      const live = flow.live_version_id ? await repository.findVersion(flow.live_version_id) : null;
+      return { ...shape(flow), versions, attention: await attentionOf(live) };
+    },
+
+    /**
+     * Test run of the draft on one record: what each block would do — nothing
+     * is sent, assigned or asked.
+     * @param {number} id
+     * @param {{ entity_id: number|string, payload?: object, assume?: 'approved'|'rejected' }} dto
+     */
+    async test(id, dto) {
+      const flow = await load(id);
+      const graph = parseGraph(flow.draft_graph);
+      const errors = problems(flow, graph);
+      if (errors.length) {
+        throw new ValidationError('Fix the flow’s problems first', errors.map((e) => ({ field: e.nodeId || 'flow', message: e.message })));
+      }
+      return simulate({ flow, graph, entityId: dto.entity_id, payload: dto.payload || {}, assume: dto.assume });
+    },
+
+    /**
+     * After publishing an assigning flow: the open records at its stages that
+     * the new rule would hand to someone else. Nothing moves unless chosen
+     * (moveCurrent). "Turn by turn" shows the next person for each; moving
+     * shares them out in turn.
+     */
+    async affected(id) {
+      const flow = await load(id);
+      if (flow.status !== 'ACTIVE' || !flow.live_version_id) return { items: [] };
+      const live = await repository.findVersion(flow.live_version_id);
+      const graph = parseGraph(live.graph);
+      if (!graph || live.trigger !== 'STAGE_ENTERED' || !assignNodes(graph, nodeType).length) return { items: [] };
+      const catalog = catalogFor(flow.module);
+      const stages = coveredStages(flow.module, graph).filter((s) => s !== 'WON' && s !== 'LOST');
+      const records = await catalog.openRecordsAt(stages);
+      const items = [];
+      for (const r of records.slice(0, 500)) {
+        const next = await assigneeFromFlows({ module: flow.module, stage: r.stage, entity: { id: r.id, owner_id: r.owner_id }, dryRun: true });
+        if (!next) continue;
+        if (next.userId === r.handler_id && (next.departmentId || null) === (r.queue_department_id || null)) continue;
+        items.push({ id: r.id, ref_no: r.ref_no, title: r.title, customer: r.customer?.name ?? null, stage: r.stage, current_id: r.handler_id, current: r.handler?.name ?? null, next_id: next.userId, queued: Boolean(next.departmentId) });
+      }
+      const names = await repository.userNames(items.map((x) => x.next_id));
+      return { items: items.map((x) => ({ ...x, next: names.get(x.next_id) || null })) };
+    },
+
+    /** Moves the chosen open records to who the live flow now assigns. */
+    async moveCurrent(id, dto, actor) {
+      const flow = await load(id);
+      if (flow.status !== 'ACTIVE') throw new ConflictError('Only an active flow can move current records');
+      const live = await repository.findVersion(flow.live_version_id);
+      const catalog = catalogFor(flow.module);
+      const affected = new Map((await this.affected(id)).items.map((x) => [x.id, x]));
+      let moved = 0; let skipped = 0;
+      for (const entityId of dto.entity_ids) {
+        const rec = affected.get(entityId);
+        if (!rec) { skipped += 1; continue; } // already right, closed, or not at the flow's stages
+        const next = await assigneeFromFlows({ module: flow.module, stage: rec.stage, entity: { id: rec.id } });
+        if (!next) { skipped += 1; continue; }
+        await catalog.applyAssignment(rec.id, next, actor, `moved by the flow change “${flow.name}” (v${live.version})`);
+        moved += 1;
+      }
+      await auditService.record({
+        action: auditService.Action.UPDATE, entity: 'FlowDefinition', entityId: id, actor, changes: { moved_current: moved, skipped },
+      });
+      return { moved, skipped };
     },
 
     async create(dto, actor) {
