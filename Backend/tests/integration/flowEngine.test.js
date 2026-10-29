@@ -926,6 +926,28 @@ describe('Flow engine parts 6–7: what ran on an enquiry; the ready-made flows'
     });
   });
 
+  it('in a “Before moving to a stage” flow, Which stage? sees the stage being entered (each stage its own approver)', async () => {
+    const graph = {
+      nodes: [
+        n('start', 'trigger', { event: 'BEFORE_STAGE_MOVE', stages: ['REVIEW', 'CONCEPT'] }),
+        n('which', 'stage_switch', { cases: [{ id: 'r', label: 'To Review', stages: ['REVIEW'] }, { id: 'c', label: 'To Concept', stages: ['CONCEPT'] }] }),
+        n('okReview', 'approval', { to: [{ who: 'PERSON', id: fx.rev.id }] }),
+        n('okConcept', 'approval', { to: [{ who: 'PERSON', id: fx.other.id }] }),
+        n('end', 'end', {}),
+      ],
+      edges: [a('start', 'which'), a('which', 'okReview', 'r'), a('which', 'okConcept', 'c'), a('which', 'end', 'other'),
+        a('okReview', 'end', 'approved'), a('okConcept', 'end', 'approved')],
+    };
+    await withFlow(graph, async () => {
+      const e = await newEnquiry();
+      await attachmentService.record(e.id, { originalname: 'f.pdf', filename: `flow-${suffix}-${Math.random().toString(36).slice(2)}`, mimetype: 'application/pdf', size: 1 }, { kind: 'FORMAT_PDF' }, as(fx.field));
+      // Leaving New for Review: the Review approver is asked (not "other", not the Concept one).
+      await assert.rejects(enquiryService.update(e.id, { stage: 'REVIEW' }, as(fx.field)), (err) => err.code === 'APPROVAL_REQUIRED' && /FlowReviewer/.test(err.message));
+      const t = await flowEngineService.test((await prisma.flowDefinition.findFirst({ where: { name: { startsWith: 'assign' }, status: 'ACTIVE' }, orderBy: { id: 'desc' }, select: { id: true } })).id, { entity_id: e.id, payload: { from: 'NEW', to: 'REVIEW' } });
+      assert.equal(t.steps[1].text, 'Review → “To Review”');
+    });
+  });
+
   it('a draft can be test-run before its people are chosen — it says what is missing', async () => {
     const e = await newEnquiry();
     const f = await newFlow({

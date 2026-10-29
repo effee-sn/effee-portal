@@ -25,9 +25,13 @@ const GUARD_EVENTS = Object.freeze(['BEFORE_STAGE_MOVE', 'BEFORE_OFFER_SENT', 'B
 
 const isId = (v) => Number.isInteger(Number(v)) && Number(v) > 0;
 
-/** The stage a block sees: the stage just entered, for a stage event; else the record's. */
+/**
+ * The stage a block sees: the stage being entered — just entered (STAGE_ENTERED)
+ * or about to be (BEFORE_STAGE_MOVE) — for a stage event; else the record's.
+ */
 function currentStage(ctx) {
-  return ctx.event?.type === 'STAGE_ENTERED' ? ctx.event.payload?.to : ctx.facts?.stage;
+  const type = ctx.event?.type;
+  return type === 'STAGE_ENTERED' || type === 'BEFORE_STAGE_MOVE' ? ctx.event.payload?.to : ctx.facts?.stage;
 }
 
 // ── When ─────────────────────────────────────────────────────────────────────
