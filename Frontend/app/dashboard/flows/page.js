@@ -383,7 +383,7 @@ function FlowBuilder() {
           </section>
           <section>
             <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Flows</h2>
-            <FlowsList module="SALES" canCreate={canCreate} />
+            <FlowsList module="SALES" canCreate={canCreate} canDelete={canDelete} />
           </section>
         </div>
       )}

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { apiGet, apiPost } from '@/lib/api';
+import { apiGet, apiPost, apiDelete } from '@/lib/api';
 import useNav from '@/lib/useNav';
 
 /**
@@ -16,7 +16,7 @@ const STATUS = {
   PAUSED: { label: 'Paused', cls: 'bg-amber-50 text-amber-800' },
 };
 
-export default function FlowsList({ module, canCreate }) {
+export default function FlowsList({ module, canCreate, canDelete }) {
   const nav = useNav();
   const [rows, setRows] = useState(null);
   const [events, setEvents] = useState([]);
@@ -31,6 +31,12 @@ export default function FlowsList({ module, canCreate }) {
       .catch((e) => { if (!cancelled) setError(e.message); });
     return () => { cancelled = true; };
   }, [module]);
+
+  const remove = async (f) => {
+    if (!window.confirm(`Delete the flow “${f.name}”? Its versions and run log go with it. This cannot be undone.`)) return;
+    try { await apiDelete(`/flow-engine/flows/${f.id}`); setRows((rs) => rs.filter((r) => r.id !== f.id)); }
+    catch (err) { setError(err.message); }
+  };
 
   const create = async (e) => {
     e.preventDefault();
@@ -65,6 +71,7 @@ export default function FlowsList({ module, canCreate }) {
           <thead><tr className="border-b border-gray-200 text-left text-gray-500">
             <th className="px-4 py-2.5 font-normal">Flow</th><th className="px-3 py-2.5 font-normal">Starts</th>
             <th className="px-3 py-2.5 font-normal">Status</th><th className="px-3 py-2.5 font-normal">Updated</th>
+            {canDelete && <th className="px-3 py-2.5"><span className="sr-only">Delete</span></th>}
           </tr></thead>
           <tbody>
             {rows.map((f) => {
@@ -78,6 +85,13 @@ export default function FlowsList({ module, canCreate }) {
                   <td className="px-3 py-2.5 text-gray-600">{f.trigger ? eventLabel(f.trigger) : 'not published yet'}</td>
                   <td className="px-3 py-2.5"><span className={`px-2 py-0.5 rounded text-xs font-medium ${s.cls}`}>{s.label}{f.live_version ? ` · v${f.live_version}` : ''}</span></td>
                   <td className="px-3 py-2.5 text-gray-500">{new Date(f.updated_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                  {canDelete && (
+                    <td className="px-3 py-2.5 text-right">
+                      <button type="button" onClick={() => remove(f)} disabled={f.status === 'ACTIVE'}
+                        title={f.status === 'ACTIVE' ? 'Pause the flow before deleting it' : 'Delete this flow'}
+                        className="text-xs text-red-600 hover:underline disabled:text-gray-300 disabled:no-underline disabled:cursor-not-allowed cursor-pointer">Delete</button>
+                    </td>
+                  )}
                 </tr>
               );
             })}

@@ -9,7 +9,7 @@ import {
 } from '@xyflow/react';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
-import { apiGet, apiPost, apiPut } from '@/lib/api';
+import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import BlockNode from '@/components/flowbuilder/BlockNode';
 import Inspector from '@/components/flowbuilder/Inspector';
 import { BLOCKS, defaultData, fromGraph, newId, summary, toGraph, waysOut, STAGE_EVENTS } from '@/components/flowbuilder/flowMeta';
@@ -364,6 +364,11 @@ function Editor({ flowId, perms }) {
     if (a.data.items.length) setMove(a.data.items);
   });
   const setStatus = (to) => act(async () => { await apiPost(`/flow-engine/flows/${flowId}/${to}`, {}); await loadFlow(); });
+  const removeFlow = () => act(async () => {
+    if (!window.confirm(`Delete the flow “${flow.name}”? Its versions and run log go with it. This cannot be undone.`)) return;
+    await apiDelete(`/flow-engine/flows/${flowId}`);
+    window.location.assign('/dashboard/flows?tab=sales');
+  });
   const restore = (versionId) => act(async () => {
     const r = await apiGet(`/flow-engine/flows/${flowId}/versions/${versionId}`);
     const g = fromGraph(r.data.graph);
@@ -404,6 +409,11 @@ function Editor({ flowId, perms }) {
         <button type="button" onClick={() => setPanel(panel === 'runs' ? 'settings' : 'runs')} className="btn-secondary px-3 py-1 text-sm">Run log</button>
         {perms.canPublish && flow.status === 'ACTIVE' && <button type="button" onClick={() => setStatus('pause')} disabled={busy} className="btn-secondary px-3 py-1 text-sm">Pause</button>}
         {perms.canPublish && flow.status === 'PAUSED' && <button type="button" onClick={() => setStatus('resume')} disabled={busy} className="btn-secondary px-3 py-1 text-sm">Resume</button>}
+        {perms.canDelete && (
+          <button type="button" onClick={removeFlow} disabled={busy || flow.status === 'ACTIVE'}
+            title={flow.status === 'ACTIVE' ? 'Pause the flow before deleting it' : 'Delete this flow'}
+            className="px-3 py-1 text-sm rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">Delete</button>
+        )}
         {perms.canPublish && !readOnly && <button type="button" onClick={publish} disabled={busy} className="btn-primary px-3 py-1 text-sm">Publish</button>}
       </div>
       {(error || notice || flowProblems.length > 0 || flow.attention?.length > 0) && (
@@ -502,7 +512,7 @@ export default function FlowEditorPage() {
   }
   return (
     <ReactFlowProvider>
-      <Editor flowId={id} perms={{ canEdit: has('FLOW_EDIT'), canPublish: has('FLOW_PUBLISH') }} />
+      <Editor flowId={id} perms={{ canEdit: has('FLOW_EDIT'), canPublish: has('FLOW_PUBLISH'), canDelete: has('FLOW_DELETE') }} />
     </ReactFlowProvider>
   );
 }
