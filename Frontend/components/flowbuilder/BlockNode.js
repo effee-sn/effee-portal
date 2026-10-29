@@ -15,8 +15,10 @@ function BlockNode({ data, selected }) {
   const outs = waysOut(data.kind, data.settings);
   const v = data.view || {};
   const ring = v.errors?.length ? 'ring-2 ring-red-400' : v.tested ? 'ring-2 ring-amber-400' : selected ? 'ring-2 ring-[var(--ams-primary)]' : '';
+  // Room for every labelled way out (e.g. a "Which stage?" with many groups).
+  const width = Math.max(224, outs.length > 2 ? outs.length * 120 : 0);
   return (
-    <div className={`w-56 rounded-lg border bg-white shadow-sm text-left ${ring}`} style={{ borderColor: v.errors?.length ? '#F87171' : '#E5E7EB' }}>
+    <div className={`rounded-lg border bg-white shadow-sm text-left ${ring}`} style={{ width, borderColor: v.errors?.length ? '#F87171' : '#E5E7EB' }}>
       {data.kind !== 'trigger' && <Handle type="target" position={Position.Top} className="!w-3 !h-3 !bg-gray-400 !border-2 !border-white" />}
       <div className="flex items-center gap-2 px-3 py-2 rounded-t-lg text-white text-xs font-semibold" style={{ backgroundColor: meta.color }}>
         <span aria-hidden="true">{meta.icon}</span>
@@ -31,7 +33,7 @@ function BlockNode({ data, selected }) {
             const left = `${((i + 1) / (outs.length + 1)) * 100}%`;
             return (
               <div key={o.id}>
-                {o.label && <span className="absolute top-0.5 -translate-x-1/2 text-[10px] text-gray-500 whitespace-nowrap max-w-20 truncate" style={{ left }}>{o.label}</span>}
+                {o.label && <span className="absolute top-0.5 -translate-x-1/2 text-[10px] text-gray-500 whitespace-nowrap max-w-28 truncate" style={{ left }} title={o.label}>{o.label}</span>}
                 <Handle type="source" id={o.id} position={Position.Bottom} title={o.label || 'next'}
                   className="!w-3 !h-3 !border-2 !border-white"
                   style={{ left, background: o.id === 'no' || o.id === 'rejected' ? '#DC2626' : o.id === 'yes' || o.id === 'approved' ? '#16A34A' : meta.color }} />
