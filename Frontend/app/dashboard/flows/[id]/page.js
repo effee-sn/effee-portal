@@ -419,6 +419,23 @@ function Editor({ flowId, perms }) {
         {/* Blocks */}
         {!readOnly && <aside className="w-48 shrink-0 bg-white border-r border-gray-200 p-3 space-y-2 overflow-y-auto">
           <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Blocks</p>
+          {(() => {
+            // Every flow has exactly one When block, put on the canvas when the flow is made — this selects it.
+            const b = BLOCKS.find((x) => x.type === 'trigger');
+            const start = nodes.find((n) => n.data.kind === 'trigger');
+            return (
+              <button type="button" title="Every flow has one When block — it is already on the canvas. Click to set what starts the flow."
+                onClick={() => {
+                  if (!start) return;
+                  setNodes((ns) => ns.map((n) => ({ ...n, selected: n.id === start.id })));
+                  setSelectedId(start.id); setPanel('settings');
+                }}
+                className="w-full text-left rounded border border-dashed px-2 py-1.5 cursor-pointer hover:bg-gray-50" style={{ borderColor: b.color }}>
+                <p className="text-sm font-medium" style={{ color: b.color }}>{b.icon} {b.label}</p>
+                <p className="text-[11px] text-gray-500">Already on the canvas — click to set what starts the flow</p>
+              </button>
+            );
+          })()}
           {BLOCKS.filter((b) => b.type !== 'trigger').map((b) => {
             const off = (b.type === 'assign' && event !== 'STAGE_ENTERED') || (b.type === 'approval' && !guard);
             return (
