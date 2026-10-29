@@ -925,4 +925,24 @@ describe('Flow engine parts 6–7: what ran on an enquiry; the ready-made flows'
       assert.equal(page.items[0].entity_label, `${e.ref_no} · ${e.title}`);
     });
   });
+
+  it('a draft can be test-run before its people are chosen — it says what is missing', async () => {
+    const e = await newEnquiry();
+    const f = await newFlow({
+      nodes: [
+        n('start', 'trigger', { event: 'STAGE_ENTERED' }),
+        n('dept', 'assign', { to: 'DEPARTMENT', pick: 'HEAD_PICKS' }), // no department chosen yet
+      ],
+      edges: [a('start', 'dept')],
+    }, 'unfinished');
+    const r = await flowEngineService.test(f.id, { entity_id: e.id, payload: { to: 'REVIEW' } });
+    assert.ok(r.problems.some((x) => /choose the department/.test(x.message)));
+    assert.equal(r.steps[1].text, 'Nobody active to give it to — the built-in rule would decide');
+    const notify = await newFlow({
+      nodes: [n('start', 'trigger', { event: 'ENQUIRY_CREATED' }), n('tell', 'notify', { to: [{ who: 'DEPARTMENT_HEAD' }], title: 'x' })],
+      edges: [a('start', 'tell')],
+    }, 'unfinished notify');
+    const r2 = await flowEngineService.test(notify.id, { entity_id: e.id });
+    assert.equal(r2.steps[1].text, 'Would notify nobody (no active person matches)');
+  });
 });

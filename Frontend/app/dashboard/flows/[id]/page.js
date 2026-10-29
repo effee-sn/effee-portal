@@ -33,7 +33,8 @@ const list = (r) => (Array.isArray(r) ? r : r?.data || r?.items || r?.customers 
 /** Try the draft on one enquiry: what each block would do. */
 function TestPanel({ flowId, event, catalog, onResult, onClose }) {
   const [search, setSearch] = useState('');
-  const [matches, setMatches] = useState([]);
+  // The results and the search they are for (so "searching…" shows until they match the box).
+  const [found, setFound] = useState({ query: null, items: [] });
   const [pick, setPick] = useState(null);
   const [payload, setPayload] = useState({});
   const [assume, setAssume] = useState('');
@@ -41,15 +42,18 @@ function TestPanel({ flowId, event, catalog, onResult, onClose }) {
   const [error, setError] = useState('');
   const guard = catalog.events.find((e) => e.key === event)?.guard;
 
+  // Empty box: the most recent enquiries; otherwise those matching the ref or title.
+  const q = search.trim();
   useEffect(() => {
-    if (search.trim().length < 2) return undefined;
     let cancelled = false;
     const t = setTimeout(() => {
-      apiGet(`/sales/enquiries?search=${encodeURIComponent(search.trim())}&limit=8`, { silent: true })
-        .then((r) => { if (!cancelled) setMatches(list(r)); }).catch(() => {});
-    }, 250);
+      apiGet(`/sales/enquiries?limit=8${q ? `&search=${encodeURIComponent(q)}` : ''}`, { silent: true })
+        .then((r) => { if (!cancelled) setFound({ query: q, items: list(r) }); })
+        .catch(() => { if (!cancelled) setFound({ query: q, items: [] }); });
+    }, q ? 250 : 0);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [search]);
+  }, [q]);
+  const searching = found.query !== q;
 
   const run = async () => {
     setError('');
@@ -86,11 +90,19 @@ function TestPanel({ flowId, event, catalog, onResult, onClose }) {
       ) : (
         <div>
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Enquiry ref or title…" className="ams-input w-full text-sm" aria-label="Find an enquiry" />
-          {search.trim().length >= 2 && matches.map((m) => (
-            <button key={m.id} type="button" onClick={() => setPick(m)} className="block w-full text-left px-2 py-1 hover:bg-gray-50 cursor-pointer">
-              <span className="font-mono text-xs">{m.ref_no}</span> <span className="text-gray-700">{m.title}</span>
-            </button>
-          ))}
+          <p className="text-[11px] text-gray-500 mt-1.5 mb-1">
+            {searching ? 'Searching…' : !q ? 'Recent enquiries — or type a ref (e.g. ENQ-2026-0016) or part of the title:' : found.items.length ? 'Pick one:' : ''}
+          </p>
+          {!searching && q && !found.items.length && (
+            <p className="text-xs text-amber-700 px-1">No enquiry matches “{q}”. Try its ref, or a word from its title.</p>
+          )}
+          <div className="max-h-56 overflow-y-auto">
+            {found.items.map((m) => (
+              <button key={m.id} type="button" onClick={() => setPick(m)} className="block w-full text-left px-2 py-1 rounded hover:bg-gray-50 cursor-pointer">
+                <span className="font-mono text-xs">{m.ref_no}</span> <span className="text-gray-700">{m.title}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
       {(event === 'STAGE_ENTERED' || event === 'BEFORE_STAGE_MOVE') && stageSelect('to', 'Entering stage')}
@@ -112,6 +124,11 @@ function TestPanel({ flowId, event, catalog, onResult, onClose }) {
       {error && <p className="text-xs text-red-600">{error}</p>}
       {result && (
         <div className="space-y-1.5">
+          {result.problems?.length > 0 && (
+            <p className="text-xs text-amber-700 rounded bg-amber-50 border border-amber-200 px-2 py-1">
+              This draft still has {result.problems.length} thing{result.problems.length === 1 ? '' : 's'} to fix (press Check to see them) — the test shows what it would do as it stands.
+            </p>
+          )}
           {!result.starts && <p className="text-xs text-amber-700">{result.reason}</p>}
           {result.steps.map((s, i) => (
             <div key={i} className="rounded border border-gray-200 px-2 py-1.5">

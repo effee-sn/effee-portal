@@ -12,6 +12,8 @@ const { notificationService } = require('../notification/notification.service');
  */
 function createHelpers(repository = flowEngineRepository) {
   const firstActive = async (id) => (id && (await repository.activeUserIds([id])).length ? Number(id) : null);
+  /** A chosen id, or null when nothing is chosen yet (a draft being tried). */
+  const chosen = (v) => (Number.isInteger(Number(v)) && Number(v) > 0 ? Number(v) : null);
 
   /** Of these people, the one holding the fewest open records (ties: the earliest added). */
   async function leastBusy(module, ids) {
@@ -53,16 +55,18 @@ function createHelpers(repository = flowEngineRepository) {
         case 'SETUP_HANDLER': return firstActive(await catalogFor(module).setupHandler());
         case 'CREATOR': return firstActive(ctx.facts?.created_by);
         case 'SAME_AS_STAGE':
-          return ctx.facts?.id ? firstActive(await catalogFor(module).heldAtStage(ctx.facts.id, d.stage)) : null;
+          return ctx.facts?.id && d.stage ? firstActive(await catalogFor(module).heldAtStage(ctx.facts.id, d.stage)) : null;
         case 'DEPARTMENT': {
-          const deptId = Number(d.department_id);
+          const deptId = chosen(d.department_id);
+          if (!deptId) return null;
           // The head holds it — for good (HEAD), or until they pick a member (HEAD_PICKS).
           if (d.pick === 'HEAD' || d.pick === 'HEAD_PICKS') return firstActive(await repository.departmentHead(deptId));
           const members = await repository.departmentMembers(deptId);
           return d.pick === 'TURN' ? nextInTurn(ctx.flow.id, node.id, members, ctx.dryRun) : leastBusy(module, members);
         }
         case 'ROLE': {
-          const members = await repository.roleMembers(Number(d.role_id));
+          if (!chosen(d.role_id)) return null;
+          const members = await repository.roleMembers(chosen(d.role_id));
           return d.pick === 'TURN' ? nextInTurn(ctx.flow.id, node.id, members, ctx.dryRun) : leastBusy(module, members);
         }
         default: return null;
@@ -77,10 +81,11 @@ function createHelpers(repository = flowEngineRepository) {
         if (r.who === 'OWNER') ids.push(f.owner_id);
         else if (r.who === 'HANDLER') ids.push(f.handler_id);
         else if (r.who === 'CREATOR') ids.push(f.created_by);
-        else if (r.who === 'PERSON') ids.push(Number(r.id));
-        else if (r.who === 'ROLE') ids.push(...await repository.roleMembers(Number(r.id)));
-        else if (r.who === 'DEPARTMENT') ids.push(...await repository.departmentMembers(Number(r.id)));
-        else if (r.who === 'DEPARTMENT_HEAD') ids.push(await repository.departmentHead(Number(r.id)));
+        else if (!chosen(r.id)) continue; // a person / role / department not chosen yet
+        else if (r.who === 'PERSON') ids.push(chosen(r.id));
+        else if (r.who === 'ROLE') ids.push(...await repository.roleMembers(chosen(r.id)));
+        else if (r.who === 'DEPARTMENT') ids.push(...await repository.departmentMembers(chosen(r.id)));
+        else if (r.who === 'DEPARTMENT_HEAD') ids.push(await repository.departmentHead(chosen(r.id)));
       }
       return repository.activeUserIds(ids);
     },

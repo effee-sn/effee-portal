@@ -127,10 +127,14 @@ function createFlowEngineService(repository) {
       const flow = await load(id);
       const graph = parseGraph(flow.draft_graph);
       const errors = problems(flow, graph);
-      if (errors.length) {
+      // A draft can be tried before everything is chosen — but not one that cannot be walked.
+      const unwalkable = !graph || !graph.nodes.length || !triggerNode(graph)
+        || errors.some((e) => /loop|exactly one “When”|Add a “When”|does not exist|Unknown block/.test(e.message));
+      if (unwalkable) {
         throw new ValidationError('Fix the flow’s problems first', errors.map((e) => ({ field: e.nodeId || 'flow', message: e.message })));
       }
-      return simulate({ flow, graph, entityId: dto.entity_id, payload: dto.payload || {}, assume: dto.assume });
+      const result = await simulate({ flow, graph, entityId: dto.entity_id, payload: dto.payload || {}, assume: dto.assume });
+      return { ...result, problems: errors };
     },
 
     /**
