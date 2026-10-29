@@ -363,7 +363,7 @@ function FlowBuilder() {
   }
 
   return (
-    <div>
+    <div className="p-4 pb-10">
       {/* Module tabs — each module's flow is configured on its own tab. */}
       <div className="flex items-center gap-1 mb-4 border-b border-gray-200">
         {[{ key: 'service', label: 'Services' }, { key: 'sales', label: 'Sales' }].map((t) => (
