@@ -1,0 +1,290 @@
+const { flowEngineRepository } = require('./flowengine.repository');
+const { catalogFor } = require('./catalog');
+const { nodeType } = require('./nodes');
+const { parseGraph, nextNodes } = require('./graph');
+const { executeRun } = require('./runner');
+const { createHelpers } = require('./helpers');
+const { emitFlowEvent } = require('./events');
+const { notificationService } = require('../notification/notification.service');
+const { auditService } = require('../audit/audit.service');
+const { NotFoundError, ConflictError, ForbiddenError, logger } = require('../../core');
+
+/**
+ * Approvals asked for by Flow Builder flows: raising a request (from the
+ * guard, at the moment of the held action), deciding it (My Approvals), and the
+ * reminder / escalation sweep. A decision continues the flow down its
+ * Approved or Rejected way; an approved action goes through when it is tried
+ * again (the guard then uses the approval up).
+ *
+ * @param {ReturnType<typeof import('./flowengine.repository').createFlowEngineRepository>} repository
+ */
+function createApprovalsService(repository) {
+  const helpers = createHelpers(repository);
+  const LINK = (id) => `/dashboard/approvals?id=${id}`;
+
+  async function names(ids) {
+    const map = await repository.userNames(ids);
+    return ids.map((id) => map.get(id)).filter(Boolean);
+  }
+
+  /** "Ravi Kumar", "Ravi Kumar or Asha Rao", "Ravi Kumar and 2 others". */
+  function joinNames(list, mode) {
+    if (!list.length) return 'an approver';
+    if (list.length === 1) return list[0];
+    if (list.length === 2) return `${list[0]} ${mode === 'ALL' ? 'and' : 'or'} ${list[1]}`;
+    return `${list[0]} ${mode === 'ALL' ? 'and' : 'or'} ${list.length - 1} others`;
+  }
+
+  /** Tells approvers a request needs them (new, reminder or escalation). */
+  async function tellApprovers(req, userIds, kind, requesterName) {
+    if (!userIds.length) return;
+    const lead = {
+      new: `${requesterName || 'Someone'} needs your approval`,
+      reminder: 'Still waiting for your approval',
+      escalated: `Waiting ${Math.round((Date.now() - req.created_at) / 36e5)} hours — passed to you to decide`,
+    }[kind];
+    await notificationService.notify({
+      userIds,
+      type: notificationService.Type.FLOW_APPROVAL,
+      title: `${kind === 'reminder' ? 'Reminder — approval' : 'Approval'} needed: ${req.title}`,
+      body: `${lead}. ${String(req.summary || '').split('\n')[0]}`.trim(),
+      entityType: req.entity_type,
+      entityId: req.entity_id,
+      link: LINK(req.id),
+      actorId: kind === 'new' ? req.requested_by : null,
+      email: {
+        eyebrow: 'Approval needed',
+        intro: `${lead}: ${req.title}.`,
+        details: String(req.summary || '').split('\n').filter(Boolean).map((line) => {
+          const i = line.indexOf(': ');
+          return i > 0 ? [line.slice(0, i), line.slice(i + 2)] : ['', line];
+        }),
+        actionLabel: 'Review and decide',
+        reason: 'You\'re receiving this because a Flow Builder flow names you as an approver.',
+      },
+    });
+  }
+
+  /** Continues the flow down the decided way (Approved / Rejected), in its run log. */
+  async function continueFlow(req, outcome, decidedBy, comment) {
+    try {
+      const version = await repository.findVersion(req.version_id);
+      const graph = parseGraph(version?.graph);
+      if (!graph) return;
+      const handle = outcome === 'APPROVED' ? 'approved' : 'rejected';
+      let runId = req.run_id;
+      if (!runId) {
+        runId = (await repository.createRun({
+          flow_id: req.flow_id, version_id: req.version_id, trigger: req.action, entity_type: req.entity_type, entity_id: req.entity_id,
+        })).id;
+      }
+      await repository.addStep({
+        run_id: runId, node_id: req.node_id, node_type: 'approval', status: 'DONE', ended_at: new Date(),
+        output: JSON.stringify({ handle, result: { request_id: req.id, status: outcome, decided_by: decidedBy, comment: comment || null } }),
+      });
+      const catalog = catalogFor(req.module);
+      const facts = catalog && req.entity_type === catalog.entityType ? await catalog.loadEntity(req.entity_id) : null;
+      const [decider] = await names([decidedBy]);
+      const flowRow = await repository.findFlow(req.flow_id);
+      const event = { type: req.action, payload: req.payload ? JSON.parse(req.payload) : {}, actorId: decidedBy };
+      const ctx = {
+        mode: 'run',
+        module: req.module,
+        event,
+        facts: facts && { ...facts, 'approval.decided_by': decider || null, 'approval.comment': comment || null, 'approval.status': outcome === 'APPROVED' ? 'Approved' : 'Rejected' },
+        flow: { id: req.flow_id, name: flowRow?.name || 'flow' },
+        version: { id: version.id, version: version.version },
+        helpers,
+        emit: (e) => emitFlowEvent({ ...e, depth: 1, originFlowId: req.flow_id }),
+      };
+      await executeRun({ repository, nodeType, runId, graph, ctx, start: nextNodes(graph, req.node_id, handle) });
+    } catch (err) {
+      logger.error({ err, requestId: req.id }, 'Flow could not continue after the approval decision');
+    }
+  }
+
+  /** What a requester / approver sees, with names. */
+  async function shape(req) {
+    const map = await repository.userNames([req.requested_by, req.decided_by, ...req.approvers.map((a) => a.user_id)]);
+    return {
+      id: req.id, module: req.module, flow_id: req.flow_id, entity_type: req.entity_type, entity_id: req.entity_id,
+      action: req.action, title: req.title, summary: req.summary, link: req.link, mode: req.mode, status: req.status,
+      requested_by: req.requested_by, requested_by_name: map.get(req.requested_by) || null,
+      decided_by: req.decided_by, decided_by_name: map.get(req.decided_by) || null, decided_at: req.decided_at, comment: req.comment,
+      consumed_at: req.consumed_at, created_at: req.created_at, escalated_at: req.escalated_at,
+      approvers: req.approvers.map((a) => ({
+        user_id: a.user_id, name: map.get(a.user_id) || null, decision: a.decision, comment: a.comment, decided_at: a.decided_at, is_escalation: a.is_escalation,
+      })),
+    };
+  }
+
+  return {
+    joinNames,
+    names,
+
+    /**
+     * Raises a request for a held action. The approvers are the Approval
+     * block's people (active ones); nobody → the Super Admins. When the person
+     * acting is themselves an approver (and one approval is enough), it is
+     * approved there and then.
+     * @returns {Promise<object>} the request (status PENDING or APPROVED)
+     */
+    async request({ module, flow, version, node, entityType, entityId, action, actionKey, title, summary, link, payload, actor, ctx, trail }) {
+      let approverIds = await helpers.recipients(node.data.to, ctx);
+      let escalated = false;
+      if (!approverIds.length) { approverIds = await repository.superAdminIds(); escalated = true; }
+      const mode = node.data.mode === 'ALL' ? 'ALL' : 'ANY';
+      const actorId = actor?.id ?? null;
+      const actorIsApprover = actorId !== null && approverIds.includes(actorId);
+      const autoApproved = actorIsApprover && (mode === 'ANY' || approverIds.length === 1);
+      const now = new Date();
+      const req = await repository.createRequest({
+        module, flow_id: flow.id, version_id: version.id, node_id: node.id, entity_type: entityType, entity_id: String(entityId),
+        action, action_key: actionKey, title, summary, link, payload: JSON.stringify(payload || {}), mode,
+        status: autoApproved ? 'APPROVED' : 'PENDING', requested_by: actorId,
+        ...(autoApproved ? { decided_by: actorId, decided_at: now, comment: 'Approved by doing it themselves (an approver)' } : {}),
+        remind_hours: Number(node.data.remind_hours) || 4,
+        escalate_hours: Number(node.data.escalate_hours) || 24,
+        ...(escalated ? { escalated_at: now } : {}),
+      }, approverIds.map((user_id) => ({
+        user_id, is_escalation: escalated,
+        ...(user_id === actorId ? { decision: 'APPROVED', decided_at: now, comment: 'Did it themselves' } : {}),
+      })));
+      if (req.status === 'PENDING') {
+        // The run log: the path up to the Approval, waiting.
+        const run = await repository.createRun({
+          flow_id: flow.id, version_id: version.id, trigger: action, entity_type: entityType, entity_id: String(entityId), status: 'WAITING',
+        });
+        for (const s of trail) {
+          await repository.addStep({ run_id: run.id, node_id: s.node.id, node_type: s.node.type, status: 'DONE', ended_at: new Date(), output: JSON.stringify({ handle: s.handle }) });
+        }
+        await repository.addStep({ run_id: run.id, node_id: node.id, node_type: 'approval', status: 'DONE', output: JSON.stringify({ handle: null, result: { request_id: req.id, status: 'WAITING' } }) });
+        await repository.setRequestRun(req.id, run.id);
+        const [requester] = await names([actorId]);
+        await tellApprovers(req, req.approvers.filter((a) => a.decision === 'PENDING').map((a) => a.user_id), 'new', requester);
+      }
+      await auditService.record({
+        action: auditService.Action.CREATE, entity: 'ApprovalRequest', entityId: req.id, actor,
+        changes: { flow_id: flow.id, action, action_key: actionKey, entity: `${entityType} ${entityId}`, status: req.status },
+      });
+      return req;
+    },
+
+    /**
+     * My Approvals. tab: waiting (for me to decide), decided (by me),
+     * requested (by me), all (Super Admin).
+     */
+    async list({ tab = 'waiting', status, skip = 0, take = 50 }, actor) {
+      const me = actor?.id;
+      let where;
+      if (tab === 'all') {
+        if (!actor?.is_system) throw new ForbiddenError('Only a Super Admin sees every approval');
+        where = {};
+      } else if (tab === 'requested') where = { requested_by: me };
+      else if (tab === 'decided') where = { approvers: { some: { user_id: me, decision: { not: 'PENDING' } } } };
+      else where = { status: 'PENDING', approvers: { some: { user_id: me, decision: 'PENDING' } } };
+      if (status) where.status = status;
+      const page = await repository.findRequests({ where, skip, take });
+      return { total: page.total, items: await Promise.all(page.items.map(shape)) };
+    },
+
+    /** How many wait for this person — the badge. */
+    count(actor) {
+      return repository.countRequests({ status: 'PENDING', approvers: { some: { user_id: actor?.id, decision: 'PENDING' } } });
+    },
+
+    /** One request — for its approvers, its requester and Super Admins. */
+    async get(id, actor) {
+      const req = await repository.findRequest(id);
+      if (!req) throw new NotFoundError('Approval');
+      const involved = actor?.is_system || req.requested_by === actor?.id || req.approvers.some((a) => a.user_id === actor?.id);
+      if (!involved) throw new NotFoundError('Approval');
+      return shape(req);
+    },
+
+    /**
+     * Approve or reject. Any one approver decides an ANY request; an ALL
+     * request needs everyone (one rejection rejects). A Super Admin may decide
+     * any pending request.
+     * @param {number} id
+     * @param {{ decision: 'APPROVED'|'REJECTED', comment?: string }} dto
+     */
+    async decide(id, dto, actor) {
+      const req = await repository.findRequest(id);
+      if (!req) throw new NotFoundError('Approval');
+      if (req.status !== 'PENDING') throw new ConflictError(`This approval was already ${req.status.toLowerCase()}`);
+      const mine = req.approvers.find((a) => a.user_id === actor?.id);
+      if (mine && mine.decision !== 'PENDING') throw new ConflictError('You have already decided this one');
+      if (!mine && !actor?.is_system) throw new ForbiddenError('You are not an approver of this request');
+      const comment = (dto.comment || '').trim() || null;
+      if (dto.decision === 'REJECTED' && !comment) {
+        throw new ConflictError('Say why it is rejected — the requester sees your comment');
+      }
+      await repository.recordDecision(req.id, actor.id, { decision: dto.decision, comment, addAsOverride: !mine });
+
+      let outcome = dto.decision;
+      if (dto.decision === 'APPROVED' && req.mode === 'ALL' && mine) {
+        const others = req.approvers.filter((a) => a.user_id !== actor.id && !a.is_escalation);
+        if (others.some((a) => a.decision !== 'APPROVED')) outcome = null; // still waiting for the rest
+      }
+      await auditService.record({
+        action: auditService.Action.UPDATE, entity: 'ApprovalRequest', entityId: req.id, actor,
+        changes: { decision: dto.decision, ...(comment ? { comment } : {}), ...(mine ? {} : { as_super_admin: true }) },
+      });
+      if (!outcome) return shape(await repository.findRequest(id));
+
+      if (!(await repository.closeRequest(req.id, { status: outcome, decidedBy: actor.id, comment }))) {
+        throw new ConflictError('Someone decided this approval just now — reload to see it');
+      }
+      const closed = await repository.findRequest(id);
+      const [decider] = await names([actor.id]);
+      if (closed.requested_by) {
+        await notificationService.notify({
+          userIds: [closed.requested_by],
+          type: notificationService.Type.FLOW_APPROVAL_DECIDED,
+          title: `${outcome === 'APPROVED' ? 'Approved' : 'Rejected'}: ${closed.title}`,
+          body: outcome === 'APPROVED'
+            ? `${decider || 'The approver'} approved it — you can go ahead now.${comment ? ` “${comment}”` : ''}`
+            : `${decider || 'The approver'} rejected it: “${comment}”`,
+          entityType: closed.entity_type,
+          entityId: closed.entity_id,
+          link: closed.link || LINK(closed.id),
+          actorId: actor.id,
+          email: {
+            eyebrow: outcome === 'APPROVED' ? 'Approved' : 'Rejected',
+            intro: outcome === 'APPROVED'
+              ? `${decider || 'The approver'} approved “${closed.title}”. Do it again in the portal and it will go through.`
+              : `${decider || 'The approver'} rejected “${closed.title}”.`,
+            details: [['Decided by', decider], ['Comment', comment]],
+            actionLabel: 'Open in the portal',
+          },
+        });
+      }
+      await continueFlow(closed, outcome, actor.id, comment);
+      return shape(await repository.findRequest(id));
+    },
+
+    /** The reminder and escalation sweep (from the flow engine's loop). */
+    async sweep(now = new Date()) {
+      let reminded = 0; let escalated = 0;
+      for (const req of await repository.dueReminders(now)) {
+        if (!(await repository.claimReminder(req.id))) continue;
+        await tellApprovers(req, req.approvers.filter((a) => a.decision === 'PENDING').map((a) => a.user_id), 'reminder');
+        reminded += 1;
+      }
+      for (const req of await repository.dueEscalations(now)) {
+        if (!(await repository.claimEscalation(req.id))) continue;
+        const already = new Set(req.approvers.map((a) => a.user_id));
+        const admins = (await repository.superAdminIds()).filter((uid) => !already.has(uid));
+        await repository.addApprovers(req.id, admins);
+        await tellApprovers(req, admins, 'escalated');
+        escalated += 1;
+      }
+      return { reminded, escalated };
+    },
+  };
+}
+
+const approvalsService = createApprovalsService(flowEngineRepository);
+
+module.exports = { approvalsService, createApprovalsService };

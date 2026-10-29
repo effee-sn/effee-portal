@@ -35,6 +35,13 @@ const SALES_EVENTS = Object.freeze([
   { key: 'ACTIVITY_LOGGED', label: 'Activity or review logged', payload: ['activity_id', 'type', 'is_review'] },
   { key: 'DOCUMENT_UPLOADED', label: 'Document uploaded', payload: ['attachment_id', 'kind'] },
   { key: 'STAGE_STALLED', label: 'Enquiry stalled in a stage', payload: ['stage', 'days'] },
+  // "Before …" events: a flow on one of these runs at the moment of the action
+  // and can hold it for approval (guard: true). Not reported to the outbox.
+  { key: 'BEFORE_STAGE_MOVE', label: 'Before moving to a stage', guard: true, action: 'Move to', payload: ['from', 'to'] },
+  { key: 'BEFORE_OFFER_SENT', label: 'Before marking an offer sent', guard: true, action: 'Mark offer sent', payload: ['attachment_id', 'offer_value', 'offer_value_inr', 'version'] },
+  { key: 'BEFORE_WON', label: 'Before marking won', guard: true, action: 'Mark won', payload: ['from', 'order_value', 'order_value_inr'] },
+  { key: 'BEFORE_LOST', label: 'Before marking lost', guard: true, action: 'Mark lost', payload: ['from', 'lost_reason', 'lost_to'] },
+  { key: 'BEFORE_REOPEN', label: 'Before reopening', guard: true, action: 'Reopen', payload: ['from'] },
 ]);
 
 const opt = (pairs) => pairs.map(([key, label]) => ({ key, label }));
@@ -57,10 +64,11 @@ const SALES_FIELDS = Object.freeze([
   { key: 'customer_id', label: 'Customer', type: 'ref', ref: 'customer' },
   { key: 'owner_id', label: 'Owner', type: 'ref', ref: 'user' },
   { key: 'currency_code', label: 'Currency', type: 'text' },
-  { key: 'event.from', label: 'Came from stage', type: 'stage', events: ['STAGE_ENTERED', 'ENQUIRY_WON', 'ENQUIRY_LOST', 'ENQUIRY_REOPENED'] },
-  { key: 'event.to', label: 'Entered stage', type: 'stage', events: ['STAGE_ENTERED'] },
-  { key: 'event.offer_value_inr', label: 'Offer value (₹)', type: 'number', events: ['OFFER_SENT'] },
-  { key: 'event.lost_reason', label: 'Lost reason', type: 'text', events: ['ENQUIRY_LOST'] },
+  { key: 'event.from', label: 'Came from stage', type: 'stage', events: ['STAGE_ENTERED', 'ENQUIRY_WON', 'ENQUIRY_LOST', 'ENQUIRY_REOPENED', 'BEFORE_STAGE_MOVE', 'BEFORE_WON', 'BEFORE_LOST', 'BEFORE_REOPEN'] },
+  { key: 'event.to', label: 'Entered stage', type: 'stage', events: ['STAGE_ENTERED', 'BEFORE_STAGE_MOVE'] },
+  { key: 'event.offer_value_inr', label: 'Offer value (₹)', type: 'number', events: ['OFFER_SENT', 'BEFORE_OFFER_SENT'] },
+  { key: 'event.order_value_inr', label: 'Order value (₹)', type: 'number', events: ['ENQUIRY_WON', 'BEFORE_WON'] },
+  { key: 'event.lost_reason', label: 'Lost reason', type: 'text', events: ['ENQUIRY_LOST', 'BEFORE_LOST'] },
   { key: 'event.kind', label: 'Document kind', type: 'enum', events: ['DOCUMENT_UPLOADED'], options: opt([
     ['FORMAT_PDF', 'Enquiry format (PDF)'], ['FORMAT_EXCEL', 'Enquiry format (Excel)'], ['CONCEPT', 'Concept'], ['POWER_CALC', 'Power-source calculation'],
     ['COSTING', 'Costing'], ['COSTING_REVIEW', 'Costing review'], ['OFFER', 'Offer'],
@@ -75,7 +83,9 @@ const SALES_FIELDS = Object.freeze([
 /** Words a Notify message can use as {{word}}. */
 const SALES_WORDS = Object.freeze([
   'ref_no', 'title', 'customer', 'stage_label', 'owner', 'handler', 'application', 'value_inr',
-  'event.from', 'event.to', 'event.lost_reason', 'event.lost_to', 'event.offer_value_inr', 'event.days',
+  'event.from', 'event.to', 'event.lost_reason', 'event.lost_to', 'event.offer_value_inr', 'event.order_value_inr', 'event.days',
+  // After an Approval: who decided and what they said.
+  'approval.decided_by', 'approval.comment', 'approval.status',
 ]);
 
 const CATALOGS = Object.freeze({

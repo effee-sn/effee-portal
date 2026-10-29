@@ -9,6 +9,7 @@ const { notificationService } = require('../notification/notification.service');
 const { loadRates } = require('../master/fx');
 const { money } = require('./emailDetails');
 const { salesEvent } = require('./flowEvents');
+const { checkGuard } = require('../flowengine/guard');
 const { NotFoundError, BadRequestError, ConflictError, ValidationError } = require('../../core');
 const { assertFullEdit, assertFlowWork, assertOwnItem, assertCanSeeEnquiry } = require('./access');
 
@@ -148,14 +149,23 @@ function createAttachmentService(repository) {
       if (sent && before.offer_value === null) {
         throw new ConflictError('Add the offer price before marking this offer as sent');
       }
+      // The rupee rate the offer goes out at — locked on it, and what a flow compares.
+      const rate = sent ? ((await loadRates())[enquiry.currency_code] ?? 1) : null;
+      const value = before.offer_value === null ? null : Number(before.offer_value);
+      const offer = { attachment_id: id, offer_value: value, offer_value_inr: value === null ? null : Math.round(value * rate * 100) / 100, version: before.version };
+      // A Flow Builder "Before marking an offer sent" flow may hold it for approval (this offer only).
+      const guard = sent ? await checkGuard({
+        module: 'SALES', type: 'BEFORE_OFFER_SENT', entityId: before.enquiry_id, actionKey: `OFFER:${id}`, actor, payload: offer,
+      }) : null;
 
       const attachment = await repository.update(id, {
         sent_at: sent ? new Date() : null,
         sent_by: sent ? (actor?.id ?? null) : null,
         // Lock the rupee rate the offer went out at; unsending releases it.
-        offer_fx_rate: sent ? ((await loadRates())[enquiry.currency_code] ?? 1) : null,
+        offer_fx_rate: rate,
         updated_by: actor?.id ?? null,
       });
+      if (guard) await guard.done();
 
       await auditService.record({
         action: auditService.Action.UPDATE,
@@ -165,13 +175,7 @@ function createAttachmentService(repository) {
         changes: { sent: { from: Boolean(before.sent_at), to: sent } },
       });
       // Reported before the stage move it causes, in the order it happened.
-      if (sent) {
-        const value = before.offer_value === null ? null : Number(before.offer_value);
-        const rate = (await loadRates())[enquiry.currency_code] ?? 1;
-        await salesEvent('OFFER_SENT', before.enquiry_id, actor, {
-          attachment_id: id, offer_value: value, offer_value_inr: value === null ? null : Math.round(value * rate * 100) / 100, version: before.version,
-        });
-      }
+      if (sent) await salesEvent('OFFER_SENT', before.enquiry_id, actor, offer);
 
       // Sending an offer moves the deal forward into a follow-up: the first
       // offer (Offer) → Follow-up; a revised offer (Negotiation) →

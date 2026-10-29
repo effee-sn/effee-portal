@@ -18,7 +18,10 @@ const { testConditions, validateConditions, factOf } = require('./conditions');
  */
 
 /** Events whose trigger can be narrowed to some stages. */
-const STAGE_EVENTS = Object.freeze({ STAGE_ENTERED: 'to', STAGE_STALLED: 'stage' });
+const STAGE_EVENTS = Object.freeze({ STAGE_ENTERED: 'to', STAGE_STALLED: 'stage', BEFORE_STAGE_MOVE: 'to' });
+
+/** The "Before …" events: a flow on one runs at the moment of the action and can hold it. */
+const GUARD_EVENTS = Object.freeze(['BEFORE_STAGE_MOVE', 'BEFORE_OFFER_SENT', 'BEFORE_WON', 'BEFORE_LOST', 'BEFORE_REOPEN']);
 
 const isId = (v) => Number.isInteger(Number(v)) && Number(v) > 0;
 
@@ -189,18 +192,29 @@ function render(text, facts, event, stageLabel = (s) => s) {
   });
 }
 
+/** What is wrong with a list of people (Notify recipients, Approval approvers). */
+function validatePeople(to, noun, emptyMessage) {
+  const errors = [];
+  if (!Array.isArray(to) || !to.length) return [emptyMessage];
+  to.forEach((r, i) => {
+    if (!NOTIFY_TO.includes(r?.who)) errors.push(`${noun} ${i + 1}: choose who`);
+    else if (['PERSON', 'ROLE', 'DEPARTMENT_HEAD', 'DEPARTMENT'].includes(r.who) && !isId(r.id)) errors.push(`${noun} ${i + 1}: choose from the list`);
+  });
+  return errors;
+}
+
+/** The people, roles and departments a list names (checked when publishing). */
+function peopleRefs(to) {
+  const kind = { PERSON: 'user', ROLE: 'role', DEPARTMENT_HEAD: 'department', DEPARTMENT: 'department' };
+  return (Array.isArray(to) ? to : []).filter((r) => kind[r?.who]).map((r) => ({ kind: kind[r.who], id: Number(r.id) }));
+}
+
 const notify = Object.freeze({
   type: 'notify',
   label: 'Notify',
   handles: ['next'],
   validate(data, catalog) {
-    const errors = [];
-    const to = data?.to;
-    if (!Array.isArray(to) || !to.length) errors.push('choose who to notify');
-    else to.forEach((r, i) => {
-      if (!NOTIFY_TO.includes(r?.who)) errors.push(`recipient ${i + 1}: choose who`);
-      else if (['PERSON', 'ROLE', 'DEPARTMENT_HEAD', 'DEPARTMENT'].includes(r.who) && !isId(r.id)) errors.push(`recipient ${i + 1}: choose from the list`);
-    });
+    const errors = validatePeople(data?.to, 'recipient', 'choose who to notify');
     const title = String(data?.title || '').trim();
     if (!title) errors.push('write a title');
     else if (title.length > 150) errors.push('the title is too long (150 characters at most)');
@@ -211,8 +225,7 @@ const notify = Object.freeze({
     return errors;
   },
   refs(data) {
-    const kind = { PERSON: 'user', ROLE: 'role', DEPARTMENT_HEAD: 'department', DEPARTMENT: 'department' };
-    return (Array.isArray(data?.to) ? data.to : []).filter((r) => kind[r?.who]).map((r) => ({ kind: kind[r.who], id: Number(r.id) }));
+    return peopleRefs(data?.to);
   },
   async run(ctx, node) {
     if (ctx.mode === 'inline') return { handle: 'next' };
@@ -225,7 +238,35 @@ const notify = Object.freeze({
   },
 });
 
-const NODE_TYPES = Object.freeze({ trigger, end, if: condition, stage_switch: stageSwitch, assign, notify });
+// ── Approval ─────────────────────────────────────────────────────────────────
+/**
+ * Holds the action until approved. It is decided by the guard (see guard.js) at
+ * the moment of the action — never by the background runner, which stops here
+ * if it ever meets one (the rest of the path runs once someone decides).
+ */
+const approval = Object.freeze({
+  type: 'approval',
+  label: 'Approval',
+  handles: ['approved', 'rejected'],
+  onlyFor: GUARD_EVENTS,
+  isApproval: true,
+  validate(data) {
+    const errors = validatePeople(data?.to, 'approver', 'choose who approves');
+    if (data?.mode !== undefined && !['ANY', 'ALL'].includes(data.mode)) errors.push('choose whether any one or all must approve');
+    const hours = (v, min, max) => v === undefined || (Number.isInteger(Number(v)) && Number(v) >= min && Number(v) <= max);
+    if (!hours(data?.remind_hours, 1, 168)) errors.push('remind after 1 to 168 hours');
+    if (!hours(data?.escalate_hours, 1, 720)) errors.push('escalate after 1 to 720 hours');
+    return errors;
+  },
+  refs(data) {
+    return peopleRefs(data?.to);
+  },
+  async run() {
+    return { handle: null, output: { waiting: true } };
+  },
+});
+
+const NODE_TYPES = Object.freeze({ trigger, end, if: condition, stage_switch: stageSwitch, assign, notify, approval });
 
 /** @param {string} type */
 function nodeType(type) {
@@ -237,4 +278,4 @@ function handlesOf(type, data) {
   return type.handlesFor ? type.handlesFor(data) : type.handles;
 }
 
-module.exports = { NODE_TYPES, nodeType, handlesOf, render, ASSIGN_TO, DEPARTMENT_PICK, ROLE_PICK, NOTIFY_TO };
+module.exports = { NODE_TYPES, nodeType, handlesOf, render, ASSIGN_TO, DEPARTMENT_PICK, ROLE_PICK, NOTIFY_TO, GUARD_EVENTS };

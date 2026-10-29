@@ -16,10 +16,12 @@ const MAX_STEPS = 500; // far above any real flow; stops a runaway
  * @param {number} p.runId
  * @param {object} p.graph   the version's parsed graph
  * @param {object} p.ctx     what blocks may use: { event, flow, version, emit }
+ * @param {object[]} [p.start]  where to begin — the When block, or (continuing a
+ *   run after an approval is decided) the blocks after the Approval
  * @returns {Promise<{ status: 'DONE'|'FAILED', error?: string, steps: number }>}
  */
-async function executeRun({ repository, nodeType, runId, graph, ctx }) {
-  const queue = [triggerNode(graph)];
+async function executeRun({ repository, nodeType, runId, graph, ctx, start }) {
+  const queue = start ? [...start] : [triggerNode(graph)];
   let steps = 0;
   while (queue.length) {
     const node = queue.shift();

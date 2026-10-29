@@ -8,6 +8,7 @@ import { apiGet, apiPut } from '@/lib/api';
 import { UPLOADS_URL } from '@/lib/config';
 import { areaKeyForPath, visibleAreasFor } from '@/lib/navigation';
 import NotificationBell from '@/components/NotificationBell';
+import ApprovalsButton from '@/components/ApprovalsButton';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
 import { useDisplayCurrency, CurrencySelect } from '@/lib/displayCurrency';
 import WhatsNewModal from '@/components/WhatsNewModal';
@@ -229,6 +230,7 @@ export default function DashboardLayout({ children }) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3zM19 15l.8 1.9L21.7 18l-1.9.8L19 20.7l-.8-1.9-1.9-.8 1.9-.8L19 15z" />
             </svg>
           </button>
+          <ApprovalsButton />
           <NotificationBell />
         </div>
 
@@ -250,6 +252,8 @@ export default function DashboardLayout({ children }) {
                   <p className="text-sm font-semibold text-gray-800 truncate">{me?.name}</p>
                   <p className="text-xs text-gray-400 truncate">{me?.email}</p>
                 </div>
+                <Link href="/dashboard/approvals" onClick={() => setUserMenuOpen(false)}
+                  className="block w-full px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition text-left">My Approvals</Link>
                 <button onClick={() => { setUserMenuOpen(false); openWhatsNew(); }}
                   className="w-full px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition text-left cursor-pointer">What’s new</button>
                 <button onClick={handleLogout} className="w-full px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition text-left cursor-pointer">Logout</button>

@@ -1466,3 +1466,69 @@ model FlowAssignState {
 
   @@unique([flow_id, node_id])
 }
+
+/// An approval a flow asked for before an action (marking an offer sent,
+/// Won, Lost, a stage move, reopening). The action is held until it is
+/// approved; the approval is then used once, by that same action
+/// (`action_key`, e.g. the offer's id or the stage), when it is tried again.
+model ApprovalRequest {
+  id          Int    @id @default(autoincrement())
+  module      String @db.VarChar(30)
+  flow_id     Int
+  version_id  Int
+  /// The Approval block that asked.
+  node_id     String @db.VarChar(60)
+  /// The run log entry it belongs to (continued when it is decided).
+  run_id      Int?
+  entity_type String @db.VarChar(40)
+  entity_id   String @db.VarChar(40)
+  /// The held action (a "Before …" event, e.g. BEFORE_OFFER_SENT) and which one exactly.
+  action      String @db.VarChar(60)
+  action_key  String @db.VarChar(100)
+  /// What approvers see: e.g. "Mark offer sent — ENQ-2026-0016", details, where to look.
+  title       String   @db.VarChar(200)
+  summary     String?  @db.Text
+  link        String?  @db.VarChar(200)
+  /// The event details at the time (JSON), for the flow's later steps.
+  payload     String?  @db.Text
+  /// ANY: the first decision decides. ALL: everyone must approve (one reject rejects).
+  mode        String   @default("ANY") @db.VarChar(5)
+  /// PENDING | APPROVED | REJECTED
+  status      String   @default("PENDING") @db.VarChar(10)
+  requested_by Int?
+  decided_by   Int?
+  decided_at   DateTime?
+  comment      String?  @db.Text
+  /// When the approved action went through (the approval is used up).
+  consumed_at  DateTime?
+  remind_hours   Int     @default(4)
+  escalate_hours Int     @default(24)
+  reminded_at    DateTime?
+  escalated_at   DateTime?
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  approvers ApprovalApprover[]
+
+  @@index([entity_type, entity_id, action_key])
+  @@index([flow_id, node_id])
+  @@index([status, created_at])
+  @@index([requested_by])
+}
+
+model ApprovalApprover {
+  id         Int             @id @default(autoincrement())
+  request    ApprovalRequest @relation(fields: [request_id], references: [id], onDelete: Cascade)
+  request_id Int
+  user_id    Int
+  /// PENDING | APPROVED | REJECTED
+  decision   String          @default("PENDING") @db.VarChar(10)
+  comment    String?         @db.Text
+  decided_at DateTime?
+  /// Added when the request was escalated, or a Super Admin deciding in someone's place.
+  is_escalation Boolean      @default(false)
+  created_at DateTime        @default(now())
+
+  @@unique([request_id, user_id])
+  @@index([user_id, decision])
+}

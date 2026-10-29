@@ -9,6 +9,7 @@ const { loadRates, toInr, paise, displayConverter } = require('../master/fx');
 const { NEXT_STEP, enquiryRows, money, sentence, stageName } = require('./emailDetails');
 const { salesEvent } = require('./flowEvents');
 const { resolveAssignment } = require('../flowengine/assignment');
+const { checkGuard } = require('../flowengine/guard');
 const { NotFoundError, ConflictError, ValidationError, ForbiddenError, buildSearchClause } = require('../../core');
 const {
   canReassign, assertFlowWork, assertDetailsEdit, assertCanWin, assertCanLose, enquiryScope, assertCanSeeEnquiry,
@@ -483,6 +484,10 @@ function createEnquiryService(repository) {
 
       const stageChanged = dto.stage !== undefined && dto.stage !== before.stage;
       const ownerChanged = dto.owner_id !== undefined && dto.owner_id !== null && dto.owner_id !== before.owner_id;
+      // A Flow Builder "Before moving to a stage" flow may hold the move for approval.
+      const guard = stageChanged ? await checkGuard({
+        module: 'SALES', type: 'BEFORE_STAGE_MOVE', entityId: id, payload: { from: before.stage, to: dto.stage }, actionKey: `STAGE:${dto.stage}`, actor,
+      }) : null;
       const data = pickWritable(dto, { updated_by: actor?.id ?? null });
       if (stageChanged) {
         data.stage_since = new Date();
@@ -494,6 +499,7 @@ function createEnquiryService(repository) {
         data.handler_id = dto.owner_id;
       }
       const enquiry = await repository.update(id, data);
+      if (guard) await guard.done();
       if (stageChanged) {
         await repository.recordStageEvent({
           enquiry_id: id, from_stage: before.stage, to_stage: dto.stage, changed_by: actor?.id ?? null, handler_id: enquiry.handler_id ?? null,
@@ -562,6 +568,12 @@ function createEnquiryService(repository) {
       assertCanWin(before, actor);
       if (before.stage === 'WON') throw new ConflictError('Enquiry is already marked won');
       await assertStageGate(id, 'WON');
+      // Today's rate: locked on the order below, and what a "Before marking won" flow compares.
+      const rate = (await loadRates())[before.currency_code] ?? 1;
+      const guard = await checkGuard({
+        module: 'SALES', type: 'BEFORE_WON', entityId: id, actionKey: 'WON', actor,
+        payload: { from: before.stage, order_value: Number(dto.order_value), order_value_inr: paise(Number(dto.order_value) * rate) },
+      });
 
       const data = {
         stage: 'WON',
@@ -570,7 +582,7 @@ function createEnquiryService(repository) {
         order_no: dto.order_no ?? null,
         order_value: dto.order_value,
         // Lock today's rate so this order's rupee value never moves.
-        order_fx_rate: (await loadRates())[before.currency_code] ?? 1,
+        order_fx_rate: rate,
         order_date: dto.order_date ?? new Date(),
         won_declaration: dto.won_declaration ?? null,
         won_terms: dto.won_terms ?? null,
@@ -582,6 +594,7 @@ function createEnquiryService(repository) {
         updated_by: actor?.id ?? null,
       };
       const enquiry = await repository.update(id, data);
+      await guard.done();
       await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'WON', changed_by: actor?.id ?? null, handler_id: data.handler_id });
       // Its open follow-ups close with it.
       await activityRepository.closeFollowUpsOfEnquiry(id);
@@ -622,6 +635,10 @@ function createEnquiryService(repository) {
       assertCanSeeEnquiry(before, actor);
       assertCanLose(before, actor);
       if (before.stage === 'LOST') throw new ConflictError('Enquiry is already marked lost');
+      const guard = await checkGuard({
+        module: 'SALES', type: 'BEFORE_LOST', entityId: id, actionKey: 'LOST', actor,
+        payload: { from: before.stage, lost_reason: dto.lost_reason, lost_to: dto.lost_to ?? null },
+      });
 
       const data = {
         stage: 'LOST',
@@ -633,6 +650,7 @@ function createEnquiryService(repository) {
         updated_by: actor?.id ?? null,
       };
       const enquiry = await repository.update(id, data);
+      await guard.done();
       await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'LOST', changed_by: actor?.id ?? null, handler_id: data.handler_id });
       await activityRepository.closeFollowUpsOfEnquiry(id);
 
@@ -669,6 +687,7 @@ function createEnquiryService(repository) {
       if (before.stage !== 'WON' && before.stage !== 'LOST') {
         throw new ConflictError('Only a won or lost enquiry can be reopened');
       }
+      const guard = await checkGuard({ module: 'SALES', type: 'BEFORE_REOPEN', entityId: id, actionKey: 'REOPEN', actor, payload: { from: before.stage } });
 
       const data = {
         stage: 'FOLLOW_UP',
@@ -680,6 +699,7 @@ function createEnquiryService(repository) {
         updated_by: actor?.id ?? null,
       };
       const enquiry = await repository.update(id, data);
+      await guard.done();
       await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'FOLLOW_UP', changed_by: actor?.id ?? null, handler_id: data.handler_id });
 
       await auditService.record({

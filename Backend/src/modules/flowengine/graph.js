@@ -113,6 +113,23 @@ function validateGraph(graph, { catalog, nodeType }) {
   }
   for (const n of graph.nodes) if (!seen.has(n.id)) add(n.id, 'Not connected to the “When” block');
 
+  // A "Before …" flow holds its action with an Approval; anything it sends goes
+  // after one (on its Approved / Rejected way), since the action has not happened.
+  if (catalog.events.find((x) => x.key === event)?.guard && !cycleAt) {
+    if (!graph.nodes.some((n) => nodeType(n.type)?.isApproval)) add(null, 'A “Before …” flow holds the action with an Approval — add one');
+    const beforeApproval = new Set([start.id]);
+    const q = [start.id];
+    while (q.length) {
+      for (const next of out(q.shift())) {
+        if (beforeApproval.has(next) || nodeType(byId.get(next)?.type)?.isApproval) continue;
+        beforeApproval.add(next); q.push(next);
+      }
+    }
+    for (const id of beforeApproval) {
+      if (byId.get(id)?.type === 'notify') add(id, 'In a “Before …” flow, Notify goes after an Approval — nothing is sent until someone decides');
+    }
+  }
+
   // At most one Assign on any path: a record goes to one person per stage move.
   if (!cycleAt) {
     const memo = new Map();

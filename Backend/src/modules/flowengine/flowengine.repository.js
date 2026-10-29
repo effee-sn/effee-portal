@@ -197,6 +197,122 @@ function createFlowEngineRepository(db) {
       });
     },
 
+    // ── Approvals ────────────────────────────────────────────────────────────
+    /** Active Super Admins — who an approval escalates to. */
+    async superAdminIds() {
+      const rows = await db.user.findMany({ where: { status: 'ACTIVE', deleted_at: null, role: { is_system: true, deleted_at: null } }, select: { id: true }, orderBy: { id: 'asc' } });
+      return rows.map((r) => r.id);
+    },
+
+    /** The latest not-yet-used request an Approval block made for this exact action. */
+    openRequest({ flowId, nodeId, entityType, entityId, actionKey }) {
+      return db.approvalRequest.findFirst({
+        where: { flow_id: flowId, node_id: nodeId, entity_type: entityType, entity_id: String(entityId), action_key: actionKey, consumed_at: null },
+        orderBy: { id: 'desc' },
+        include: { approvers: true },
+      });
+    },
+
+    /** A new request with its approvers (each PENDING, or already decided). */
+    createRequest(data, approvers) {
+      return db.approvalRequest.create({
+        data: { ...data, approvers: { create: approvers } },
+        include: { approvers: true },
+      });
+    },
+
+    /** Uses up approved requests: the action they allowed went through. */
+    consumeRequests(ids) {
+      if (!ids.length) return null;
+      return db.approvalRequest.updateMany({ where: { id: { in: ids }, status: 'APPROVED', consumed_at: null }, data: { consumed_at: new Date() } });
+    },
+
+    findRequest(id) {
+      return db.approvalRequest.findUnique({ where: { id }, include: { approvers: { orderBy: { id: 'asc' } } } });
+    },
+
+    async findRequests({ where, skip, take }) {
+      const [items, total] = await Promise.all([
+        db.approvalRequest.findMany({ where, include: { approvers: { orderBy: { id: 'asc' } } }, orderBy: { id: 'desc' }, skip, take }),
+        db.approvalRequest.count({ where }),
+      ]);
+      return { items, total };
+    },
+
+    countRequests(where) {
+      return db.approvalRequest.count({ where });
+    },
+
+    /** Records one approver's decision (adding them first when a Super Admin decides in someone's place). */
+    async recordDecision(requestId, userId, { decision, comment, addAsOverride }) {
+      if (addAsOverride) {
+        await db.approvalApprover.upsert({
+          where: { request_id_user_id: { request_id: requestId, user_id: userId } },
+          create: { request_id: requestId, user_id: userId, decision, comment, decided_at: new Date(), is_escalation: true },
+          update: { decision, comment, decided_at: new Date() },
+        });
+        return;
+      }
+      await db.approvalApprover.update({
+        where: { request_id_user_id: { request_id: requestId, user_id: userId } },
+        data: { decision, comment, decided_at: new Date() },
+      });
+    },
+
+    /** Closes a request — only while it is still pending (true when this call closed it). */
+    async closeRequest(id, { status, decidedBy, comment }) {
+      const r = await db.approvalRequest.updateMany({
+        where: { id, status: 'PENDING' },
+        data: { status, decided_by: decidedBy, decided_at: new Date(), comment: comment || null },
+      });
+      return r.count === 1;
+    },
+
+    setRequestRun(id, runId) {
+      return db.approvalRequest.update({ where: { id }, data: { run_id: runId } });
+    },
+
+    /** Pending requests past their reminder time, not yet reminded. */
+    async dueReminders(now) {
+      const rows = await db.approvalRequest.findMany({ where: { status: 'PENDING', reminded_at: null }, include: { approvers: true } });
+      return rows.filter((r) => now - r.created_at >= r.remind_hours * 36e5);
+    },
+
+    async claimReminder(id) {
+      const r = await db.approvalRequest.updateMany({ where: { id, status: 'PENDING', reminded_at: null }, data: { reminded_at: new Date() } });
+      return r.count === 1;
+    },
+
+    /** Pending requests past their escalation time, not yet escalated. */
+    async dueEscalations(now) {
+      const rows = await db.approvalRequest.findMany({ where: { status: 'PENDING', escalated_at: null }, include: { approvers: true } });
+      return rows.filter((r) => now - r.created_at >= r.escalate_hours * 36e5);
+    },
+
+    async claimEscalation(id) {
+      const r = await db.approvalRequest.updateMany({ where: { id, status: 'PENDING', escalated_at: null }, data: { escalated_at: new Date() } });
+      return r.count === 1;
+    },
+
+    /** Adds people as approvers of a pending request (escalation); existing ones are left as they are. */
+    async addApprovers(requestId, userIds) {
+      for (const user_id of userIds) {
+        await db.approvalApprover.upsert({
+          where: { request_id_user_id: { request_id: requestId, user_id } },
+          create: { request_id: requestId, user_id, is_escalation: true },
+          update: {},
+        });
+      }
+    },
+
+    /** id → name (deleted users included). */
+    async userNames(ids) {
+      const want = [...new Set(ids.filter(Boolean))];
+      if (!want.length) return new Map();
+      const rows = await db.user.findMany({ where: { id: { in: want } }, select: { id: true, name: true } });
+      return new Map(rows.map((u) => [u.id, u.name]));
+    },
+
     // ── Runs ─────────────────────────────────────────────────────────────────
     createRun(data) {
       return db.flowRun.create({ data, select: { id: true } });

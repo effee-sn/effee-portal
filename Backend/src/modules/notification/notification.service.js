@@ -89,8 +89,10 @@ function createNotificationService(repository) {
     ACTIVITY_FOLLOWUP:          'ACTIVITY_FOLLOWUP',
     FOLLOWUP_DUE:               'FOLLOWUP_DUE',
     FOLLOWUP_OVERDUE:           'FOLLOWUP_OVERDUE',
-    // Flow Builder flows (a Notify block).
+    // Flow Builder flows (a Notify block; approvals asked and decided).
     FLOW_NOTIFY:                'FLOW_NOTIFY',
+    FLOW_APPROVAL:              'FLOW_APPROVAL',
+    FLOW_APPROVAL_DECIDED:      'FLOW_APPROVAL_DECIDED',
   });
 
   return {

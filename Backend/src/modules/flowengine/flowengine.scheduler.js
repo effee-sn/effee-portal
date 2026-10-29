@@ -1,5 +1,6 @@
 const { processPendingEvents } = require('./dispatcher');
 const { flowEngineRepository } = require('./flowengine.repository');
+const { approvalsService } = require('./approvals.service');
 const { logger } = require('../../core');
 
 /**
@@ -14,6 +15,7 @@ const INTERVAL_MS = 5 * 1000;
 // Handled events are kept 30 days for tracing, then removed (once an hour).
 const KEEP_DAYS = 30;
 const PURGE_EVERY = 720;
+const APPROVALS_EVERY = 12;
 
 let running = false;
 let sweeps = 0;
@@ -25,6 +27,11 @@ async function sweep() {
   try {
     const r = await processPendingEvents();
     if (r.runs > 0) logger.info(r, 'Flows run');
+    // Approval reminders and escalations: hour-scale, so every minute is plenty.
+    if (sweeps % APPROVALS_EVERY === 0) {
+      const a = await approvalsService.sweep();
+      if (a.reminded || a.escalated) logger.info(a, 'Approval reminders / escalations sent');
+    }
     if (sweeps % PURGE_EVERY === 0) {
       await flowEngineRepository.purgeEvents(new Date(Date.now() - KEEP_DAYS * 864e5));
     }

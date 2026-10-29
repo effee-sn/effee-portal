@@ -123,6 +123,7 @@ after(async () => {
   try {
     if (fx.admin) await workflowService.update({ internal_user_id: fx.previousInternal }, admin(fx.admin));
     await prisma.flowAssignState.deleteMany({ where: { flow_id: { in: ids.flows } } });
+    await prisma.approvalRequest.deleteMany({ where: { flow_id: { in: ids.flows } } }); // approvers cascade
     await prisma.flowDefinition.deleteMany({ where: { id: { in: ids.flows } } }); // versions, runs, steps cascade
     await prisma.flowEvent.deleteMany({ where: { entity_type: ENTITY } });
     const enquiryIds = ids.enquiries;
@@ -303,7 +304,7 @@ describe('Flow engine: catalog', () => {
     const c = flowEngineService.catalog('SALES');
     assert.ok(c.events.some((e) => e.key === 'STAGE_ENTERED'));
     assert.equal(c.stages.find((s) => s.key === 'OFFER_RELEASED').label, 'Offer');
-    assert.deepEqual(c.blocks.map((b) => b.type).sort(), ['assign', 'end', 'if', 'notify', 'stage_switch', 'trigger']);
+    assert.deepEqual(c.blocks.map((b) => b.type).sort(), ['approval', 'assign', 'end', 'if', 'notify', 'stage_switch', 'trigger']);
     assert.ok(c.fields.some((f) => f.key === 'value_inr'));
     assert.equal(c.loadEntity, undefined, 'no functions go to the browser');
     assert.throws(() => flowEngineService.catalog('PAYROLL'), { name: 'ValidationError' });
@@ -596,5 +597,185 @@ describe('Flow engine part 3: the department queue', () => {
     } finally {
       await prisma.department.delete({ where: { id: headless.id } });
     }
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Part 4 — approvals ("Before …" flows hold the action).
+// ═════════════════════════════════════════════════════════════════════════════
+describe('Flow engine part 4: approvals', () => {
+  let approvalsService;
+  before(() => { ({ approvalsService } = require('../../src/modules/flowengine/approvals.service')); });
+
+  const upload = (enquiryId, kind, extra = {}) => attachmentService.record(enquiryId, {
+    originalname: `${kind.toLowerCase()}.pdf`, filename: `flow-${suffix}-${Math.random().toString(36).slice(2)}`, mimetype: 'application/pdf', size: 1,
+  }, { kind, ...extra }, admin(fx.admin));
+  const sa = () => admin(fx.admin);
+
+  /** An enquiry walked to Offer by a Super Admin, with one offer at this price (₹). */
+  async function withOffer(price) {
+    const e = await toReview();
+    await activityService.create(e.id, { type: 'MEETING', activity_at: new Date(), subject: 'review', is_review: true, follow_up_ended: true }, sa());
+    await enquiryService.update(e.id, { stage: 'CONCEPT' }, sa());
+    await upload(e.id, 'CONCEPT'); await upload(e.id, 'POWER_CALC');
+    await enquiryService.update(e.id, { stage: 'COSTING' }, sa());
+    await upload(e.id, 'COSTING');
+    await enquiryService.update(e.id, { stage: 'COSTING_REVIEW' }, sa());
+    await upload(e.id, 'COSTING_REVIEW');
+    await enquiryService.update(e.id, { stage: 'OFFER_RELEASED' }, sa());
+    const offer = await upload(e.id, 'OFFER', { offer_value: price });
+    return { e, offer };
+  }
+
+  const requestsFor = (enquiryId) => prisma.approvalRequest.findMany({ where: { entity_id: String(enquiryId) }, include: { approvers: true }, orderBy: { id: 'asc' } });
+  const stageOf = async (id) => (await prisma.enquiry.findUnique({ where: { id }, select: { stage: true } })).stage;
+
+  const bigOfferFlow = () => ({
+    nodes: [
+      n('start', 'trigger', { event: 'BEFORE_OFFER_SENT' }),
+      n('big', 'if', { rules: [{ field: 'event.offer_value_inr', op: 'gt', value: 5000000 }] }),
+      n('ok', 'approval', { to: [{ who: 'PERSON', id: fx.rev.id }] }),
+      n('tell', 'notify', { to: [{ who: 'HANDLER' }], title: 'Offer for {{ref_no}} not approved', message: '{{approval.decided_by}}: {{approval.comment}}' }),
+      n('end', 'end', {}),
+    ],
+    edges: [a('start', 'big'), a('big', 'ok', 'yes'), a('big', 'end', 'no'), a('ok', 'end', 'approved'), a('ok', 'tell', 'rejected')],
+  });
+
+  it('publish rules: Approval only in a “Before …” flow, which needs one; nothing sent before it', async () => {
+    const afterWon = await newFlow({ nodes: [n('start', 'trigger', { event: 'ENQUIRY_WON' }), n('ok', 'approval', { to: [{ who: 'OWNER' }] })], edges: [a('start', 'ok')] }, 'approval after');
+    assert.ok((await flowEngineService.check(afterWon.id)).errors.some((x) => /works only in a flow started by/.test(x.message)));
+    const noApproval = await newFlow({ nodes: [n('start', 'trigger', { event: 'BEFORE_WON' }), n('end', 'end', {})], edges: [a('start', 'end')] }, 'no approval');
+    assert.ok((await flowEngineService.check(noApproval.id)).errors.some((x) => /add one/.test(x.message)));
+    const early = await newFlow({
+      nodes: [n('start', 'trigger', { event: 'BEFORE_WON' }), n('tell', 'notify', { to: [{ who: 'OWNER' }], title: 'x' }), n('ok', 'approval', { to: [{ who: 'OWNER' }] })],
+      edges: [a('start', 'tell'), a('tell', 'ok')],
+    }, 'notify first');
+    assert.ok((await flowEngineService.check(early.id)).errors.some((x) => /Notify goes after an Approval/.test(x.message)));
+  });
+
+  it('a big offer is held for approval; a small one is not; approved, it goes through once', async () => {
+    await withFlow(bigOfferFlow(), async () => {
+      const small = await withOffer(100000);
+      await attachmentService.markSent(small.offer.id, true, sa());
+      assert.equal(await stageOf(small.e.id), 'FOLLOW_UP', 'under the limit: no approval');
+      assert.equal((await requestsFor(small.e.id)).length, 0);
+
+      const big = await withOffer(7200000);
+      await assert.rejects(attachmentService.markSent(big.offer.id, true, sa()),
+        (err) => err.code === 'APPROVAL_REQUIRED' && /Needs approval from FlowReviewer/.test(err.message));
+      assert.equal(await stageOf(big.e.id), 'OFFER_RELEASED', 'held');
+      const [req] = await requestsFor(big.e.id);
+      assert.equal(req.status, 'PENDING');
+      assert.equal(req.action_key, `OFFER:${big.offer.id}`);
+      assert.match(req.title, /^Mark offer sent — ENQ-/);
+      assert.match(req.summary, /Offer: Rev 1 · ₹72,00,000/);
+      assert.deepEqual(req.approvers.map((x) => x.user_id), [fx.rev.id]);
+      assert.equal(await prisma.notification.count({ where: { user_id: fx.rev.id, type: 'FLOW_APPROVAL', entity_id: String(big.e.id) } }), 1);
+      const waitingRun = await prisma.flowRun.findUnique({ where: { id: req.run_id }, include: { steps: { orderBy: { id: 'asc' } } } });
+      assert.equal(waitingRun.status, 'WAITING');
+      assert.deepEqual(waitingRun.steps.map((s) => s.node_id), ['start', 'big', 'ok']);
+
+      await assert.rejects(attachmentService.markSent(big.offer.id, true, sa()), (err) => err.code === 'APPROVAL_PENDING', 'asking again while it waits');
+      assert.equal((await requestsFor(big.e.id)).length, 1, 'no second request');
+      assert.equal((await approvalsService.list({ tab: 'waiting' }, as(fx.rev))).items.some((x) => x.id === req.id), true);
+      assert.equal(await approvalsService.count(as(fx.rev)), 1);
+
+      await approvalsService.decide(req.id, { decision: 'APPROVED', comment: 'Fine' }, as(fx.rev));
+      assert.equal(await prisma.notification.count({ where: { user_id: fx.admin.id, type: 'FLOW_APPROVAL_DECIDED', entity_id: String(big.e.id) } }), 1);
+      const doneRun = await prisma.flowRun.findUnique({ where: { id: req.run_id }, include: { steps: { orderBy: { id: 'asc' } } } });
+      assert.equal(doneRun.status, 'DONE');
+      assert.deepEqual(doneRun.steps.map((s) => s.node_id), ['start', 'big', 'ok', 'ok', 'end']);
+
+      await attachmentService.markSent(big.offer.id, true, sa());
+      assert.equal(await stageOf(big.e.id), 'FOLLOW_UP', 'approved: it went through');
+      assert.ok((await prisma.approvalRequest.findUnique({ where: { id: req.id } })).consumed_at, 'used up');
+    });
+  });
+
+  it('rejected (with a comment): the holder is told why; trying again asks again', async () => {
+    await withFlow(bigOfferFlow(), async () => {
+      const big = await withOffer(9000000);
+      await assert.rejects(attachmentService.markSent(big.offer.id, true, sa()), { code: 'APPROVAL_REQUIRED' });
+      const [req] = await requestsFor(big.e.id);
+      await assert.rejects(approvalsService.decide(req.id, { decision: 'REJECTED' }, as(fx.rev)), { name: 'ConflictError' }, 'a reason is needed');
+      await assert.rejects(approvalsService.decide(req.id, { decision: 'APPROVED' }, as(fx.other)), { name: 'ForbiddenError' }, 'not an approver');
+      await approvalsService.decide(req.id, { decision: 'REJECTED', comment: 'Price too low for this spec' }, as(fx.rev));
+      await assert.rejects(approvalsService.decide(req.id, { decision: 'APPROVED' }, as(fx.rev)), { name: 'ConflictError' }, 'already decided');
+      const told = await prisma.notification.findFirst({ where: { type: 'FLOW_NOTIFY', entity_id: String(big.e.id) } });
+      assert.equal(told.user_id, fx.internal.id, 'the holder at Offer (Internal Sales)');
+      assert.equal(told.title, `Offer for ${big.e.ref_no} not approved`);
+      assert.match(told.body, /FlowReviewer .*: Price too low for this spec/);
+      await assert.rejects(attachmentService.markSent(big.offer.id, true, sa()), { code: 'APPROVAL_REQUIRED' }, 'asks again');
+      assert.equal((await requestsFor(big.e.id)).length, 2);
+    });
+  });
+
+  it('an approver doing it themselves needs no request to someone else', async () => {
+    const graph = { nodes: [n('start', 'trigger', { event: 'BEFORE_STAGE_MOVE', stages: ['REVIEW'] }), n('ok', 'approval', { to: [{ who: 'PERSON', id: fx.field.id }] }), n('end', 'end', {})], edges: [a('start', 'ok'), a('ok', 'end', 'approved')] };
+    await withFlow(graph, async () => {
+      const e = await toReview(); // moved to Review by fx.field, the approver
+      assert.equal(await stageOf(e.id), 'REVIEW');
+      const [req] = await requestsFor(e.id);
+      assert.equal(req.status, 'APPROVED');
+      assert.equal(req.decided_by, fx.field.id);
+      assert.ok(req.consumed_at);
+    });
+  });
+
+  it('everyone must approve: one approval is not enough; a Super Admin can decide in their place', async () => {
+    const graph = { nodes: [n('start', 'trigger', { event: 'BEFORE_STAGE_MOVE', stages: ['REVIEW'] }), n('ok', 'approval', { to: [{ who: 'DEPARTMENT', id: fx.dept.id }], mode: 'ALL' }), n('end', 'end', {})], edges: [a('start', 'ok'), a('ok', 'end', 'approved')] };
+    await withFlow(graph, async () => {
+      const e = await newEnquiry();
+      await upload(e.id, 'FORMAT_PDF');
+      await assert.rejects(enquiryService.update(e.id, { stage: 'REVIEW' }, as(fx.field)), { code: 'APPROVAL_REQUIRED' });
+      const [req] = await requestsFor(e.id);
+      assert.deepEqual(req.approvers.map((x) => x.user_id).sort(), [fx.d1.id, fx.d2.id].sort());
+      const half = await approvalsService.decide(req.id, { decision: 'APPROVED' }, as(fx.d1));
+      assert.equal(half.status, 'PENDING', 'still waiting for the other');
+      await approvalsService.decide(req.id, { decision: 'APPROVED' }, as(fx.d2));
+      await enquiryService.update(e.id, { stage: 'REVIEW' }, as(fx.field));
+      assert.equal(await stageOf(e.id), 'REVIEW');
+
+      const e2 = await newEnquiry();
+      await upload(e2.id, 'FORMAT_PDF');
+      await assert.rejects(enquiryService.update(e2.id, { stage: 'REVIEW' }, as(fx.field)), { code: 'APPROVAL_REQUIRED' });
+      const [req2] = await requestsFor(e2.id);
+      const decided = await approvalsService.decide(req2.id, { decision: 'APPROVED', comment: 'covering' }, sa());
+      assert.equal(decided.status, 'APPROVED');
+      assert.ok(decided.approvers.some((x) => x.user_id === fx.admin.id && x.is_escalation));
+    });
+  });
+
+  it('reminded once after the reminder time; escalated to the Super Admins after the escalation time', async () => {
+    await withFlow(bigOfferFlow(), async () => {
+      const big = await withOffer(6000000);
+      await assert.rejects(attachmentService.markSent(big.offer.id, true, sa()), { code: 'APPROVAL_REQUIRED' });
+      const [req] = await requestsFor(big.e.id);
+      const reminders = () => prisma.notification.count({ where: { user_id: fx.rev.id, entity_id: String(big.e.id), title: { startsWith: 'Reminder' } } });
+      await approvalsService.sweep();
+      assert.equal(await reminders(), 0, 'not yet');
+      await prisma.approvalRequest.update({ where: { id: req.id }, data: { created_at: new Date(Date.now() - 5 * 36e5) } });
+      await approvalsService.sweep(); await approvalsService.sweep();
+      assert.equal(await reminders(), 1);
+      await prisma.approvalRequest.update({ where: { id: req.id }, data: { created_at: new Date(Date.now() - 25 * 36e5) } });
+      await approvalsService.sweep();
+      const after = await prisma.approvalRequest.findUnique({ where: { id: req.id }, include: { approvers: true } });
+      assert.ok(after.escalated_at);
+      const admins = await prisma.user.findMany({ where: { status: 'ACTIVE', deleted_at: null, role: { is_system: true } }, select: { id: true } });
+      for (const u of admins) assert.ok(after.approvers.some((x) => x.user_id === u.id), 'each Super Admin can now decide');
+      assert.ok(after.approvers.some((x) => x.is_escalation) || admins.every((u) => u.id === fx.rev.id), 'added at escalation');
+    });
+  });
+
+  it('only the people involved see a request', async () => {
+    await withFlow(bigOfferFlow(), async () => {
+      const big = await withOffer(8000000);
+      await assert.rejects(attachmentService.markSent(big.offer.id, true, sa()), { code: 'APPROVAL_REQUIRED' });
+      const [req] = await requestsFor(big.e.id);
+      assert.equal((await approvalsService.get(req.id, as(fx.rev))).id, req.id);
+      assert.equal((await approvalsService.get(req.id, sa())).id, req.id);
+      await assert.rejects(approvalsService.get(req.id, as(fx.other)), { name: 'NotFoundError' });
+      await assert.rejects(approvalsService.list({ tab: 'all' }, as(fx.rev)), { name: 'ForbiddenError' });
+    });
   });
 });
