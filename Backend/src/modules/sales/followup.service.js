@@ -334,4 +334,42 @@ async function runOverdueFollowupDigest(now = new Date()) {
   return { people: byPerson.size, sent };
 }
 
-module.exports = { runDueFollowupReminders, runStageAgingReminders, runOverdueFollowupDigest, STAGE_AGING_DAYS };
+/** A department head is reminded once when an enquiry has waited this long for them to assign it. */
+const QUEUE_REMIND_HOURS = 4;
+
+/**
+ * Reminds department heads of enquiries still waiting in their queue (a Flow
+ * Builder flow sent them to the department, "head picks"). Once per wait;
+ * claimed before sending, so a second worker skips it.
+ * @param {Date} [now]
+ */
+async function runQueueReminders(now = new Date()) {
+  const { enquiryRepository } = require('./enquiry.repository');
+  const waiting = await enquiryRepository.staleQueue(new Date(now.getTime() - QUEUE_REMIND_HOURS * 36e5));
+  let sent = 0;
+  for (const e of waiting) {
+    if (!(await enquiryRepository.claimQueueReminder(e.id, e.queued_at))) continue;
+    const hours = Math.floor((now - e.queued_at.getTime()) / 36e5);
+    await notificationService.notify({
+      userIds: [e.handler_id],
+      type: notificationService.Type.ENQUIRY_ASSIGNED,
+      title: `Waiting for you to assign: ${e.ref_no}`,
+      body: `${e.title} — ${hours} hours at ${stageLabel(e.stage)}, waiting for someone in ${e.queue_department?.name || 'your team'}.`,
+      entityType: 'Enquiry',
+      entityId: String(e.id),
+      link: '/dashboard/sales/team-queue',
+      email: {
+        eyebrow: 'Sales · Assign to your team',
+        intro: `This enquiry has been waiting ${hours} hours for you to assign it to someone in ${e.queue_department?.name || 'your team'}.`,
+        details: [['Enquiry', e.ref_no], ['Title', e.title], ['Stage', stageLabel(e.stage)]],
+        actionLabel: 'Assign it',
+      },
+    });
+    sent += 1;
+  }
+  return { checked: waiting.length, sent };
+}
+
+module.exports = {
+  runDueFollowupReminders, runStageAgingReminders, runOverdueFollowupDigest, runQueueReminders, STAGE_AGING_DAYS, QUEUE_REMIND_HOURS,
+};

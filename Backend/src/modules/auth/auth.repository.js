@@ -61,6 +61,12 @@ function createAuthRepository(db) {
       });
     },
 
+    /** Does this user head a (live) department? */
+    async headsDepartment(userId) {
+      const row = await db.department.findFirst({ where: { head_user_id: userId, deleted_at: null }, select: { id: true } });
+      return row !== null;
+    },
+
     /**
      * The caller's identity plus their allowed permission codes.
      *

@@ -11,6 +11,7 @@ import EnquiryActivities from '@/components/EnquiryActivities';
 import EnquiryReviews from '@/components/EnquiryReviews';
 import EnquiryProcess from '@/components/EnquiryProcess';
 import EnquiryAttachments from '@/components/EnquiryAttachments';
+import EnquiryQueueBanner from '@/components/EnquiryQueueBanner';
 import useNav from '@/lib/useNav';
 import useSalesConfig from '@/lib/useSalesConfig';
 import useCurrencies, { MoneyText, formatMoney } from '@/lib/money';
@@ -559,12 +560,16 @@ export default function EnquiryDetailPage() {
                   With:
                   <span className="font-medium text-gray-700">{enquiry.handler?.name || enquiry.owner?.name || '—'}</span>
                   {isHolder && <span className="text-[10px] font-semibold text-green-700 bg-green-50 rounded px-1 py-0.5">you</span>}
+                  {enquiry.queue_department_id && <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 rounded px-1 py-0.5">to assign</span>}
                 </span>
               )}
               {enquiry.expected_value != null && (
                 <span>Value: <MoneyText value={enquiry.expected_value} inr={enquiry.expected_value_inr} code={enquiry.currency_code} symbol={enquiry.currency?.symbol} shown={shownExpected} /></span>
               )}
             </div>
+            {enquiry.queue_department_id && !isClosed && (
+              <EnquiryQueueBanner enquiry={enquiry} me={me} onAssigned={() => load()} />
+            )}
           </div>
           {(canFlow || canReopen || canDelete || canReassign) && (
             <div className="flex items-center gap-2 shrink-0">

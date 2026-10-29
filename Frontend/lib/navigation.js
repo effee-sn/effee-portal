@@ -65,6 +65,8 @@ export const AREAS = [
       { label: 'Enquiries', href: '/dashboard/sales/enquiries', perm: null, anyPerm: ['SALES_VIEW', 'SALES_VIEW_OWN'] },
       // Everyone's follow-ups (Follow-ups → View) or only the ones you added (Follow-ups own → View).
       { label: 'Follow-ups', href: '/dashboard/sales/followups', perm: null, anyPerm: ['SALES_FOLLOWUP_VIEW', 'SALES_FOLLOWUP_VIEW_OWN'] },
+      // Department heads: enquiries a Flow Builder flow sent to their department, to hand to a member.
+      { label: 'Assign to my team', href: '/dashboard/sales/team-queue', perm: null, flag: 'team_queue' },
       { label: 'Configuration', href: '/dashboard/sales/config', perm: 'SALES_CONFIG_VIEW' },
     ],
   },

@@ -182,12 +182,15 @@ function createAuthService(repository, policy = {}) {
       const service_access = user.role.is_system
         || permissions.some((code) => code.startsWith('SERVICE_'))
         || await serviceRepository.hasServiceWork({ id: user.id, department_id: user.department_id, role_id: user.role.id });
+      // Sales → "Assign to my team": department heads (who receive Flow Builder queues) and Super Admin.
+      const team_queue = user.role.is_system || await authRepository.headsDepartment(user.id);
 
       return {
         ...user,
         is_system: user.role.is_system,
         permissions,
         service_access,
+        team_queue,
       };
     },
 

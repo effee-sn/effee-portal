@@ -499,3 +499,102 @@ describe('Flow engine part 2: Notify', () => {
     }
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Part 3 — the department queue ("head picks").
+// ═════════════════════════════════════════════════════════════════════════════
+describe('Flow engine part 3: the department queue', () => {
+  const queueAtReview = () => assignAt(['REVIEW'], { to: 'DEPARTMENT', department_id: fx.dept.id, pick: 'HEAD_PICKS' });
+  const queueState = (id) => prisma.enquiry.findUnique({ where: { id }, select: { handler_id: true, queue_department_id: true, queued_at: true } });
+
+  it('sent to the department: the head holds it, it waits in their list, and they are told', async () => {
+    await withFlow(queueAtReview(), async () => {
+      const e = await toReview();
+      const s = await queueState(e.id);
+      assert.equal(s.handler_id, fx.head.id);
+      assert.equal(s.queue_department_id, fx.dept.id);
+      assert.ok(s.queued_at);
+      const told = await prisma.notification.findFirst({ where: { user_id: fx.head.id, entity_id: String(e.id), type: 'ENQUIRY_ASSIGNED' }, orderBy: { id: 'desc' } });
+      assert.match(told.body, /waiting for you to assign it to someone in your team/);
+
+      const list = await enquiryService.teamQueue(as(fx.head));
+      assert.ok(list.items.some((x) => x.id === e.id));
+      const dept = list.departments.find((d) => d.id === fx.dept.id);
+      assert.deepEqual(dept.team.map((u) => u.id).sort(), [fx.head.id, fx.d1.id, fx.d2.id].sort());
+      assert.deepEqual(await enquiryService.teamQueue(as(fx.field)), { departments: [], items: [] }, 'not a head: nothing');
+    });
+  });
+
+  it('only the head assigns, only to their team; then the member holds it and can work on it', async () => {
+    await withFlow(queueAtReview(), async () => {
+      const e = await toReview();
+      await assert.rejects(enquiryService.assignFromQueue(e.id, { user_id: fx.d1.id }, as(fx.field)), { name: 'ForbiddenError' });
+      await assert.rejects(enquiryService.assignFromQueue(e.id, { user_id: fx.rev.id }, as(fx.head)), { name: 'ValidationError' }, 'not in the department');
+      await enquiryService.assignFromQueue(e.id, { user_id: fx.d1.id }, as(fx.head));
+      const s = await queueState(e.id);
+      assert.equal(s.handler_id, fx.d1.id);
+      assert.equal(s.queue_department_id, null);
+      const ev = await prisma.enquiryStageEvent.findFirst({ where: { enquiry_id: e.id, to_stage: 'REVIEW' }, orderBy: { id: 'desc' } });
+      assert.equal(ev.handler_id, fx.d1.id, 'the stage records who does it');
+      assert.equal(await prisma.notification.count({ where: { user_id: fx.d1.id, entity_id: String(e.id), type: 'ENQUIRY_ASSIGNED' } }), 1);
+      // The member now holds it: they log the review with View alone, like any holder.
+      await activityService.create(e.id, { type: 'MEETING', activity_at: new Date(), subject: 'review', is_review: true, follow_up_ended: true }, { id: fx.d1.id, email: fx.d1.email, permissions: ['SALES_VIEW'] });
+      await assert.rejects(enquiryService.assignFromQueue(e.id, { user_id: fx.d2.id }, as(fx.head)), { name: 'ConflictError' }, 'no longer waiting');
+    });
+  });
+
+  it('the head can keep it', async () => {
+    await withFlow(queueAtReview(), async () => {
+      const e = await toReview();
+      await enquiryService.assignFromQueue(e.id, { user_id: fx.head.id }, as(fx.head));
+      const s = await queueState(e.id);
+      assert.equal(s.handler_id, fx.head.id);
+      assert.equal(s.queue_department_id, null);
+    });
+  });
+
+  it('the head is reminded once after 4 hours of waiting', async () => {
+    const { runQueueReminders } = require('../../src/modules/sales/followup.service');
+    await withFlow(queueAtReview(), async () => {
+      const e = await toReview();
+      const reminders = () => prisma.notification.count({ where: { user_id: fx.head.id, entity_id: String(e.id), title: { startsWith: 'Waiting for you to assign' } } });
+      await runQueueReminders();
+      assert.equal(await reminders(), 0, 'not yet');
+      await prisma.enquiry.update({ where: { id: e.id }, data: { queued_at: new Date(Date.now() - 5 * 36e5) } });
+      await runQueueReminders();
+      await runQueueReminders();
+      assert.equal(await reminders(), 1);
+    });
+  });
+
+  it('moving on, or a reassign, takes it out of the queue', async () => {
+    await withFlow(queueAtReview(), async () => {
+      const moved = await toReview();
+      await activityService.create(moved.id, { type: 'MEETING', activity_at: new Date(), subject: 'review', is_review: true, follow_up_ended: true }, as(fx.head));
+      await enquiryService.update(moved.id, { stage: 'CONCEPT' }, as(fx.head));
+      const m = await queueState(moved.id);
+      assert.equal(m.queue_department_id, null);
+      assert.equal(m.handler_id, fx.internal.id, 'Concept: no flow → the built-in rule');
+
+      const reassigned = await toReview();
+      await enquiryService.reassign(reassigned.id, { handler_id: fx.rev.id }, admin(fx.admin));
+      const r = await queueState(reassigned.id);
+      assert.equal(r.handler_id, fx.rev.id);
+      assert.equal(r.queue_department_id, null);
+    });
+  });
+
+  it('a department without a head → the built-in rule (no queue)', async () => {
+    const headless = await prisma.department.create({ data: { name: `FLOW HEADLESS ${suffix}` }, select: { id: true } });
+    try {
+      await withFlow(assignAt(['REVIEW'], { to: 'DEPARTMENT', department_id: headless.id, pick: 'HEAD_PICKS' }), async () => {
+        const e = await toReview();
+        const s = await queueState(e.id);
+        assert.equal(s.handler_id, fx.internal.id);
+        assert.equal(s.queue_department_id, null);
+      });
+    } finally {
+      await prisma.department.delete({ where: { id: headless.id } });
+    }
+  });
+});

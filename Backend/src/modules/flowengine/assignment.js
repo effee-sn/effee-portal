@@ -34,7 +34,8 @@ async function walkInline(graph, ctx) {
 }
 
 /**
- * The person a live flow assigns, or null (no flow covers the stage, or its
+ * Who a live flow assigns — { userId, departmentId } (departmentId when it waits
+ * in that department's queue) — or null (no flow covers the stage, or its
  * Assign found nobody active).
  * @param {object} p
  * @param {string} p.module
@@ -56,7 +57,7 @@ async function assigneeFromFlows({ module, stage, entity }, repository = flowEng
     const ctx = { mode: 'inline', module, event, facts, flow, version: { id: version.id, version: version.version }, helpers };
     await walkInline(graph, ctx);
     // One assigning flow per stage (publish enforces it): its answer, even "nobody", is final.
-    if (ctx.assigned) return ctx.assigned.userId || null;
+    if (ctx.assigned) return ctx.assigned.userId ? { userId: ctx.assigned.userId, departmentId: ctx.assigned.departmentId } : null;
   }
   return null;
 }
@@ -64,16 +65,17 @@ async function assigneeFromFlows({ module, stage, entity }, repository = flowEng
 /**
  * @param {{ module: string, stage: string, entity?: object|null }} q
  * @param {() => Promise<number|null>|number|null} fallback  the module's built-in rule
- * @returns {Promise<number|null>} the user id who should hold it
+ * @returns {Promise<{ userId: number|null, departmentId: number|null }>} who holds it, and the
+ *   department whose queue it waits in (null when it is simply with that person)
  */
-async function resolveAssignee({ module, stage, entity = null }, fallback) {
+async function resolveAssignment({ module, stage, entity = null }, fallback) {
   try {
-    const userId = await assigneeFromFlows({ module, stage, entity });
-    if (userId) return userId;
+    const hit = await assigneeFromFlows({ module, stage, entity });
+    if (hit) return hit;
   } catch (err) {
     logger.error({ err, module, stage, entityId: entity?.id }, 'Flow assignment failed — using the built-in rule');
   }
-  return fallback();
+  return { userId: await fallback(), departmentId: null };
 }
 
-module.exports = { resolveAssignee, assigneeFromFlows };
+module.exports = { resolveAssignment, assigneeFromFlows };

@@ -51,7 +51,8 @@ function createHelpers(repository = flowEngineRepository) {
           return ctx.facts?.id ? firstActive(await catalogFor(module).heldAtStage(ctx.facts.id, d.stage)) : null;
         case 'DEPARTMENT': {
           const deptId = Number(d.department_id);
-          if (d.pick === 'HEAD') return firstActive(await repository.departmentHead(deptId));
+          // The head holds it — for good (HEAD), or until they pick a member (HEAD_PICKS).
+          if (d.pick === 'HEAD' || d.pick === 'HEAD_PICKS') return firstActive(await repository.departmentHead(deptId));
           const members = await repository.departmentMembers(deptId);
           return d.pick === 'TURN' ? nextInTurn(ctx.flow.id, node.id, members) : leastBusy(module, members);
         }

@@ -8,7 +8,7 @@ const { currencyService } = require('../master/currency.service');
 const { loadRates, toInr, paise, displayConverter } = require('../master/fx');
 const { NEXT_STEP, enquiryRows, money, sentence, stageName } = require('./emailDetails');
 const { salesEvent } = require('./flowEvents');
-const { resolveAssignee } = require('../flowengine/assignment');
+const { resolveAssignment } = require('../flowengine/assignment');
 const { NotFoundError, ConflictError, ValidationError, ForbiddenError, buildSearchClause } = require('../../core');
 const {
   canReassign, assertFlowWork, assertDetailsEdit, assertCanWin, assertCanLose, enquiryScope, assertCanSeeEnquiry,
@@ -210,14 +210,28 @@ function createEnquiryService(repository) {
 
   /**
    * Who holds the enquiry as it enters `stage`: what a Flow Builder flow says,
-   * else the built-in rule above (owner, or the Internal Sales handler).
+   * else the built-in rule above (owner, or the Internal Sales handler). When
+   * the flow sends it to a department's queue, its head holds it until they
+   * pick a member. Returns the fields to write; every stage move clears an
+   * earlier queue.
    * @param {string} stage @param {number} ownerId  the owner it will have
    * @param {object|null} enquiry  the enquiry before the move (a partial one while it is being created)
    */
-  function handlerFor(stage, ownerId, enquiry) {
-    return resolveAssignee({ module: 'SALES', stage, entity: enquiry ? { ...enquiry, owner_id: ownerId } : null }, async () =>
-      resolveHandler(stage, ownerId, phaseRole(stage) === 'INTERNAL' ? await internalHandlerId() : null));
+  async function holderFor(stage, ownerId, enquiry) {
+    const { userId, departmentId } = await resolveAssignment(
+      { module: 'SALES', stage, entity: enquiry ? { ...enquiry, owner_id: ownerId } : null },
+      async () => resolveHandler(stage, ownerId, phaseRole(stage) === 'INTERNAL' ? await internalHandlerId() : null),
+    );
+    return {
+      handler_id: userId,
+      queue_department_id: departmentId,
+      queued_at: departmentId ? new Date() : null,
+      queue_reminded_at: null,
+    };
   }
+
+  /** What the hand-off notification says when the enquiry waits for the head to pick a member. */
+  const QUEUED_NOTE = 'waiting for you to assign it to someone in your team';
 
   /** Notifies whoever the enquiry has just been handed to (never the actor). */
   function notifyHandoff(enquiry, handlerId, actor, note) {
@@ -370,7 +384,7 @@ function createEnquiryService(repository) {
         stage: 'NEW',
         owner_id,
         // The raiser is both the field initiator (owner) and the first handler.
-        handler_id: await handlerFor('NEW', owner_id, { owner_id, created_by: actor?.id ?? null }),
+        ...(await holderFor('NEW', owner_id, { owner_id, created_by: actor?.id ?? null })),
         ref_no: await nextRefNo(),
         created_by: actor?.id ?? null,
         updated_by: actor?.id ?? null,
@@ -473,7 +487,7 @@ function createEnquiryService(repository) {
       if (stageChanged) {
         data.stage_since = new Date();
         // Hand the baton to whoever owns the new stage's phase.
-        data.handler_id = await handlerFor(dto.stage, data.owner_id ?? before.owner_id, before);
+        Object.assign(data, await holderFor(dto.stage, data.owner_id ?? before.owner_id, before));
       } else if (ownerChanged && (before.handler_id ?? before.owner_id) === before.owner_id) {
         // Same rule as Reassign: when the field owner holds the baton, it
         // follows them to the new owner.
@@ -484,7 +498,7 @@ function createEnquiryService(repository) {
         await repository.recordStageEvent({
           enquiry_id: id, from_stage: before.stage, to_stage: dto.stage, changed_by: actor?.id ?? null, handler_id: enquiry.handler_id ?? null,
         });
-        if (data.handler_id !== before.handler_id) notifyHandoff(enquiry, data.handler_id, actor);
+        if (data.handler_id !== before.handler_id) notifyHandoff(enquiry, data.handler_id, actor, data.queue_department_id ? QUEUED_NOTE : undefined);
       }
 
       await auditService.record({
@@ -516,14 +530,15 @@ function createEnquiryService(repository) {
       if (!before) throw new NotFoundError('Enquiry');
       if (before.stage === toStage) return before;
 
-      const handler_id = await handlerFor(toStage, before.owner_id, before);
+      const hold = await holderFor(toStage, before.owner_id, before);
+      const { handler_id } = hold;
       const enquiry = await repository.update(id, {
-        stage: toStage, stage_since: new Date(), handler_id, updated_by: actor?.id ?? null,
+        stage: toStage, stage_since: new Date(), ...hold, updated_by: actor?.id ?? null,
       });
       await repository.recordStageEvent({
         enquiry_id: id, from_stage: before.stage, to_stage: toStage, changed_by: actor?.id ?? null, handler_id,
       });
-      if (handler_id !== before.handler_id) notifyHandoff(enquiry, handler_id, actor, note);
+      if (handler_id !== before.handler_id) notifyHandoff(enquiry, handler_id, actor, hold.queue_department_id ? `${note ? `${note} — ` : ''}${QUEUED_NOTE}` : note);
 
       await auditService.record({
         action: auditService.Action.UPDATE,
@@ -559,7 +574,7 @@ function createEnquiryService(repository) {
         order_date: dto.order_date ?? new Date(),
         won_declaration: dto.won_declaration ?? null,
         won_terms: dto.won_terms ?? null,
-        handler_id: await handlerFor('WON', before.owner_id, before),
+        ...(await holderFor('WON', before.owner_id, before)),
         // Clear any prior lost close-out.
         lost_at: null,
         lost_reason: null,
@@ -614,7 +629,7 @@ function createEnquiryService(repository) {
         lost_at: new Date(),
         lost_reason: dto.lost_reason,
         lost_to: dto.lost_to ?? null,
-        handler_id: await handlerFor('LOST', before.owner_id, before),
+        ...(await holderFor('LOST', before.owner_id, before)),
         updated_by: actor?.id ?? null,
       };
       const enquiry = await repository.update(id, data);
@@ -658,7 +673,7 @@ function createEnquiryService(repository) {
       const data = {
         stage: 'FOLLOW_UP',
         stage_since: new Date(),
-        handler_id: await handlerFor('FOLLOW_UP', before.owner_id, before), // the field initiator's phase
+        ...(await holderFor('FOLLOW_UP', before.owner_id, before)), // the field initiator's phase
         won_at: null, order_no: null, order_value: null, order_fx_rate: null, order_date: null,
         won_declaration: null, won_terms: null,
         lost_at: null, lost_reason: null, lost_to: null,
@@ -712,6 +727,8 @@ function createEnquiryService(repository) {
         data.handler_id = dto.handler_id;
       }
       if (data.owner_id === undefined && data.handler_id === undefined) return before;
+      // Handed to a person, it is no longer waiting in a department's queue.
+      if (data.handler_id !== undefined) Object.assign(data, { queue_department_id: null, queued_at: null, queue_reminded_at: null });
 
       const enquiry = await repository.update(id, data);
       if (data.handler_id !== undefined && data.handler_id !== before.handler_id) {
@@ -734,6 +751,52 @@ function createEnquiryService(repository) {
         ...(data.owner_id !== undefined ? { owner: { from: before.owner_id, to: data.owner_id } } : {}),
         ...(data.handler_id !== undefined ? { handler: { from: before.handler_id, to: data.handler_id } } : {}),
       });
+      return withMoney(enquiry);
+    },
+
+    /**
+     * "Assign to my team": the enquiries waiting in the queues of the
+     * departments the actor heads (every queue for a Super Admin), each with
+     * the members it can go to.
+     * @param {import('../../core/http/requestContext').ActorContext} actor
+     */
+    async teamQueue(actor) {
+      const departments = actor?.is_system ? null : await repository.headedDepartmentIds(actor?.id);
+      if (departments && !departments.length) return { departments: [], items: [] };
+      return repository.queue(departments);
+    },
+
+    /**
+     * The department head hands a waiting enquiry to a member of their team
+     * (or keeps it). Only the head of that department — or a Super Admin — may.
+     * @param {number} id
+     * @param {{ user_id: number }} dto
+     * @param {import('../../core/http/requestContext').ActorContext} actor
+     */
+    async assignFromQueue(id, dto, actor) {
+      const before = await repository.findById(id);
+      if (!before) throw new NotFoundError('Enquiry');
+      const deptId = before.queue_department_id;
+      if (!deptId) throw new ConflictError('This enquiry is not waiting to be assigned');
+      const headed = actor?.is_system ? [deptId] : await repository.headedDepartmentIds(actor?.id);
+      if (!headed.includes(deptId)) throw new ForbiddenError('Only the head of the department can assign this enquiry');
+      const team = await repository.departmentTeam(deptId);
+      if (!team.some((u) => u.id === dto.user_id)) {
+        throw new ValidationError('Validation failed', [{ field: 'user_id', message: 'Choose someone in the department' }]);
+      }
+
+      const enquiry = await repository.update(id, {
+        handler_id: dto.user_id, queue_department_id: null, queued_at: null, queue_reminded_at: null, updated_by: actor?.id ?? null,
+      });
+      // The stage's record names who actually does it ("same person as at stage" relies on it).
+      await repository.setStageHandler(id, before.stage, dto.user_id);
+      if (dto.user_id !== before.handler_id) notifyHandoff(enquiry, dto.user_id, actor, `assigned to you by the department head — now at ${stageLabel(before.stage)}`);
+
+      await auditService.record({
+        action: auditService.Action.UPDATE, entity: 'Enquiry', entityId: id, actor,
+        changes: { handler_id: { from: before.handler_id, to: dto.user_id }, assigned_from_queue: deptId },
+      });
+      await salesEvent('ENQUIRY_REASSIGNED', id, actor, { handler: { from: before.handler_id, to: dto.user_id }, from_queue: deptId });
       return withMoney(enquiry);
     },
 

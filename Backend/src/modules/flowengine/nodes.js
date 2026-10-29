@@ -122,7 +122,8 @@ const stageSwitch = Object.freeze({
 
 // ── Assign ───────────────────────────────────────────────────────────────────
 const ASSIGN_TO = Object.freeze(['PERSON', 'DEPARTMENT', 'ROLE', 'OWNER', 'CREATOR', 'SAME_AS_STAGE']);
-const DEPARTMENT_PICK = Object.freeze(['HEAD', 'LEAST_BUSY', 'TURN']);
+// HEAD_PICKS: the department head holds it and assigns it to a member (the queue).
+const DEPARTMENT_PICK = Object.freeze(['HEAD', 'HEAD_PICKS', 'LEAST_BUSY', 'TURN']);
 const ROLE_PICK = Object.freeze(['LEAST_BUSY', 'TURN']);
 
 const assign = Object.freeze({
@@ -156,7 +157,13 @@ const assign = Object.freeze({
   async run(ctx, node) {
     if (ctx.mode === 'inline') {
       // Answer "who gets it" and stop: the rest of the flow is the background run's.
-      ctx.assigned = { userId: await ctx.helpers.pickAssignee(node, ctx), nodeId: node.id };
+      const queued = node.data.to === 'DEPARTMENT' && node.data.pick === 'HEAD_PICKS';
+      ctx.assigned = {
+        userId: await ctx.helpers.pickAssignee(node, ctx),
+        nodeId: node.id,
+        // Waiting for the head to pick a member.
+        departmentId: queued ? Number(node.data.department_id) : null,
+      };
       return { handle: null };
     }
     // The stage move already assigned it (inline); the run log records who holds it.

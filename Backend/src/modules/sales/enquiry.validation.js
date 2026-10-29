@@ -111,7 +111,13 @@ const reassignEnquiryBody = z.object({
   { message: 'Choose a new owner or handler' }
 );
 
+// A department head hands a waiting enquiry to someone in their team.
+const assignFromQueueBody = z.object({
+  user_id: z.coerce.number().int().positive('Choose someone in the department'),
+});
+
 module.exports = {
+  assignFromQueueBody,
   TYPES,
   ACTIVE_STAGES,
   ALL_STAGES,

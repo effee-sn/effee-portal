@@ -126,6 +126,7 @@ model Department {
   users              User[]          @relation("DepartmentMembers")
   workflowSteps      WorkflowStep[]  @relation("StepAssigneeDepartment")
   originatingTickets ServiceTicket[] @relation("OriginatingTickets")
+  queuedEnquiries    Enquiry[]       @relation("EnquiryQueue")
 
   @@index([deleted_at])
   @@index([created_at])
@@ -970,6 +971,15 @@ model Enquiry {
   handler    User? @relation("EnquiryHandler", fields: [handler_id], references: [id])
   handler_id Int?
 
+  // Waiting in a department's queue (a Flow Builder Assign block sent it to the
+  // department, "head picks"): the head holds it meanwhile and assigns it to a
+  // member, which clears this. Null when it is with a person.
+  queue_department    Department? @relation("EnquiryQueue", fields: [queue_department_id], references: [id])
+  queue_department_id Int?
+  queued_at           DateTime?
+  // When the head was reminded to assign it (once per wait).
+  queue_reminded_at   DateTime?
+
   // Won close-out (no execution module - we just capture the order).
   won_at          DateTime?
   order_no        String?
@@ -1001,6 +1011,7 @@ model Enquiry {
   @@index([customer_id])
   @@index([owner_id])
   @@index([handler_id])
+  @@index([queue_department_id])
   @@index([stage])
   @@index([enquiry_type])
   @@index([application_id])

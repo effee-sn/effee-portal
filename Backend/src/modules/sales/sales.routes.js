@@ -6,11 +6,11 @@ const { asyncHandler, validate } = require('../../core');
 
 const {
   listEnquiriesQuery, enquiryIdParam, createEnquiryBody, updateEnquiryBody,
-  winEnquiryBody, loseEnquiryBody, reassignEnquiryBody,
+  winEnquiryBody, loseEnquiryBody, reassignEnquiryBody, assignFromQueueBody,
 } = require('./enquiry.validation');
 const {
   getEnquiries, getEnquiryById, getEnquiryReadiness, createEnquiry, updateEnquiry,
-  winEnquiry, loseEnquiry, reopenEnquiry, reassignEnquiry, deleteEnquiry,
+  winEnquiry, loseEnquiry, reopenEnquiry, reassignEnquiry, deleteEnquiry, getTeamQueue, assignFromQueue,
 } = require('./enquiry.controller');
 
 const activityValidation = require('./activity.validation');
@@ -165,6 +165,15 @@ router.post(
   authorize('SALES_REASSIGN'),
   validate({ params: enquiryIdParam, body: reassignEnquiryBody }),
   asyncHandler(reassignEnquiry)
+);
+
+// Department queue (Flow Builder "head picks"): no permission needed — being
+// the department's head is what allows it (checked in the service).
+router.get('/team-queue', asyncHandler(getTeamQueue));
+router.post(
+  '/enquiries/:id/assign-from-queue',
+  validate({ params: enquiryIdParam, body: assignFromQueueBody }),
+  asyncHandler(assignFromQueue)
 );
 
 router.delete(

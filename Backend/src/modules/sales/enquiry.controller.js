@@ -63,6 +63,16 @@ const reassignEnquiry = async (req, res) => {
   ApiResponse.ok(res, enquiry);
 };
 
+/** `GET /sales/team-queue` — enquiries waiting for the caller (a department head) to assign. */
+const getTeamQueue = async (req, res) => {
+  ApiResponse.ok(res, await enquiryService.teamQueue(requestContext(req)));
+};
+
+/** `POST /sales/enquiries/:id/assign-from-queue` */
+const assignFromQueue = async (req, res) => {
+  ApiResponse.ok(res, await enquiryService.assignFromQueue(req.params.id, req.body, requestContext(req)));
+};
+
 /** `DELETE /sales/enquiries/:id` */
 const deleteEnquiry = async (req, res) => {
   await enquiryService.remove(req.params.id, requestContext(req));
@@ -80,4 +90,6 @@ module.exports = {
   reopenEnquiry,
   reassignEnquiry,
   deleteEnquiry,
+  getTeamQueue,
+  assignFromQueue,
 };

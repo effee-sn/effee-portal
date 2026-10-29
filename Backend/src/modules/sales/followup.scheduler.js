@@ -1,4 +1,4 @@
-const { runDueFollowupReminders, runStageAgingReminders, runOverdueFollowupDigest } = require('./followup.service');
+const { runDueFollowupReminders, runStageAgingReminders, runOverdueFollowupDigest, runQueueReminders } = require('./followup.service');
 const { logger } = require('../../core');
 
 /**
@@ -32,6 +32,9 @@ async function sweep() {
       // Once a day per person, from the morning time (see followup.service).
       const overdue = await runOverdueFollowupDigest();
       if (overdue.sent > 0) logger.info(overdue, 'Overdue follow-up emails sent');
+      // Department heads with enquiries waiting for them to assign.
+      const queued = await runQueueReminders();
+      if (queued.sent > 0) logger.info(queued, 'Queue reminders sent');
     }
     sweeps += 1;
   } catch (err) {

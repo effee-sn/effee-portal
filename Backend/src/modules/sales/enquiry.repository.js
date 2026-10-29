@@ -29,6 +29,7 @@ function createEnquiryRepository(db) {
     owner: { select: { id: true, name: true } },
     handler_id: true,
     handler: { select: { id: true, name: true } },
+    queue_department_id: true,
     won_at: true,
     created_at: true,
     _count: {
@@ -74,6 +75,9 @@ function createEnquiryRepository(db) {
     owner: { select: { id: true, name: true } },
     handler_id: true,
     handler: { select: { id: true, name: true, email: true } },
+    queue_department_id: true,
+    queue_department: { select: { id: true, name: true, head_user_id: true } },
+    queued_at: true,
     created_at: true,
     updated_at: true,
     created_by: true,
@@ -176,6 +180,66 @@ function createEnquiryRepository(db) {
     async userExists(id) {
       const row = await db.user.findFirst({ where: { id, deleted_at: null }, select: { id: true } });
       return row !== null;
+    },
+
+    // ── Department queue ─────────────────────────────────────────────────────
+    /** Ids of the live departments this user heads. */
+    async headedDepartmentIds(userId) {
+      if (!userId) return [];
+      const rows = await db.department.findMany({ where: { head_user_id: userId, deleted_at: null }, select: { id: true } });
+      return rows.map((r) => r.id);
+    },
+
+    /** Who a department's waiting enquiry can go to: its head and its active members. */
+    async departmentTeam(departmentId) {
+      const dept = await db.department.findFirst({ where: { id: departmentId, deleted_at: null }, select: { head_user_id: true } });
+      const users = await db.user.findMany({
+        where: {
+          status: 'ACTIVE', deleted_at: null,
+          OR: [{ department_id: departmentId }, ...(dept?.head_user_id ? [{ id: dept.head_user_id }] : [])],
+        },
+        select: { id: true, name: true, designation: true },
+        orderBy: { name: 'asc' },
+      });
+      return users.map((u) => ({ ...u, is_head: u.id === dept?.head_user_id }));
+    },
+
+    /**
+     * Enquiries waiting in these departments' queues (all queues when null),
+     * oldest first, with each department's team to choose from.
+     * @param {number[]|null} departmentIds
+     */
+    async queue(departmentIds) {
+      const where = active({ queue_department_id: departmentIds ? { in: departmentIds } : { not: null } });
+      const items = await db.enquiry.findMany({
+        where,
+        select: { ...enquiryListSelect, queued_at: true, queue_department_id: true, queue_department: { select: { id: true, name: true } } },
+        orderBy: [{ queued_at: 'asc' }, { id: 'asc' }],
+      });
+      const ids = departmentIds ?? [...new Set(items.map((e) => e.queue_department_id))];
+      const departments = await db.department.findMany({ where: { id: { in: ids }, deleted_at: null }, select: { id: true, name: true }, orderBy: { name: 'asc' } });
+      const teams = await Promise.all(departments.map(async (d) => ({ ...d, team: await this.departmentTeam(d.id) })));
+      return { departments: teams, items };
+    },
+
+    /** Records who does the work at `stage` on its latest entry (after the head picks someone). */
+    async setStageHandler(enquiryId, stage, userId) {
+      const row = await db.enquiryStageEvent.findFirst({ where: { enquiry_id: enquiryId, to_stage: stage }, orderBy: { id: 'desc' }, select: { id: true } });
+      if (row) await db.enquiryStageEvent.update({ where: { id: row.id }, data: { handler_id: userId } });
+    },
+
+    /** Waiting enquiries whose head has not been reminded, queued before `before`. */
+    staleQueue(before) {
+      return db.enquiry.findMany({
+        where: active({ queue_department_id: { not: null }, queued_at: { lte: before }, queue_reminded_at: null }),
+        select: { id: true, ref_no: true, title: true, stage: true, handler_id: true, queued_at: true, queue_department: { select: { name: true } } },
+      });
+    },
+
+    /** Claims the queue reminder for this wait (one sender in a cluster). */
+    async claimQueueReminder(id, queuedAt) {
+      const r = await db.enquiry.updateMany({ where: { id, queued_at: queuedAt, queue_reminded_at: null }, data: { queue_reminded_at: new Date() } });
+      return r.count === 1;
     },
 
     /**
