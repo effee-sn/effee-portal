@@ -863,3 +863,66 @@ describe('Flow engine part 5: test run, current enquiries, attention', () => {
     }
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Parts 6–7 — the enquiry's Flows section, the run log, the ready-made flows.
+// ═════════════════════════════════════════════════════════════════════════════
+describe('Flow engine parts 6–7: what ran on an enquiry; the ready-made flows', () => {
+  const { STARTER_FLOWS } = require('../../src/modules/flowengine/starterFlows');
+  const handoffs = () => STARTER_FLOWS.find((f) => /hand-offs/.test(f.name)).graph;
+
+  it('the ready-made hand-offs flow gives the same person as today at every stage', async () => {
+    await withFlow(handoffs(), async (f) => {
+      const e = await toReview();
+      assert.equal(e.handler_id, fx.field.id, 'New: the raiser');
+      assert.equal(await holder(e.id), fx.internal.id, 'Review: the Internal Sales person in Setup');
+      await activityService.create(e.id, { type: 'MEETING', activity_at: new Date(), subject: 'review', is_review: true, follow_up_ended: true }, as(fx.internal));
+      await enquiryService.update(e.id, { stage: 'CONCEPT' }, as(fx.internal));
+      assert.equal(await holder(e.id), fx.internal.id, 'Concept: still Internal Sales');
+      await enquiryService.lose(e.id, { lost_reason: 'test' }, as(fx.internal));
+      assert.equal(await holder(e.id), fx.field.id, 'Lost: back to the owner');
+      await drain();
+      const runs = await runsFor(f.id, String(e.id));
+      assert.ok(runs.length >= 3, 'each stage move ran the flow (logged)');
+
+      // No Internal Sales person in Setup → the owner, exactly as the built-in rule.
+      await workflowService.update({ internal_user_id: null }, admin(fx.admin));
+      try {
+        const e2 = await toReview();
+        assert.equal(await holder(e2.id), fx.field.id);
+      } finally {
+        await workflowService.update({ internal_user_id: fx.internal.id }, admin(fx.admin));
+      }
+    }, 'starter hand-offs');
+  });
+
+  it('the starter drafts: hand-offs is ready to publish; the others need their people chosen', async () => {
+    for (const s of STARTER_FLOWS) {
+      const f = await newFlow(s.graph, `starter ${s.name}`);
+      const c = await flowEngineService.check(f.id);
+      if (/hand-offs/.test(s.name)) assert.deepEqual(c.errors, []);
+      else assert.ok(c.errors.length && c.errors.every((x) => /choose from the list/.test(x.message)), s.name);
+    }
+  });
+
+  it('an enquiry’s Flows section says what flows did, in words — only for people who can see it', async () => {
+    await withFlow(assignAt(['REVIEW'], { to: 'PERSON', user_id: fx.rev.id }), async () => {
+      const e = await toReview();
+      await drain();
+      const act = await enquiryService.flowActivity(e.id, as(fx.field));
+      const run = act.runs.find((r) => r.trigger === 'Enquiry enters a stage');
+      assert.ok(run);
+      assert.ok(run.steps.includes(`Assigned to FlowReviewer ${suffix}`));
+      await assert.rejects(enquiryService.flowActivity(e.id, { id: fx.other.id, permissions: ['SALES_VIEW_OWN'] }), { name: 'NotFoundError' });
+    });
+  });
+
+  it('the run log names each enquiry', async () => {
+    await withFlow(assignAt(['REVIEW'], { to: 'PERSON', user_id: fx.rev.id }), async (f) => {
+      const e = await toReview();
+      await drain();
+      const page = await flowEngineService.runs({ flowId: f.id, skip: 0, take: 10 });
+      assert.equal(page.items[0].entity_label, `${e.ref_no} · ${e.title}`);
+    });
+  });
+});

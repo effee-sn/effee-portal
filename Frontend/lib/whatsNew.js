@@ -12,6 +12,30 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|string[]|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.8.0',
+    date: '2026-10-29',
+    items: [
+      {
+        icon: 'spark',
+        title: 'My Approvals',
+        text: 'Some actions may now need approval first — for example a big offer. You’ll see “Needs approval from …”, and you’re told when it’s decided. Approvals waiting for you are under the new button in the top bar.',
+        perm: null,
+      },
+      {
+        icon: 'grid',
+        title: 'Flow Builder: Sales flows',
+        text: 'Administrator → Flow Builder → Sales → Flows: draw who gets each stage, which actions need approval and who is told — no code. Test a flow on a real enquiry before publishing it.',
+        perm: ['FLOW_VIEW', 'FLOW_EDIT'],
+      },
+      {
+        icon: 'spark',
+        title: 'Assign to my team',
+        text: 'Department heads: enquiries a flow sends to your department wait in Sales → Assign to my team until you choose who takes them.',
+        perm: null,
+      },
+    ],
+  },
+  {
     version: '1.7.2',
     date: '2026-10-28',
     items: [

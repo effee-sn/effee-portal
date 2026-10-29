@@ -42,6 +42,7 @@ export const ASSIGN_TO = [
   { key: 'OWNER', label: 'The enquiry owner' },
   { key: 'CREATOR', label: 'Whoever raised it' },
   { key: 'SAME_AS_STAGE', label: 'Same person as at an earlier stage' },
+  { key: 'SETUP_HANDLER', label: 'The Internal Sales person (set in Setup)' },
 ];
 export const DEPARTMENT_PICK = [
   { key: 'HEAD_PICKS', label: 'The head picks someone in the team' },

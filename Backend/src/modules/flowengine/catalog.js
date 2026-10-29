@@ -28,7 +28,7 @@ const SALES_EVENTS = Object.freeze([
   { key: 'ENQUIRY_CREATED', label: 'Enquiry created', payload: [] },
   { key: 'STAGE_ENTERED', label: 'Enquiry enters a stage', payload: ['from', 'to', 'auto'] },
   { key: 'OFFER_SENT', label: 'Offer marked sent', payload: ['attachment_id', 'offer_value', 'offer_value_inr', 'version'] },
-  { key: 'ENQUIRY_WON', label: 'Enquiry won', payload: ['from', 'order_value'] },
+  { key: 'ENQUIRY_WON', label: 'Enquiry won', payload: ['from', 'order_value', 'order_value_inr'] },
   { key: 'ENQUIRY_LOST', label: 'Enquiry lost', payload: ['from', 'lost_reason', 'lost_to'] },
   { key: 'ENQUIRY_REOPENED', label: 'Enquiry reopened', payload: ['from'] },
   { key: 'ENQUIRY_REASSIGNED', label: 'Enquiry reassigned', payload: ['owner', 'handler'] },
@@ -105,6 +105,11 @@ const CATALOGS = Object.freeze({
     /** Who held it when it last entered a stage (for "same person as at stage"). */
     heldAtStage: (id, stage) => require('../sales/flowFacts').handlerAtStage(id, stage),
     emailRows: (facts) => require('../sales/flowFacts').enquiryEmailRows(facts),
+    /** The Internal Sales person set in Flow Builder → Sales → Setup (or null). */
+    setupHandler: () => require('../sales/workflow.repository').workflowRepository.internalUserId(),
+    setupHandlerLabel: 'The Internal Sales person (Setup)',
+    /** id → "ENQ-2026-0016 · Title" (the run log). */
+    labelsFor: (ids) => require('../sales/flowFacts').enquiryLabels(ids),
     /** Open records at these stages (for "move current enquiries?"). */
     openRecordsAt: (stages) => require('../sales/flowFacts').openEnquiriesAt(stages),
     /** Hands an open record to who a flow now assigns (a flow change moving current work). */

@@ -112,6 +112,8 @@ const PERMISSIONS = [
   { module: 'flow', action: 'CREATE', code: 'FLOW_CREATE' },
   { module: 'flow', action: 'EDIT',   code: 'FLOW_EDIT' },
   { module: 'flow', action: 'DELETE', code: 'FLOW_DELETE' },
+  // Make a Flow Builder flow live, pause / resume it, move current records.
+  { module: 'flow', action: 'PUBLISH', code: 'FLOW_PUBLISH' },
 
   // Departments.
   { module: 'department', action: 'VIEW',   code: 'DEPT_VIEW' },

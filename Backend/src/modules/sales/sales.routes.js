@@ -10,7 +10,7 @@ const {
 } = require('./enquiry.validation');
 const {
   getEnquiries, getEnquiryById, getEnquiryReadiness, createEnquiry, updateEnquiry,
-  winEnquiry, loseEnquiry, reopenEnquiry, reassignEnquiry, deleteEnquiry, getTeamQueue, assignFromQueue,
+  winEnquiry, loseEnquiry, reopenEnquiry, reassignEnquiry, deleteEnquiry, getTeamQueue, assignFromQueue, getEnquiryFlows,
 } = require('./enquiry.controller');
 
 const activityValidation = require('./activity.validation');
@@ -128,6 +128,14 @@ router.get(
   authorize(...SEE),
   validate({ params: enquiryIdParam }),
   asyncHandler(getEnquiryReadiness)
+);
+
+// What Flow Builder flows did on this enquiry (anyone who can see it).
+router.get(
+  '/enquiries/:id/flows',
+  authorize(...SEE),
+  validate({ params: enquiryIdParam }),
+  asyncHandler(getEnquiryFlows)
 );
 
 // Stage moves: whoever holds it (the flow); details: Sales → Edit (checked in the service).

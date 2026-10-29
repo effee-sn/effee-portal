@@ -49,6 +49,8 @@ function createHelpers(repository = flowEngineRepository) {
       switch (d.to) {
         case 'PERSON': return firstActive(d.user_id);
         case 'OWNER': return firstActive(ctx.facts?.owner_id);
+        // Whoever the module's Setup names now (none set → the built-in rule decides).
+        case 'SETUP_HANDLER': return firstActive(await catalogFor(module).setupHandler());
         case 'CREATOR': return firstActive(ctx.facts?.created_by);
         case 'SAME_AS_STAGE':
           return ctx.facts?.id ? firstActive(await catalogFor(module).heldAtStage(ctx.facts.id, d.stage)) : null;

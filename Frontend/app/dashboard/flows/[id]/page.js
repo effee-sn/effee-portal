@@ -175,7 +175,56 @@ function MoveCurrentModal({ flowId, items, onClose }) {
   );
 }
 
-function Editor({ flowId }) {
+/** The run log: every run of this flow (newest first), and one run's steps. */
+function RunLog({ flowId, nodes, onClose }) {
+  const [runs, setRuns] = useState(null);
+  const [open, setOpen] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    apiGet(`/flow-engine/runs?flow_id=${flowId}&limit=50`, { silent: true })
+      .then((r) => { if (!cancelled) setRuns(r.data); }).catch(() => { if (!cancelled) setRuns([]); });
+    return () => { cancelled = true; };
+  }, [flowId]);
+  const show = async (id) => {
+    if (open?.id === id) { setOpen(null); return; }
+    try { const r = await apiGet(`/flow-engine/runs/${id}`, { silent: true }); setOpen(r.data); } catch { setOpen(null); }
+  };
+  const label = (s) => {
+    const kind = BLOCKS.find((b) => b.type === s.node_type)?.label || s.node_type;
+    const there = nodes.some((n) => n.id === s.node_id) ? '' : ' (no longer in the draft)';
+    const way = s.output?.handle && s.output.handle !== 'next' ? ` → ${s.output.handle}` : '';
+    return `${kind}${way}${there}`;
+  };
+  const tone = { DONE: 'text-gray-500', WAITING: 'text-amber-700', FAILED: 'text-red-600', RUNNING: 'text-gray-500' };
+  return (
+    <div className="p-4 space-y-3 text-sm">
+      <div className="flex items-center"><p className="font-semibold text-gray-800">Run log</p>
+        <button type="button" onClick={onClose} className="ml-auto text-gray-400 hover:text-gray-700 cursor-pointer" aria-label="Close run log">×</button></div>
+      <p className="text-xs text-gray-500">Each time this flow ran — newest first. Click one to see its steps.</p>
+      {!runs ? <p className="text-xs text-gray-400">Loading…</p> : !runs.length ? <p className="text-xs text-gray-400">It has not run yet.</p> : runs.map((r) => (
+        <div key={r.id} className="rounded border border-gray-200">
+          <button type="button" onClick={() => show(r.id)} className="w-full text-left px-2 py-1.5 hover:bg-gray-50 cursor-pointer">
+            <p className="text-xs text-gray-800 truncate">{r.entity_label || `${r.entity_type} ${r.entity_id}`}</p>
+            <p className="text-[11px] text-gray-500">
+              v{r.version?.version} · {new Date(r.started_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+              <span className={`ml-1 font-medium ${tone[r.status]}`}>· {r.status.toLowerCase()}</span>
+            </p>
+          </button>
+          {open?.id === r.id && (
+            <ol className="px-3 pb-2 space-y-0.5 list-decimal list-inside text-[11px] text-gray-700">
+              {open.steps.map((s) => (
+                <li key={s.id} className={s.status === 'FAILED' ? 'text-red-600' : ''}>{label(s)}{s.error ? ` — ${s.error}` : ''}</li>
+              ))}
+            </ol>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Editor({ flowId, perms }) {
+  const readOnly = !perms.canEdit;
   const { screenToFlowPosition } = useReactFlow();
   const [flow, setFlow] = useState(null);
   const [nodes, setNodes] = useState([]);
@@ -342,18 +391,20 @@ function Editor({ flowId }) {
         <span className={`px-2 py-0.5 rounded text-xs font-medium ${st.cls}`}>{st.label}{flow.versions?.length ? ` · v${flow.versions[0].version}` : ''}</span>
         {dirty && <span className="text-xs text-amber-700">Unsaved changes</span>}
         <div className="flex-1" />
-        {flow.versions?.length > 0 && (
+        {!readOnly && flow.versions?.length > 0 && (
           <select value="" onChange={(e) => e.target.value && restore(e.target.value)} className="text-sm border border-gray-300 rounded px-2 py-1 bg-white cursor-pointer" aria-label="Versions">
             <option value="">Versions…</option>
             {flow.versions.map((v) => <option key={v.id} value={v.id}>v{v.version} · {new Date(v.published_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} — put back in the draft</option>)}
           </select>
         )}
-        <button type="button" onClick={() => act(save)} disabled={busy || !dirty} className="btn-secondary px-3 py-1 text-sm disabled:opacity-50">Save draft</button>
-        <button type="button" onClick={check} disabled={busy} className="btn-secondary px-3 py-1 text-sm">Check</button>
-        <button type="button" onClick={() => setPanel(panel === 'test' ? 'settings' : 'test')} className="btn-secondary px-3 py-1 text-sm">Test run</button>
-        {flow.status === 'ACTIVE' && <button type="button" onClick={() => setStatus('pause')} disabled={busy} className="btn-secondary px-3 py-1 text-sm">Pause</button>}
-        {flow.status === 'PAUSED' && <button type="button" onClick={() => setStatus('resume')} disabled={busy} className="btn-secondary px-3 py-1 text-sm">Resume</button>}
-        <button type="button" onClick={publish} disabled={busy} className="btn-primary px-3 py-1 text-sm">Publish</button>
+        {readOnly && <span className="text-xs text-gray-500">View only</span>}
+        {!readOnly && <button type="button" onClick={() => act(save)} disabled={busy || !dirty} className="btn-secondary px-3 py-1 text-sm disabled:opacity-50">Save draft</button>}
+        {!readOnly && <button type="button" onClick={check} disabled={busy} className="btn-secondary px-3 py-1 text-sm">Check</button>}
+        {!readOnly && <button type="button" onClick={() => setPanel(panel === 'test' ? 'settings' : 'test')} className="btn-secondary px-3 py-1 text-sm">Test run</button>}
+        <button type="button" onClick={() => setPanel(panel === 'runs' ? 'settings' : 'runs')} className="btn-secondary px-3 py-1 text-sm">Run log</button>
+        {perms.canPublish && flow.status === 'ACTIVE' && <button type="button" onClick={() => setStatus('pause')} disabled={busy} className="btn-secondary px-3 py-1 text-sm">Pause</button>}
+        {perms.canPublish && flow.status === 'PAUSED' && <button type="button" onClick={() => setStatus('resume')} disabled={busy} className="btn-secondary px-3 py-1 text-sm">Resume</button>}
+        {perms.canPublish && !readOnly && <button type="button" onClick={publish} disabled={busy} className="btn-primary px-3 py-1 text-sm">Publish</button>}
       </div>
       {(error || notice || flowProblems.length > 0 || flow.attention?.length > 0) && (
         <div className="px-4 py-2 space-y-1 bg-white border-b border-gray-200 text-sm">
@@ -366,7 +417,7 @@ function Editor({ flowId }) {
 
       <div className="flex flex-1 min-h-0">
         {/* Blocks */}
-        <aside className="w-48 shrink-0 bg-white border-r border-gray-200 p-3 space-y-2 overflow-y-auto">
+        {!readOnly && <aside className="w-48 shrink-0 bg-white border-r border-gray-200 p-3 space-y-2 overflow-y-auto">
           <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Blocks</p>
           {BLOCKS.filter((b) => b.type !== 'trigger').map((b) => {
             const off = (b.type === 'assign' && event !== 'STAGE_ENTERED') || (b.type === 'approval' && !guard);
@@ -386,7 +437,7 @@ function Editor({ flowId }) {
             );
           })}
           {STAGE_EVENTS.includes(event) && <p className="text-[11px] text-gray-500 pt-2">Tip: “Which stage?” gives each group of stages its own way.</p>}
-        </aside>
+        </aside>}
 
         {/* Canvas */}
         <div className="flex-1 min-w-0" onDrop={onDrop} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}>
@@ -395,7 +446,8 @@ function Editor({ flowId }) {
             onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
             onPaneClick={() => setSelectedId(null)}
             defaultEdgeOptions={{ type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed }, style: { strokeWidth: 1.5 } }}
-            fitView fitViewOptions={{ maxZoom: 1 }} deleteKeyCode={['Delete', 'Backspace']} proOptions={{ hideAttribution: true }}
+            fitView fitViewOptions={{ maxZoom: 1 }} deleteKeyCode={readOnly ? null : ['Delete', 'Backspace']} proOptions={{ hideAttribution: true }}
+            nodesDraggable={!readOnly} nodesConnectable={!readOnly}
           >
             <Background gap={16} />
             <Controls showInteractive={false} />
@@ -405,10 +457,11 @@ function Editor({ flowId }) {
 
         {/* Settings / test run */}
         <aside className="w-[340px] shrink-0 bg-white border-l border-gray-200 overflow-y-auto">
-          {panel === 'test'
+          {panel === 'runs' ? <RunLog flowId={flowId} nodes={nodes} onClose={() => setPanel('settings')} />
+            : panel === 'test'
             ? <TestPanel flowId={flowId} event={event} catalog={lookups.catalog} onResult={onTestResult} onClose={() => { setPanel('settings'); setTested({}); }} />
-            : <Inspector node={selected} event={event} lookups={lookups} errors={selected ? byNode[selected.id] : null}
-              onChange={(s) => updateSettings(selected.id, s)} onDelete={removeSelected} />}
+            : <fieldset disabled={readOnly} className="min-w-0"><Inspector node={selected} event={event} lookups={lookups} errors={selected ? byNode[selected.id] : null}
+              onChange={(s) => updateSettings(selected.id, s)} onDelete={removeSelected} /></fieldset>}
         </aside>
       </div>
       {move && <MoveCurrentModal flowId={flowId} items={move} onClose={() => setMove(null)} />}
@@ -419,19 +472,20 @@ function Editor({ flowId }) {
 export default function FlowEditorPage() {
   useAuth();
   const { id } = useParams();
-  const { me, loading } = usePermissions();
+  const { me, can, loading } = usePermissions();
+  const has = (code) => Boolean(me?.is_system || can(code));
   if (loading) return <p className="p-6 text-sm text-gray-500">Loading…</p>;
-  if (!me?.is_system) {
+  if (!has('FLOW_VIEW')) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-center">
-        <p className="text-sm font-semibold text-gray-700 mb-1">Super Admin only for now</p>
-        <p className="text-sm text-gray-500">Building flows will be given to roles with the Flow Builder permissions.</p>
+        <p className="text-sm font-semibold text-gray-700 mb-1">Access Denied</p>
+        <p className="text-sm text-gray-500">You need Flow Builder → View.</p>
       </div>
     );
   }
   return (
     <ReactFlowProvider>
-      <Editor flowId={id} />
+      <Editor flowId={id} perms={{ canEdit: has('FLOW_EDIT'), canPublish: has('FLOW_PUBLISH') }} />
     </ReactFlowProvider>
   );
 }

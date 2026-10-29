@@ -7,7 +7,7 @@ import useNav from '@/lib/useNav';
 
 /**
  * Flow Builder → (module) → Flows: the module's flows — what each starts on,
- * live or not, its version — and "New flow". Super Admin only for now.
+ * live or not, its version — and "New flow" (Flow Builder → Create).
  */
 
 const STATUS = {
@@ -16,7 +16,7 @@ const STATUS = {
   PAUSED: { label: 'Paused', cls: 'bg-amber-50 text-amber-800' },
 };
 
-export default function FlowsList({ module, isAdmin }) {
+export default function FlowsList({ module, canCreate }) {
   const nav = useNav();
   const [rows, setRows] = useState(null);
   const [events, setEvents] = useState([]);
@@ -25,13 +25,12 @@ export default function FlowsList({ module, isAdmin }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!isAdmin) return undefined;
     let cancelled = false;
     Promise.all([apiGet(`/flow-engine/flows?module=${module}&limit=100`, { silent: true }), apiGet(`/flow-engine/catalog/${module}`, { silent: true })])
       .then(([f, c]) => { if (!cancelled) { setRows(f.data); setEvents(c.data.events); } })
       .catch((e) => { if (!cancelled) setError(e.message); });
     return () => { cancelled = true; };
-  }, [module, isAdmin]);
+  }, [module]);
 
   const create = async (e) => {
     e.preventDefault();
@@ -40,9 +39,6 @@ export default function FlowsList({ module, isAdmin }) {
     catch (err) { setError(err.message); }
   };
 
-  if (!isAdmin) {
-    return <p className="text-sm text-gray-500 bg-white rounded border border-gray-200 px-4 py-6">Flows are built by a Super Admin for now.</p>;
-  }
   const eventLabel = (k) => events.find((e) => e.key === k)?.label || '—';
 
   return (
@@ -51,7 +47,7 @@ export default function FlowsList({ module, isAdmin }) {
         <span className="text-sm font-medium text-gray-700 px-1">Flows</span>
         <span className="text-xs text-gray-500">Who gets each stage, approvals before actions, and who is told — drawn on a canvas.</span>
         <div className="flex-1" />
-        {creating ? (
+        {!canCreate ? null : creating ? (
           <form onSubmit={create} className="flex items-center gap-2">
             <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Name, e.g. Big offers need approval" className="ams-input text-sm w-72" aria-label="New flow name" />
             <button type="submit" className="btn-primary px-3 py-1 text-sm">Create</button>

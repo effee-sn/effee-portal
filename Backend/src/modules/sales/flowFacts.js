@@ -95,6 +95,14 @@ async function openEnquiriesAt(stages) {
   });
 }
 
+/** id → "ENQ-2026-0016 · Title", for the run log. */
+async function enquiryLabels(ids) {
+  const want = [...new Set(ids.map(Number).filter(Boolean))];
+  if (!want.length) return new Map();
+  const rows = await prisma.enquiry.findMany({ where: { id: { in: want } }, select: { id: true, ref_no: true, title: true } });
+  return new Map(rows.map((e) => [String(e.id), `${e.ref_no} · ${e.title}`]));
+}
+
 /** The enquiry lines a flow's email shows. */
 function enquiryEmailRows(f) {
   return [
@@ -103,4 +111,4 @@ function enquiryEmailRows(f) {
   ];
 }
 
-module.exports = { loadEnquiryFacts, openEnquiryCounts, handlerAtStage, openEnquiriesAt, enquiryEmailRows, STAGE_LABEL };
+module.exports = { loadEnquiryFacts, openEnquiryCounts, handlerAtStage, openEnquiriesAt, enquiryLabels, enquiryEmailRows, STAGE_LABEL };

@@ -63,6 +63,11 @@ const reassignEnquiry = async (req, res) => {
   ApiResponse.ok(res, enquiry);
 };
 
+/** `GET /sales/enquiries/:id/flows` — what Flow Builder flows did on it. */
+const getEnquiryFlows = async (req, res) => {
+  ApiResponse.ok(res, await enquiryService.flowActivity(req.params.id, requestContext(req)));
+};
+
 /** `GET /sales/team-queue` — enquiries waiting for the caller (a department head) to assign. */
 const getTeamQueue = async (req, res) => {
   ApiResponse.ok(res, await enquiryService.teamQueue(requestContext(req)));
@@ -92,4 +97,5 @@ module.exports = {
   deleteEnquiry,
   getTeamQueue,
   assignFromQueue,
+  getEnquiryFlows,
 };

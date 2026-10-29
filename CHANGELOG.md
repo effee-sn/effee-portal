@@ -13,6 +13,27 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.8.0] — not yet released (branch feature/flow-engine)
+
+### Added — Flow Builder: flows for Sales, on a canvas
+
+- **Administrator → Flow Builder → Sales** now has **Setup** (the Internal Sales person, as before) and **Flows**: who gets each stage, approvals before actions and who is told — drawn as blocks and arrows (React Flow canvas), with no code.
+- **Blocks:** When (what starts the flow), Which stage? (a way per group of stages), If (conditions on value in ₹, type, refurbishment, temperature, application, customer, owner, and the event's details), **Assign**, **Approval**, **Notify** and End.
+- **Assign** (at the moment of a stage move): a person; a department — its head, the least busy member, turn by turn, or **the head picks** someone in the team; a role; the owner; whoever raised it; the same person as at an earlier stage; or the Internal Sales person set in Setup. If nobody active matches, the built-in rule decides — an enquiry is never left with nobody. One flow decides each stage (a clash is refused).
+- **Department queue:** "head picks" sends the enquiry to the department; the head holds it and chooses the member from **Sales → Assign to my team** or a banner on the enquiry. Reminded after 4 hours.
+- **Approvals:** "Before …" flows run the moment someone tries to move a stage, mark an offer sent, mark Won or Lost, or reopen — and can hold it: *"Needs approval from X — request sent"*. Any one or all approvers; reminder after 4 hours, escalation to the Super Admins after 24; an approver doing it themselves needs no request; rejecting needs a reason. An approval is used once, for that exact action. **My Approvals** (top-bar button with a count, and the user menu): waiting for me, decided by me, asked by me.
+- **Notify:** bell, push and email to the owner, the holder, the raiser, a person, a role, a department or its head, with `{{words}}` from the enquiry and the event.
+- **Builder:** Save draft, **Check** (problems shown on the blocks), **Test run** on a real enquiry (what each block would do — nothing sent or changed), Publish (a new version; runs keep the version they started with), Pause / Resume, put an older version back. After publishing an assigning flow: **move the current enquiries too?** — only the ones you tick.
+- **Visibility:** a **Flows** section on each enquiry (approvals, and what each flow did — "Assigned to …", "Notified …"); a **run log** per flow; a ⚠ on flows naming someone who has left.
+- **Ready-made drafts** (none live): *Sales hand-offs (today's rules)* — the built-in rule drawn, ready to publish; *Big offers need approval* (above ₹50 Lakh); *Late-stage loss alert*; *Big order won* (above ₹1 Crore) — choose their people, then publish.
+- **Permissions:** Flow Builder → View / Create / Edit / Delete, and the new **Publish** (given to no role on upgrade — choose who in Roles; Super Admin always can).
+
+### How Sales behaves on day one
+
+Exactly as before. With no live flow, every hand-off, notification and gate is the built-in rule; the engine only records what happens. Switch features on one at a time (suggested: publish the hand-offs flow → the offer approval → department routing), watching each for a week.
+
+**Upgrade:** 6 migrations — run `npx prisma migrate deploy` in `Backend`; a new frontend package (`@xyflow/react`) — run `npm install` in `Frontend`, then build.
+
 ## [1.7.2] — 2026-10-28
 
 ### Changed — Sales: follow-ups close only by following up

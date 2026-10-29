@@ -288,13 +288,81 @@ function createFlowEngineService(repository) {
       return { ...v, graph: parseGraph(v.graph) };
     },
 
-    /** The run log: a flow's runs, or every run on one record. */
+    /** The run log: a flow's runs, or every run on one record — with each record's reference. */
     async runs({ flowId, entityType, entityId, skip, take }) {
       const where = {};
       if (flowId) where.flow_id = flowId;
       if (entityType) where.entity_type = entityType;
       if (entityId) where.entity_id = String(entityId);
-      return repository.findRuns({ where, skip, take });
+      const page = await repository.findRuns({ where, skip, take });
+      const flow = flowId ? await repository.findFlow(flowId) : null;
+      const catalog = flow && catalogFor(flow.module);
+      const labels = catalog?.labelsFor ? await catalog.labelsFor(page.items.filter((r) => r.entity_type === catalog.entityType).map((r) => r.entity_id)) : new Map();
+      return { ...page, items: page.items.map((r) => ({ ...r, entity_label: labels.get(String(r.entity_id)) || null })) };
+    },
+
+    /**
+     * What flows did on one record, in words — for its page: the approvals asked
+     * (waiting first) and the runs with their steps ("Assigned to Ravi",
+     * "Notified Asha", "Waiting for approval from …").
+     * @param {string} module @param {number|string} entityId
+     */
+    async activityFor(module, entityId) {
+      const catalog = catalogFor(module);
+      const id = String(entityId);
+      const [{ items: runs }, approvals] = await Promise.all([
+        repository.findRuns({ where: { entity_type: catalog.entityType, entity_id: id }, skip: 0, take: 30 }),
+        repository.findRequests({ where: { entity_type: catalog.entityType, entity_id: id }, skip: 0, take: 20 }),
+      ]);
+      const flowNames = new Map();
+      const graphs = new Map();
+      const userIds = new Set(approvals.items.flatMap((a) => [a.requested_by, a.decided_by, ...a.approvers.map((x) => x.user_id)]));
+      const detailed = [];
+      for (const r of runs) {
+        if (!flowNames.has(r.flow_id)) flowNames.set(r.flow_id, (await repository.findFlow(r.flow_id))?.name || 'a flow');
+        if (!graphs.has(r.version_id)) graphs.set(r.version_id, parseGraph((await repository.findVersion(r.version_id))?.graph));
+        const full = await repository.findRun(r.id);
+        for (const s of full.steps) {
+          const out = s.output ? JSON.parse(s.output) : {};
+          for (const u of [].concat(out.result?.handler_id || [], out.result?.sent_to || [])) userIds.add(u);
+        }
+        detailed.push(full);
+      }
+      const names = await repository.userNames([...userIds].filter(Boolean));
+      const who = (uid) => names.get(uid) || 'someone';
+      const ev = (k) => catalog.events.find((e) => e.key === k)?.label || k;
+      const say = (s, graph) => {
+        const out = s.output ? JSON.parse(s.output) : {};
+        if (s.status === 'FAILED') return `Failed: ${s.error}`;
+        switch (s.node_type) {
+          case 'if': return `If → ${out.handle === 'yes' ? 'Yes' : 'No'}`;
+          case 'stage_switch': {
+            const c = graph?.nodes.find((n) => n.id === s.node_id)?.data?.cases?.find((x) => x.id === out.handle);
+            return `Which stage? → ${c ? c.label || c.id : 'Other'}`;
+          }
+          case 'assign': return out.result?.handler_id ? `Assigned to ${who(out.result.handler_id)}` : 'Assigned by the built-in rule';
+          case 'notify': return out.result?.sent_to?.length ? `Notified ${out.result.sent_to.map(who).join(', ')}` : 'Notified nobody (no active person matched)';
+          case 'approval': {
+            const st = out.result?.status;
+            return st === 'WAITING' ? 'Held for approval' : st === 'APPROVED' ? 'Approved' : st === 'REJECTED' ? `Rejected${out.result?.comment ? ` — “${out.result.comment}”` : ''}` : 'Approval';
+          }
+          default: return null;
+        }
+      };
+      return {
+        // Waiting ones first, newest first within each.
+        approvals: [...approvals.items].sort((a, b) => (b.status === 'PENDING') - (a.status === 'PENDING'))
+          .map((a) => ({
+            id: a.id, title: a.title, status: a.status, created_at: a.created_at, decided_at: a.decided_at, comment: a.comment, consumed_at: a.consumed_at,
+            requested_by: names.get(a.requested_by) || null, decided_by: names.get(a.decided_by) || null,
+            waiting_for: a.approvers.filter((x) => x.decision === 'PENDING').map((x) => who(x.user_id)),
+          })),
+        runs: detailed.map((r) => ({
+          id: r.id, flow_id: r.flow_id, flow: flowNames.get(r.flow_id), version: r.version?.version, trigger: ev(r.trigger), status: r.status,
+          started_at: r.started_at, error: r.error,
+          steps: r.steps.map((s) => say(s, graphs.get(r.version_id))).filter(Boolean),
+        })),
+      };
     },
 
     async getRun(id) {

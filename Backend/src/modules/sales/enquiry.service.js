@@ -623,7 +623,7 @@ function createEnquiryService(repository) {
         },
       });
 
-      await salesEvent('ENQUIRY_WON', id, actor, { from: before.stage, order_value: Number(dto.order_value) });
+      await salesEvent('ENQUIRY_WON', id, actor, { from: before.stage, order_value: Number(dto.order_value), order_value_inr: paise(Number(dto.order_value) * rate) });
       await salesEvent('STAGE_ENTERED', id, actor, { from: before.stage, to: 'WON' });
       return withMoney(enquiry);
     },
@@ -772,6 +772,16 @@ function createEnquiryService(repository) {
         ...(data.handler_id !== undefined ? { handler: { from: before.handler_id, to: data.handler_id } } : {}),
       });
       return withMoney(enquiry);
+    },
+
+    /** What Flow Builder flows did on this enquiry — for anyone who can see it. */
+    async flowActivity(id, actor) {
+      const enquiry = await repository.findById(id);
+      if (!enquiry) throw new NotFoundError('Enquiry');
+      assertCanSeeEnquiry(enquiry, actor);
+      // Required here, not at the top: the engine's service loads Sales lazily too.
+      const { flowEngineService } = require('../flowengine/flowengine.service');
+      return flowEngineService.activityFor('SALES', id);
     },
 
     /**

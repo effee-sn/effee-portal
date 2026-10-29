@@ -12,6 +12,7 @@ import EnquiryReviews from '@/components/EnquiryReviews';
 import EnquiryProcess from '@/components/EnquiryProcess';
 import EnquiryAttachments from '@/components/EnquiryAttachments';
 import EnquiryQueueBanner from '@/components/EnquiryQueueBanner';
+import EnquiryFlows from '@/components/EnquiryFlows';
 import useNav from '@/lib/useNav';
 import useSalesConfig from '@/lib/useSalesConfig';
 import useCurrencies, { MoneyText, formatMoney } from '@/lib/money';
@@ -685,6 +686,7 @@ export default function EnquiryDetailPage() {
               <div id="activity">
                 <EnquiryActivities enquiryId={enquiry.id} canCreate={canLogActivity} canEdit={canEditActivity} canDelete={canDeleteActivity} owns={owns} editableAt={editableAt} users={users} stage={enquiry.stage} onChanged={load} />
               </div>
+              <EnquiryFlows enquiryId={enquiry.id} version={enquiry.updated_at} />
             </div>
           </div>
         );

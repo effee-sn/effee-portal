@@ -96,7 +96,7 @@ function DeleteRoleModal({ role, onClose, onDeleted }) {
 
 // ── Permission Matrix Panel ───────────────────────────────────────────────────
 // Known actions in display order; any other action found is shown after them.
-const ACTION_ORDER = ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE', 'FINANCE', 'EXPORT', 'REASSIGN'];
+const ACTION_ORDER = ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE', 'FINANCE', 'EXPORT', 'REASSIGN', 'PUBLISH'];
 const titleCase = (s) => (s.charAt(0) + s.slice(1).toLowerCase()).replace(/_/g, ' ');
 
 function PermissionPanel({ role, onClose, canEdit }) {
