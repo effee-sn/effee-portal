@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  BLOCK, STAGE_EVENTS, OPERATORS, OPS_FOR, NO_VALUE, LIST_VALUE, ASSIGN_TO, DEPARTMENT_PICK, ROLE_PICK, PEOPLE,
+  BLOCK, STAGE_EVENTS, OPERATORS, OPS_FOR, NO_VALUE, LIST_VALUE, ASSIGN_TO, DEPARTMENT_PICK, ROLE_PICK, PEOPLE, numberText,
 } from './flowMeta';
 
 /**
@@ -83,8 +83,9 @@ function RuleValue({ field, op, value, onChange, lookups }) {
   if (field.type === 'number') {
     return (
       <div>
-        <input type="number" value={value ?? ''} onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))} className={input} placeholder="Amount in ₹" aria-label="Value" />
-        {Number(value) > 0 && <p className={small}>₹{Number(value).toLocaleString('en-IN')}</p>}
+        <input type="number" value={value ?? ''} onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))} className={input}
+          placeholder={/_pct$/.test(field.key) ? 'Percent' : /_inr$/.test(field.key) ? 'Amount in ₹' : 'Number'} aria-label="Value" />
+        {value !== '' && value !== undefined && value !== null && <p className={small}>{numberText(field.key, value)}</p>}
       </div>
     );
   }

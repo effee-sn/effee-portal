@@ -91,7 +91,13 @@ export function waysOut(type, data) {
   }
 }
 
-const money = (v) => (v === '' || v === undefined || v === null || Number.isNaN(Number(v)) ? '…' : `₹${Number(v).toLocaleString('en-IN')}`);
+/** A number field's value in its unit: ₹ for amounts (…_inr), % for percentages (…_pct), plain otherwise (days). */
+export function numberText(key, v) {
+  if (v === '' || v === undefined || v === null || Number.isNaN(Number(v))) return '…';
+  if (/_pct$/.test(key)) return `${Number(v)}%`;
+  if (/_inr$/.test(key)) return `₹${Number(v).toLocaleString('en-IN')}`;
+  return Number(v).toLocaleString('en-IN');
+}
 
 /**
  * One line saying what a block is set to.
@@ -120,7 +126,7 @@ export function summary(type, data, catalog, names) {
         const f = catalog?.fields?.find((x) => x.key === r.field);
         if (!f) return '…';
         const v = NO_VALUE.includes(r.op) ? ''
-          : f.type === 'number' ? ` ${money(r.value)}`
+          : f.type === 'number' ? ` ${numberText(f.key, r.value)}`
             : f.type === 'stage' ? ` ${[].concat(r.value || []).map(stage).join(', ')}`
               : f.type === 'enum' ? ` ${[].concat(r.value || []).map((x) => f.options.find((o) => o.key === x)?.label || x).join(', ')}`
                 : f.type === 'ref' ? ` ${[].concat(r.value || []).map((x) => (f.ref === 'user' ? person(x) : f.ref === 'application' ? names.applications.get(Number(x)) : names.customers.get(Number(x))) || x).join(', ')}`
