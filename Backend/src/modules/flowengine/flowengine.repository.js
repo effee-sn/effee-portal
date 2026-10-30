@@ -271,6 +271,18 @@ function createFlowEngineRepository(db) {
       });
     },
 
+    /** The newest request of any status for an action on a record (keyPrefix narrows it). */
+    latestRequest({ entityType, entityId, action, keyPrefix }) {
+      return db.approvalRequest.findFirst({
+        where: {
+          entity_type: entityType, entity_id: String(entityId), action,
+          ...(keyPrefix ? { action_key: { startsWith: keyPrefix } } : {}),
+        },
+        orderBy: { id: 'desc' },
+        include: { approvers: true },
+      });
+    },
+
     /** Closes a request — only while it is still pending (true when this call closed it). */
     async closeRequest(id, { status, decidedBy, comment }) {
       const r = await db.approvalRequest.updateMany({

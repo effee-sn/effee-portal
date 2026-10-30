@@ -359,6 +359,25 @@ function createApprovalsService(repository) {
       };
     },
 
+    /**
+     * Where an action stands: its newest request, for showing on the record
+     * (waiting / approved and not used yet / rejected with the reason).
+     * @param {{ entityType: string, entityId: number|string, action: string, keyPrefix?: string }} p
+     * @returns {Promise<object|null>} null when never asked
+     */
+    async latestFor({ entityType, entityId, action, keyPrefix }) {
+      const req = await repository.latestRequest({ entityType, entityId, action, keyPrefix });
+      if (!req) return null;
+      const pending = req.approvers.filter((a) => a.decision === 'PENDING').map((a) => a.user_id);
+      const map = await repository.userNames([req.decided_by, ...pending]);
+      return {
+        id: req.id, status: req.status, action_key: req.action_key, requested_by: req.requested_by,
+        waiting_for: req.status === 'PENDING' ? joinNames(pending.map((id) => map.get(id)).filter(Boolean), req.mode) : null,
+        can_withdraw: req.status === 'PENDING' && await withdrawable(req),
+        decided_by: map.get(req.decided_by) || null, decided_at: req.decided_at, comment: req.comment, consumed_at: req.consumed_at,
+      };
+    },
+
     /** The reminder and escalation sweep (from the flow engine's loop). */
     async sweep(now = new Date()) {
       let reminded = 0; let escalated = 0;

@@ -97,6 +97,7 @@ export default function EnquiryAttachments({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy]     = useState(false);
   const [error, setError]   = useState('');
+  const [notice, setNotice] = useState(''); // e.g. "sent for approval" — information, not an error
   const [pending, setPending] = useState(null); // { kind, file, note, price } awaiting confirm
   const [priceEdit, setPriceEdit] = useState(null); // { id, value } — pricing an existing offer
   const [costEdit, setCostEdit] = useState(null); // string while entering the costing value
@@ -212,8 +213,14 @@ export default function EnquiryAttachments({
     setBusy(true); setError('');
     // Sending an offer can advance the stage (Offer / Negotiation →
     // Follow-up), so refresh the parent enquiry too, not just the file list.
+    setNotice('');
     try { await apiPost(`/sales/attachments/${a.id}/sent`, { sent: !a.sent_at }); await reload(); }
-    catch (err) { setError(err.message); load(); } // held for approval: show it waiting
+    catch (err) {
+      // Held by a Flow Builder approval: not an error — say who it went to, and show it waiting.
+      if (err.code === 'APPROVAL_REQUIRED' || err.code === 'APPROVAL_PENDING') setNotice(err.message);
+      else setError(err.message);
+      load();
+    }
     finally { setBusy(false); }
   };
 
@@ -292,6 +299,12 @@ export default function EnquiryAttachments({
   const inner = (
     <div className="space-y-4">
       {error && <div className="px-3 py-2 rounded bg-red-50 border border-red-200 text-red-600 text-xs">{error}</div>}
+      {notice && (
+        <div className="flex items-start gap-2 px-3 py-2 rounded bg-amber-50 border border-amber-200 text-amber-800 text-xs" role="status">
+          <span aria-hidden="true">⏳</span><span className="flex-1">{notice}</span>
+          <button type="button" onClick={() => setNotice('')} aria-label="Dismiss" className="text-amber-700 hover:text-amber-900 cursor-pointer">×</button>
+        </div>
+      )}
 
       {/* Hidden shared file input */}
       <input ref={fileRef} type="file" accept={ACCEPT} onChange={onFile} className="hidden" />
@@ -434,23 +447,40 @@ export default function EnquiryAttachments({
                         })()}
                         <Meta a={a} />
                         {a.sent_at && <span className="text-[11px] text-green-600">Sent to customer · {fmtDate(a.sent_at)}</span>}
-                        {a.pending_approval && (
+                        {a.approval?.state === 'WAITING' && (
                           <p className="text-[11px] text-amber-700">
-                            Waiting for approval from {a.pending_approval.waiting_for} — price locked until it is decided
-                            {canManage && a.pending_approval.can_withdraw && (
+                            Waiting for approval from {a.approval.waiting_for} — price locked until it is decided
+                            {canManage && a.approval.can_withdraw && (
                               <button type="button" onClick={() => withdrawApproval(a)} disabled={busy}
                                 className="ml-2 text-gray-600 hover:text-gray-900 hover:underline cursor-pointer">Withdraw request</button>
                             )}
                           </p>
                         )}
+                        {a.approval?.state === 'APPROVED' && (
+                          <p className="text-[11px] text-green-700">
+                            Approved by {a.approval.decided_by || '—'}{a.approval.comment ? ` — “${a.approval.comment}”` : ''} · mark it sent to send it
+                          </p>
+                        )}
+                        {a.approval?.state === 'REJECTED' && (
+                          <p className="text-[11px] text-red-600">
+                            Rejected by {a.approval.decided_by || '—'}{a.approval.comment ? `: “${a.approval.comment}”` : ''} — update the price or costing value and mark it sent again
+                          </p>
+                        )}
                       </div>
                       {canManage && (
                         <div className="flex items-center gap-2 shrink-0 pt-0.5">
-                          <button onClick={() => toggleSent(a)} disabled={busy || (!a.sent_at && a.offer_value == null)}
-                            title={!a.sent_at && a.offer_value == null ? 'Add the offer price first' : undefined}
-                            className={`text-xs cursor-pointer ${a.sent_at ? 'text-gray-500 hover:text-gray-800' : 'text-green-600 hover:text-green-800'}`}>
-                            {a.sent_at ? 'Unmark sent' : 'Mark sent'}
-                          </button>
+                          {a.approval?.state === 'WAITING' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 text-amber-800 text-xs font-medium"
+                              title={`Waiting for approval from ${a.approval.waiting_for}`}>
+                              ⏳ Waiting for approval
+                            </span>
+                          ) : (
+                            <button onClick={() => toggleSent(a)} disabled={busy || (!a.sent_at && a.offer_value == null)}
+                              title={!a.sent_at && a.offer_value == null ? 'Add the offer price first' : undefined}
+                              className={`text-xs cursor-pointer ${a.sent_at ? 'text-gray-500 hover:text-gray-800' : 'text-green-600 hover:text-green-800 font-medium'}`}>
+                              {a.sent_at ? 'Unmark sent' : a.approval?.state === 'APPROVED' ? '✓ Approved — Mark sent' : 'Mark sent'}
+                            </button>
+                          )}
                           {canDelete && owns(a) && !a.pending_approval && (
                             <button onClick={() => remove(a)} disabled={busy}
                               className="text-xs text-red-500 hover:text-red-700 cursor-pointer">Delete</button>

@@ -42,6 +42,29 @@ function createAttachmentService(repository) {
     return approvalsService.pendingFor({ entityType: 'Enquiry', entityId: offer.enquiry_id, action: 'BEFORE_OFFER_SENT', keyPrefix: `OFFER:${offer.id}:` });
   }
 
+  /**
+   * Which approval an offer's sending is asked as: this offer at these figures
+   * (changing the price or the costing value asks again).
+   */
+  function offerKey(offer, enquiry) {
+    const value = offer.offer_value === null ? null : Number(offer.offer_value);
+    const cost = enquiry.final_cost === null || enquiry.final_cost === undefined ? null : Number(enquiry.final_cost);
+    return `OFFER:${offer.id}:${value}:${cost ?? '-'}`;
+  }
+
+  /**
+   * Where an unsent offer stands with approval, for its button: WAITING,
+   * APPROVED (for its current figures, not used yet) or REJECTED (with why).
+   */
+  async function offerApprovalState(offer, enquiry) {
+    const latest = await approvalsService.latestFor({ entityType: 'Enquiry', entityId: offer.enquiry_id, action: 'BEFORE_OFFER_SENT', keyPrefix: `OFFER:${offer.id}:` });
+    if (!latest) return null;
+    if (latest.status === 'PENDING') return { ...latest, state: 'WAITING' };
+    if (latest.status === 'APPROVED' && !latest.consumed_at && latest.action_key === offerKey(offer, enquiry)) return { ...latest, state: 'APPROVED' };
+    if (latest.status === 'REJECTED') return { ...latest, state: 'REJECTED' };
+    return null;
+  }
+
   /** @throws {ConflictError} while the offer waits for approval */
   async function assertNotAwaiting(offer, what) {
     if (offer.kind !== 'OFFER') return;
@@ -59,10 +82,14 @@ function createAttachmentService(repository) {
   return {
     /** @param {number} enquiryId @param {object} [actor] */
     async listForEnquiry(enquiryId, actor) {
-      await loadEnquiry(enquiryId, actor);
+      const enquiry = await loadEnquiry(enquiryId, actor);
       const items = await repository.findByEnquiry(enquiryId);
-      // Offers waiting for approval say so (and who asked, so they can withdraw it).
-      return Promise.all(items.map(async (a) => (a.kind === 'OFFER' && !a.sent_at ? { ...a, pending_approval: await offerApproval(a) } : a)));
+      // Unsent offers say where they stand with approval (waiting / approved / rejected).
+      return Promise.all(items.map(async (a) => {
+        if (a.kind !== 'OFFER' || a.sent_at) return a;
+        const approval = await offerApprovalState(a, enquiry);
+        return { ...a, approval, pending_approval: approval?.state === 'WAITING' ? approval : null };
+      }));
     },
 
     /**
@@ -183,7 +210,7 @@ function createAttachmentService(repository) {
       // A Flow Builder "Before marking an offer sent" flow may hold it for approval
       // (this offer at these figures: changing the price or the costing value asks again).
       const guard = sent ? await checkGuard({
-        module: 'SALES', type: 'BEFORE_OFFER_SENT', entityId: before.enquiry_id, actionKey: `OFFER:${id}:${value}:${cost ?? '-'}`, actor, payload: offer,
+        module: 'SALES', type: 'BEFORE_OFFER_SENT', entityId: before.enquiry_id, actionKey: offerKey(before, enquiry), actor, payload: offer,
       }) : null;
 
       const attachment = await repository.update(id, {

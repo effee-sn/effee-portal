@@ -816,6 +816,28 @@ describe('Flow engine part 4: approvals', () => {
     });
   });
 
+  it('the offer list says where an offer stands: waiting, rejected (with why), approved for its figures', async () => {
+    await withFlow(bigOfferFlow(), async () => {
+      const big = await withOffer(6000000);
+      const stateOf = async () => (await attachmentService.listForEnquiry(big.e.id, sa())).find((x) => x.id === big.offer.id).approval;
+      assert.equal(await stateOf(), null, 'never asked');
+      await assert.rejects(attachmentService.markSent(big.offer.id, true, sa()), { code: 'APPROVAL_REQUIRED' });
+      assert.equal((await stateOf()).state, 'WAITING');
+      let [req] = await requestsFor(big.e.id);
+      await approvalsService.decide(req.id, { decision: 'REJECTED', comment: 'Too low' }, as(fx.rev));
+      const rejected = await stateOf();
+      assert.equal(rejected.state, 'REJECTED');
+      assert.equal(rejected.comment, 'Too low');
+      assert.match(rejected.decided_by, /^FlowReviewer/);
+      await assert.rejects(attachmentService.markSent(big.offer.id, true, sa()), { code: 'APPROVAL_REQUIRED' });
+      [, req] = await requestsFor(big.e.id);
+      await approvalsService.decide(req.id, { decision: 'APPROVED' }, as(fx.rev));
+      assert.equal((await stateOf()).state, 'APPROVED');
+      await attachmentService.setOfferValue(big.offer.id, 6100000, sa());
+      assert.equal(await stateOf(), null, 'approved for other figures: not this price');
+    });
+  });
+
   it('an approval holds for those figures only: changing the price asks again', async () => {
     await withFlow(bigOfferFlow(), async () => {
       const big = await withOffer(6000000);
