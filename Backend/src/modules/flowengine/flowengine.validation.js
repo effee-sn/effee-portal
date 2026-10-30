@@ -62,7 +62,7 @@ const updateFlowBody = z.object({
 const testFlowBody = z.object({
   entity_id: z.coerce.number().int().positive('Choose a record to try it on'),
   payload: z.record(z.string(), z.unknown()).optional().default({}),
-  assume: z.enum(['approved', 'rejected']).optional(),
+  assume: z.enum(['approved', 'rejected', 'withdrawn']).optional(),
 });
 
 const moveCurrentBody = z.object({

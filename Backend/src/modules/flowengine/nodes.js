@@ -253,7 +253,7 @@ const notify = Object.freeze({
 const approval = Object.freeze({
   type: 'approval',
   label: 'Approval',
-  handles: ['approved', 'rejected'],
+  handles: ['approved', 'rejected', 'withdrawn'],
   onlyFor: GUARD_EVENTS,
   isApproval: true,
   validate(data) {

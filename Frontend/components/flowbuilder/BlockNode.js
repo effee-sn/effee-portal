@@ -36,7 +36,7 @@ function BlockNode({ data, selected }) {
                 {o.label && <span className="absolute top-0.5 -translate-x-1/2 text-[10px] text-gray-500 whitespace-nowrap max-w-28 truncate" style={{ left }} title={o.label}>{o.label}</span>}
                 <Handle type="source" id={o.id} position={Position.Bottom} title={o.label || 'next'}
                   className="!w-3 !h-3 !border-2 !border-white"
-                  style={{ left, background: o.id === 'no' || o.id === 'rejected' ? '#DC2626' : o.id === 'yes' || o.id === 'approved' ? '#16A34A' : meta.color }} />
+                  style={{ left, background: o.id === 'no' || o.id === 'rejected' ? '#DC2626' : o.id === 'yes' || o.id === 'approved' ? '#16A34A' : o.id === 'withdrawn' ? '#6B7280' : meta.color }} />
               </div>
             );
           })}

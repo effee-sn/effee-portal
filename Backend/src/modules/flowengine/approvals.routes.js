@@ -16,7 +16,10 @@ router.use(authenticate);
 
 const listQuery = schemas.listQuery.extend({
   tab: z.enum(['waiting', 'decided', 'requested', 'all']).optional().default('waiting'),
-  status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(),
+  status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'WITHDRAWN']).optional(),
+});
+const withdrawBody = z.object({
+  comment: z.string().trim().max(1000).optional(),
 });
 const decideBody = z.object({
   decision: z.enum(['APPROVED', 'REJECTED']),
@@ -39,6 +42,11 @@ router.get('/:id', validate({ params: schemas.idParam }), asyncHandler(async (re
 
 router.post('/:id/decide', validate({ params: schemas.idParam, body: decideBody }), asyncHandler(async (req, res) => {
   ApiResponse.ok(res, await approvalsService.decide(req.params.id, req.body, requestContext(req)));
+}));
+
+// The person who asked (or a Super Admin) takes a waiting request back.
+router.post('/:id/withdraw', validate({ params: schemas.idParam, body: withdrawBody }), asyncHandler(async (req, res) => {
+  ApiResponse.ok(res, await approvalsService.withdraw(req.params.id, req.body, requestContext(req)));
 }));
 
 module.exports = router;

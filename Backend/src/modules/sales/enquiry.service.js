@@ -10,6 +10,7 @@ const { NEXT_STEP, enquiryRows, money, sentence, stageName } = require('./emailD
 const { salesEvent } = require('./flowEvents');
 const { resolveAssignment } = require('../flowengine/assignment');
 const { checkGuard } = require('../flowengine/guard');
+const { approvalsService } = require('../flowengine/approvals.service');
 const { NotFoundError, ConflictError, ValidationError, ForbiddenError, buildSearchClause } = require('../../core');
 const {
   canReassign, assertFlowWork, assertDetailsEdit, assertCanWin, assertCanLose, enquiryScope, assertCanSeeEnquiry,
@@ -878,6 +879,11 @@ function createEnquiryService(repository) {
       assertFlowWork(before, actor, 'enter the costing value');
       if (!COSTED_STAGES.includes(before.stage)) {
         throw new ConflictError('The costing value is entered from Costing Review on');
+      }
+      // An offer waiting for approval was asked on this cost — it stays until decided or withdrawn.
+      const waiting = await approvalsService.pendingFor({ entityType: 'Enquiry', entityId: id, action: 'BEFORE_OFFER_SENT' });
+      if (waiting) {
+        throw new ConflictError(`An offer is waiting for approval from ${waiting.waiting_for} — withdraw the request first to change the costing value`);
       }
 
       const enquiry = await repository.update(id, { final_cost: dto.final_cost, updated_by: actor?.id ?? null });

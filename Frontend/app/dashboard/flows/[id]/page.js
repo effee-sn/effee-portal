@@ -116,7 +116,7 @@ function TestPanel({ flowId, event, catalog, onResult, onClose }) {
       {guard && (
         <label className="block text-xs text-gray-600">At the Approval
           <select value={assume} onChange={(e) => setAssume(e.target.value)} className="ams-input w-full text-sm mt-1">
-            <option value="">Stop there</option><option value="approved">Assume approved</option><option value="rejected">Assume rejected</option>
+            <option value="">Stop there</option><option value="approved">Assume approved</option><option value="rejected">Assume rejected</option><option value="withdrawn">Assume withdrawn</option>
           </select>
         </label>
       )}

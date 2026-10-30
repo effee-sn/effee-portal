@@ -11,6 +11,7 @@ const { money } = require('./emailDetails');
 const { marginOf } = require('./margin');
 const { salesEvent } = require('./flowEvents');
 const { checkGuard } = require('../flowengine/guard');
+const { approvalsService } = require('../flowengine/approvals.service');
 const { NotFoundError, BadRequestError, ConflictError, ValidationError } = require('../../core');
 const { assertFullEdit, assertFlowWork, assertOwnItem, assertCanSeeEnquiry } = require('./access');
 
@@ -36,6 +37,18 @@ function createAttachmentService(repository) {
   }
 
 
+  /** The approval waiting on this offer being sent, if any (its figures are locked meanwhile). */
+  function offerApproval(offer) {
+    return approvalsService.pendingFor({ entityType: 'Enquiry', entityId: offer.enquiry_id, action: 'BEFORE_OFFER_SENT', keyPrefix: `OFFER:${offer.id}:` });
+  }
+
+  /** @throws {ConflictError} while the offer waits for approval */
+  async function assertNotAwaiting(offer, what) {
+    if (offer.kind !== 'OFFER') return;
+    const waiting = await offerApproval(offer);
+    if (waiting) throw new ConflictError(`Waiting for approval from ${waiting.waiting_for} — withdraw the request first to ${what}`);
+  }
+
   /** Best-effort removal of an orphaned upload when the request is rejected. */
   function discard(file) {
     if (file?.path) fs.promises.unlink(file.path).catch(() => {});
@@ -45,7 +58,9 @@ function createAttachmentService(repository) {
     /** @param {number} enquiryId @param {object} [actor] */
     async listForEnquiry(enquiryId, actor) {
       await loadEnquiry(enquiryId, actor);
-      return repository.findByEnquiry(enquiryId);
+      const items = await repository.findByEnquiry(enquiryId);
+      // Offers waiting for approval say so (and who asked, so they can withdraw it).
+      return Promise.all(items.map(async (a) => (a.kind === 'OFFER' && !a.sent_at ? { ...a, pending_approval: await offerApproval(a) } : a)));
     },
 
     /**
@@ -243,6 +258,7 @@ function createAttachmentService(repository) {
       if (before.sent_at && before.offer_value !== null) {
         throw new ConflictError('The price of a sent offer is fixed — upload a revised offer instead');
       }
+      await assertNotAwaiting(before, 'change the price');
 
       const data = { offer_value: value, updated_by: actor?.id ?? null };
       if (before.sent_at && before.offer_fx_rate === null) {
@@ -275,6 +291,7 @@ function createAttachmentService(repository) {
       if (before.superseded_at) {
         throw new ConflictError('Previous versions are kept as history and cannot be deleted');
       }
+      await assertNotAwaiting(before, 'delete it');
 
       await repository.softDelete(id, actor?.id ?? null);
 

@@ -14,6 +14,7 @@ import { TableSkeleton } from '@/components/Skeleton';
  * with a comment; the person who asked is told, and an approved action goes
  * through when they do it again. Also what you decided, what you asked for,
  * and — for a Super Admin — everything (they may decide any pending one).
+ * The person who asked can withdraw a waiting request (with a reason).
  */
 
 const TABS = [
@@ -25,6 +26,7 @@ const STATUS = {
   PENDING: { label: 'Waiting', cls: 'bg-amber-50 text-amber-800' },
   APPROVED: { label: 'Approved', cls: 'bg-green-50 text-green-700' },
   REJECTED: { label: 'Rejected', cls: 'bg-red-50 text-red-700' },
+  WITHDRAWN: { label: 'Withdrawn', cls: 'bg-gray-100 text-gray-600' },
 };
 const when = (d) => (d ? new Date(d).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '');
 
@@ -34,12 +36,22 @@ function Card({ a, me, onDecided, highlight }) {
   const [error, setError] = useState('');
   const mine = a.approvers.find((x) => x.user_id === me?.id);
   const canDecide = a.status === 'PENDING' && ((mine && mine.decision === 'PENDING') || me?.is_system);
+  const canWithdraw = a.status === 'PENDING' && (a.requested_by === me?.id || me?.is_system);
+  const [withdrawing, setWithdrawing] = useState(false);
 
   const decide = async (decision) => {
     if (busy) return;
     if (decision === 'REJECTED' && !comment.trim()) { setError('Say why it is rejected — the person who asked sees it.'); return; }
     setBusy(true); setError('');
     try { await apiPost(`/approvals/${a.id}/decide`, { decision, comment: comment.trim() || undefined }); onDecided(); }
+    catch (err) { setError(err.message); setBusy(false); }
+  };
+
+  const withdraw = async () => {
+    if (busy) return;
+    if (!comment.trim()) { setError('Say why it is withdrawn — the approvers see it.'); return; }
+    setBusy(true); setError('');
+    try { await apiPost(`/approvals/${a.id}/withdraw`, { comment: comment.trim() }); onDecided(); }
     catch (err) { setError(err.message); setBusy(false); }
   };
 
@@ -79,10 +91,30 @@ function Card({ a, me, onDecided, highlight }) {
 
       {a.status !== 'PENDING' && (
         <p className="text-sm text-gray-700">
-          {a.status === 'APPROVED' ? 'Approved' : 'Rejected'} by {a.decided_by_name || '—'} · {when(a.decided_at)}
+          {s.label} by {a.decided_by_name || '—'} · {when(a.decided_at)}
           {a.comment ? <span className="text-gray-600"> — “{a.comment}”</span> : null}
           {a.status === 'APPROVED' && (a.consumed_at ? ' · done' : ' · not done yet')}
         </p>
+      )}
+
+      {canWithdraw && !canDecide && (
+        <div className="space-y-2 pt-1 border-t border-gray-100">
+          {withdrawing ? (
+            <>
+              <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} maxLength={1000} autoFocus
+                placeholder="Why are you withdrawing it? (the approvers see this)" className="ams-input w-full text-sm mt-2" aria-label="Reason" />
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={withdraw} disabled={busy} className="btn-danger px-3 py-1.5 text-sm cursor-pointer">Withdraw request</button>
+                <button type="button" onClick={() => { setWithdrawing(false); setError(''); }} disabled={busy} className="text-sm text-gray-500 hover:text-gray-800 cursor-pointer">Cancel</button>
+              </div>
+            </>
+          ) : (
+            <button type="button" onClick={() => setWithdrawing(true)} className="mt-2 text-sm text-gray-600 hover:text-gray-900 hover:underline cursor-pointer">
+              Withdraw this request…
+            </button>
+          )}
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </div>
       )}
 
       {canDecide && (
@@ -94,6 +126,10 @@ function Card({ a, me, onDecided, highlight }) {
             <button type="button" onClick={() => decide('APPROVED')} disabled={busy}
               className="px-3 py-1.5 text-sm font-medium text-white rounded cursor-pointer disabled:opacity-50" style={{ backgroundColor: '#15803D' }}>Approve</button>
             <button type="button" onClick={() => decide('REJECTED')} disabled={busy} className="btn-danger px-3 py-1.5 text-sm cursor-pointer">Reject</button>
+            {canWithdraw && a.requested_by === me?.id && (
+              <button type="button" onClick={withdraw} disabled={busy} title="Take your own request back (the comment is the reason)"
+                className="text-sm text-gray-600 hover:text-gray-900 hover:underline cursor-pointer">Withdraw</button>
+            )}
             {a.link && <Link href={a.link} className="ml-auto text-sm text-[var(--ams-primary)] hover:underline">Open the enquiry</Link>}
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}

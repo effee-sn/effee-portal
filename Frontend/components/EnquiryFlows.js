@@ -15,6 +15,7 @@ const STATUS = {
   PENDING: { label: 'Waiting', cls: 'bg-amber-50 text-amber-800' },
   APPROVED: { label: 'Approved', cls: 'bg-green-50 text-green-700' },
   REJECTED: { label: 'Rejected', cls: 'bg-red-50 text-red-700' },
+  WITHDRAWN: { label: 'Withdrawn', cls: 'bg-gray-100 text-gray-600' },
 };
 const RUN = { DONE: 'text-gray-500', WAITING: 'text-amber-700', FAILED: 'text-red-600', RUNNING: 'text-gray-500' };
 const when = (d) => new Date(d).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
@@ -53,7 +54,7 @@ export default function EnquiryFlows({ enquiryId, version }) {
                     <p className="text-xs text-gray-500">
                       Asked by {a.requested_by || '—'} · {when(a.created_at)}
                       {a.status === 'PENDING' && a.waiting_for.length ? ` · waiting for ${a.waiting_for.join(', ')}` : ''}
-                      {a.status !== 'PENDING' && a.decided_by ? ` · ${a.status === 'APPROVED' ? 'approved' : 'rejected'} by ${a.decided_by}` : ''}
+                      {a.status !== 'PENDING' && a.decided_by ? ` · ${s.label.toLowerCase()} by ${a.decided_by}` : ''}
                       {a.comment ? ` — “${a.comment}”` : ''}
                       {a.status === 'APPROVED' ? (a.consumed_at ? ' · done' : ' · can go ahead now') : ''}
                     </p>

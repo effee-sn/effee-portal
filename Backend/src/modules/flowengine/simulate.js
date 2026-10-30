@@ -20,7 +20,7 @@ const MAX_STEPS = 200;
  * @param {object} p.graph            the draft
  * @param {number|string} p.entityId  the record to try it on
  * @param {object} [p.payload]        the event's details (e.g. { to: 'COSTING' }, { offer_value_inr })
- * @param {'approved'|'rejected'} [p.assume]  which way an Approval goes (default: stop there)
+ * @param {'approved'|'rejected'|'withdrawn'} [p.assume]  which way an Approval goes (default: stop there)
  */
 async function simulate({ flow, graph, entityId, payload = {}, assume }, repository = flowEngineRepository) {
   const helpers = createHelpers(repository);
@@ -74,7 +74,7 @@ async function simulate({ flow, graph, entityId, payload = {}, assume }, reposit
       if (toAdmins) ids = await repository.superAdminIds();
       step.text = `Would hold it for approval by ${(await people(ids)).join(node.data.mode === 'ALL' ? ' and ' : ' or ')}${toAdmins ? ' (nobody named is active — the Super Admins)' : ''}`;
       handle = assume || null;
-      if (assume) step.text += ` — trying the ${assume === 'approved' ? 'Approved' : 'Rejected'} way`;
+      if (assume) step.text += ` — trying the ${{ approved: 'Approved', rejected: 'Rejected', withdrawn: 'Withdrawn' }[assume]} way`;
     } else {
       const r = await t.run(ctx, node);
       handle = r?.handle ?? null;

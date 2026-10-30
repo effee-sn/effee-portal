@@ -85,7 +85,7 @@ export function waysOut(type, data) {
   switch (type) {
     case 'trigger': case 'assign': case 'notify': return [{ id: 'next', label: '' }];
     case 'if': return [{ id: 'yes', label: 'Yes' }, { id: 'no', label: 'No' }];
-    case 'approval': return [{ id: 'approved', label: 'Approved' }, { id: 'rejected', label: 'Rejected' }];
+    case 'approval': return [{ id: 'approved', label: 'Approved' }, { id: 'rejected', label: 'Rejected' }, { id: 'withdrawn', label: 'Withdrawn' }];
     case 'stage_switch': return [...(data?.cases || []).map((c) => ({ id: c.id, label: c.label || 'Group' })), { id: 'other', label: 'Other' }];
     default: return [];
   }

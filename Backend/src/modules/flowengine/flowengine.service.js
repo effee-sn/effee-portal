@@ -121,7 +121,7 @@ function createFlowEngineService(repository) {
      * Test run of the draft on one record: what each block would do — nothing
      * is sent, assigned or asked.
      * @param {number} id
-     * @param {{ entity_id: number|string, payload?: object, assume?: 'approved'|'rejected' }} dto
+     * @param {{ entity_id: number|string, payload?: object, assume?: 'approved'|'rejected'|'withdrawn' }} dto
      */
     async test(id, dto) {
       const flow = await load(id);
@@ -348,7 +348,7 @@ function createFlowEngineService(repository) {
           case 'notify': return out.result?.sent_to?.length ? `Notified ${out.result.sent_to.map(who).join(', ')}` : 'Notified nobody (no active person matched)';
           case 'approval': {
             const st = out.result?.status;
-            return st === 'WAITING' ? 'Held for approval' : st === 'APPROVED' ? 'Approved' : st === 'REJECTED' ? `Rejected${out.result?.comment ? ` — “${out.result.comment}”` : ''}` : 'Approval';
+            return st === 'WAITING' ? 'Held for approval' : st === 'APPROVED' ? 'Approved' : st === 'REJECTED' || st === 'WITHDRAWN' ? `${st === 'REJECTED' ? 'Rejected' : 'Withdrawn'}${out.result?.comment ? ` — “${out.result.comment}”` : ''}` : 'Approval';
           }
           default: return null;
         }

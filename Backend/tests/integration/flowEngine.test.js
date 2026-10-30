@@ -745,6 +745,60 @@ describe('Flow engine part 4: approvals', () => {
     });
   });
 
+  it('while an offer waits for approval its price, its deletion and the costing value are locked', async () => {
+    await withFlow(bigOfferFlow(), async () => {
+      const big = await withOffer(6000000);
+      await enquiryService.setFinalCost(big.e.id, { final_cost: 5000000 }, sa());
+      await assert.rejects(attachmentService.markSent(big.offer.id, true, sa()), { code: 'APPROVAL_REQUIRED' });
+      await assert.rejects(attachmentService.setOfferValue(big.offer.id, 6500000, sa()), (err) => err.name === 'ConflictError' && /Waiting for approval from FlowReviewer/.test(err.message));
+      await assert.rejects(attachmentService.remove(big.offer.id, sa()), /withdraw the request first to delete it/);
+      await assert.rejects(enquiryService.setFinalCost(big.e.id, { final_cost: 4000000 }, sa()), /withdraw the request first to change the costing value/);
+      const listed = (await attachmentService.listForEnquiry(big.e.id, sa())).find((x) => x.id === big.offer.id);
+      assert.match(listed.pending_approval.waiting_for, /^FlowReviewer/);
+
+      // Rejected → unlocked for rework.
+      const [req] = await requestsFor(big.e.id);
+      await approvalsService.decide(req.id, { decision: 'REJECTED', comment: 'Too low' }, as(fx.rev));
+      await attachmentService.setOfferValue(big.offer.id, 6500000, sa());
+      await enquiryService.setFinalCost(big.e.id, { final_cost: 4000000 }, sa());
+    });
+  });
+
+  it('withdraw: only the person who asked (or a Super Admin), with a reason; it unlocks and runs the Withdrawn way', async () => {
+    const graph = bigOfferFlow();
+    graph.nodes.push(n('gone', 'notify', { to: [{ who: 'PERSON', id: fx.other.id }], title: 'Withdrawn {{ref_no}}', message: '{{approval.decided_by}}: {{approval.comment}} ({{approval.status}})' }));
+    graph.edges.push(a('ok', 'gone', 'withdrawn'));
+    await withFlow(graph, async () => {
+      const big = await withOffer(6000000);
+      await assert.rejects(attachmentService.markSent(big.offer.id, true, as(fx.internal)), { code: 'APPROVAL_REQUIRED' });
+      const [req] = await requestsFor(big.e.id);
+      assert.equal(req.requested_by, fx.internal.id);
+      await assert.rejects(approvalsService.withdraw(req.id, { comment: 'x' }, as(fx.rev)), { name: 'ForbiddenError' }, 'the approver cannot withdraw');
+      await assert.rejects(approvalsService.withdraw(req.id, {}, as(fx.internal)), { name: 'ConflictError' }, 'a reason is needed');
+      const out = await approvalsService.withdraw(req.id, { comment: 'Wrong price typed' }, as(fx.internal));
+      assert.equal(out.status, 'WITHDRAWN');
+      assert.equal((await approvalsService.list({ tab: 'waiting' }, as(fx.rev))).items.some((x) => x.id === req.id), false, 'gone from the approver\'s list');
+      await assert.rejects(approvalsService.decide(req.id, { decision: 'APPROVED' }, as(fx.rev)), /already withdrawn/);
+      const told = await prisma.notification.findFirst({ where: { type: 'FLOW_NOTIFY', user_id: fx.other.id, entity_id: String(big.e.id) } });
+      assert.equal(told.title, `Withdrawn ${big.e.ref_no}`);
+      assert.match(told.body, /FlowInternal.*: Wrong price typed \(Withdrawn\)/);
+      assert.equal(await prisma.notification.count({ where: { type: 'FLOW_APPROVAL_DECIDED', user_id: fx.rev.id, entity_id: String(big.e.id) } }), 0, 'the flow told people instead');
+      await attachmentService.setOfferValue(big.offer.id, 6100000, as(fx.internal)); // unlocked
+    });
+  });
+
+  it('withdraw with nothing on the Withdrawn way: the approvers still get one notice', async () => {
+    await withFlow(bigOfferFlow(), async () => {
+      const big = await withOffer(6000000);
+      await assert.rejects(attachmentService.markSent(big.offer.id, true, sa()), { code: 'APPROVAL_REQUIRED' });
+      const [req] = await requestsFor(big.e.id);
+      await approvalsService.withdraw(req.id, { comment: 'Customer asked to hold' }, sa());
+      const notice = await prisma.notification.findFirst({ where: { type: 'FLOW_APPROVAL_DECIDED', user_id: fx.rev.id, entity_id: String(big.e.id) } });
+      assert.match(notice.title, /^Withdrawn: Mark offer sent/);
+      assert.match(notice.body, /no action needed/);
+    });
+  });
+
   it('an approval holds for those figures only: changing the price asks again', async () => {
     await withFlow(bigOfferFlow(), async () => {
       const big = await withOffer(6000000);

@@ -65,13 +65,21 @@ function createApprovalsService(repository) {
     });
   }
 
-  /** Continues the flow down the decided way (Approved / Rejected), in its run log. */
+  const WAY = Object.freeze({ APPROVED: 'approved', REJECTED: 'rejected', WITHDRAWN: 'withdrawn' });
+  const STATUS_LABEL = Object.freeze({ APPROVED: 'Approved', REJECTED: 'Rejected', WITHDRAWN: 'Withdrawn' });
+
+  /**
+   * Continues the flow down the decided way (Approved / Rejected / Withdrawn),
+   * in its run log.
+   * @returns {Promise<boolean>} whether that way out leads anywhere
+   */
   async function continueFlow(req, outcome, decidedBy, comment) {
     try {
       const version = await repository.findVersion(req.version_id);
       const graph = parseGraph(version?.graph);
-      if (!graph) return;
-      const handle = outcome === 'APPROVED' ? 'approved' : 'rejected';
+      if (!graph) return false;
+      const handle = WAY[outcome];
+      const start = nextNodes(graph, req.node_id, handle);
       let runId = req.run_id;
       if (!runId) {
         runId = (await repository.createRun({
@@ -91,15 +99,17 @@ function createApprovalsService(repository) {
         mode: 'run',
         module: req.module,
         event,
-        facts: facts && { ...facts, 'approval.decided_by': decider || null, 'approval.comment': comment || null, 'approval.status': outcome === 'APPROVED' ? 'Approved' : 'Rejected' },
+        facts: facts && { ...facts, 'approval.decided_by': decider || null, 'approval.comment': comment || null, 'approval.status': STATUS_LABEL[outcome] },
         flow: { id: req.flow_id, name: flowRow?.name || 'flow' },
         version: { id: version.id, version: version.version },
         helpers,
         emit: (e) => emitFlowEvent({ ...e, depth: 1, originFlowId: req.flow_id }),
       };
-      await executeRun({ repository, nodeType, runId, graph, ctx, start: nextNodes(graph, req.node_id, handle) });
+      await executeRun({ repository, nodeType, runId, graph, ctx, start });
+      return start.length > 0;
     } catch (err) {
       logger.error({ err, requestId: req.id }, 'Flow could not continue after the approval decision');
+      return false;
     }
   }
 
@@ -262,6 +272,72 @@ function createApprovalsService(repository) {
       }
       await continueFlow(closed, outcome, actor.id, comment);
       return shape(await repository.findRequest(id));
+    },
+
+    /**
+     * The person who asked (or a Super Admin) takes a waiting request back —
+     * e.g. a wrong figure was sent for approval. It closes as Withdrawn, the
+     * held action is free to be reworked, and the flow goes down its Withdrawn
+     * way. With nothing on that way, the approvers still get one notice so
+     * they don't go looking for it.
+     * @param {number} id
+     * @param {{ comment?: string }} dto
+     */
+    async withdraw(id, dto, actor) {
+      const req = await repository.findRequest(id);
+      if (!req) throw new NotFoundError('Approval');
+      if (req.status !== 'PENDING') throw new ConflictError(`This approval was already ${req.status.toLowerCase()}`);
+      if (req.requested_by !== actor?.id && !actor?.is_system) {
+        throw new ForbiddenError('Only the person who asked for this approval can withdraw it');
+      }
+      const comment = (dto.comment || '').trim() || null;
+      if (!comment) throw new ConflictError('Say why it is withdrawn — the approvers see it');
+
+      if (!(await repository.closeRequest(req.id, { status: 'WITHDRAWN', decidedBy: actor.id, comment }))) {
+        throw new ConflictError('Someone decided this approval just now — reload to see it');
+      }
+      await auditService.record({
+        action: auditService.Action.UPDATE, entity: 'ApprovalRequest', entityId: req.id, actor,
+        changes: { status: { from: 'PENDING', to: 'WITHDRAWN' }, comment },
+      });
+      const closed = await repository.findRequest(id);
+      const handled = await continueFlow(closed, 'WITHDRAWN', actor.id, comment);
+      if (!handled) {
+        const [who] = await names([actor.id]);
+        const approvers = closed.approvers.filter((a) => a.decision === 'PENDING' && a.user_id !== actor.id).map((a) => a.user_id);
+        if (approvers.length) {
+          await notificationService.notify({
+            userIds: approvers,
+            type: notificationService.Type.FLOW_APPROVAL_DECIDED,
+            title: `Withdrawn: ${closed.title}`,
+            body: `${who || 'The requester'} withdrew it — no action needed. “${comment}”`,
+            entityType: closed.entity_type,
+            entityId: closed.entity_id,
+            link: closed.link || LINK(closed.id),
+            actorId: actor.id,
+            email: {
+              eyebrow: 'Withdrawn',
+              intro: `${who || 'The requester'} withdrew “${closed.title}” — no action needed from you.`,
+              details: [['Withdrawn by', who], ['Reason', comment]],
+              actionLabel: 'Open in the portal',
+            },
+          });
+        }
+      }
+      return shape(await repository.findRequest(id));
+    },
+
+    /**
+     * The pending request holding an action, if any — what locks the figures
+     * it was asked on (e.g. an offer's price while its approval waits).
+     * @param {{ entityType: string, entityId: number|string, action: string, keyPrefix?: string }} p
+     * @returns {Promise<{ id: number, waiting_for: string }|null>}
+     */
+    async pendingFor({ entityType, entityId, action, keyPrefix }) {
+      const req = await repository.pendingRequest({ entityType, entityId, action, keyPrefix });
+      if (!req) return null;
+      const who = await names(req.approvers.filter((a) => a.decision === 'PENDING').map((a) => a.user_id));
+      return { id: req.id, action_key: req.action_key, requested_by: req.requested_by, waiting_for: joinNames(who, req.mode) };
     },
 
     /** The reminder and escalation sweep (from the flow engine's loop). */

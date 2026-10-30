@@ -195,13 +195,25 @@ export default function EnquiryAttachments({
     return { margin, pct: pct(margin, offer), markup: pct(margin, cost) };
   };
   const needsPrice = pending?.kind === 'OFFER' && (pending.price === '' || Number(pending.price) < 0);
+  // An offer waiting for approval locks its price and the costing value it was asked on.
+  const awaiting = offers.find((a) => a.pending_approval);
+
+  const withdrawApproval = async (a) => {
+    const reason = window.prompt(`Withdraw the approval request for Rev ${a.version}?\nWhy? (the approvers see this)`);
+    if (reason === null) return;
+    if (!reason.trim()) { setError('Say why it is withdrawn — the approvers see it.'); return; }
+    setBusy(true); setError('');
+    try { await apiPost(`/approvals/${a.pending_approval.id}/withdraw`, { comment: reason.trim() }); await reload(); }
+    catch (err) { setError(err.message); }
+    finally { setBusy(false); }
+  };
 
   const toggleSent = async (a) => {
     setBusy(true); setError('');
     // Sending an offer can advance the stage (Offer / Negotiation →
     // Follow-up), so refresh the parent enquiry too, not just the file list.
     try { await apiPost(`/sales/attachments/${a.id}/sent`, { sent: !a.sent_at }); await reload(); }
-    catch (err) { setError(err.message); }
+    catch (err) { setError(err.message); load(); } // held for approval: show it waiting
     finally { setBusy(false); }
   };
 
@@ -358,7 +370,10 @@ export default function EnquiryAttachments({
                       {cost != null
                         ? <span className="font-semibold text-gray-900 tabular-nums">{money(cost)}</span>
                         : <span className="text-xs text-gray-400">Not entered — offers show their margin once it is</span>}
-                      {canCost && (
+                      {canCost && awaiting && (
+                        <span className="text-[11px] text-amber-700">Locked while Rev {awaiting.version} waits for approval</span>
+                      )}
+                      {canCost && !awaiting && (
                         <button type="button" onClick={() => setCostEdit(cost != null ? String(cost) : '')}
                           className="text-xs text-gray-500 hover:text-gray-800 hover:underline cursor-pointer">
                           {cost != null ? 'Edit' : 'Enter'}
@@ -399,7 +414,7 @@ export default function EnquiryAttachments({
                             {a.offer_value != null
                               ? <span className="font-semibold text-gray-900 tabular-nums">{money(a.offer_value)}</span>
                               : <span className="text-xs text-amber-700">No price recorded</span>}
-                            {canManage && (!a.sent_at || a.offer_value == null) && (
+                            {canManage && !a.pending_approval && (!a.sent_at || a.offer_value == null) && (
                               <button type="button" onClick={() => setPriceEdit({ id: a.id, value: a.offer_value != null ? String(a.offer_value) : '' })}
                                 className="ml-2 text-xs text-gray-500 hover:text-gray-800 hover:underline cursor-pointer">
                                 {a.offer_value != null ? 'Edit price' : 'Add price'}
@@ -419,6 +434,15 @@ export default function EnquiryAttachments({
                         })()}
                         <Meta a={a} />
                         {a.sent_at && <span className="text-[11px] text-green-600">Sent to customer · {fmtDate(a.sent_at)}</span>}
+                        {a.pending_approval && (
+                          <p className="text-[11px] text-amber-700">
+                            Waiting for approval from {a.pending_approval.waiting_for} — price locked until it is decided
+                            {canManage && (
+                              <button type="button" onClick={() => withdrawApproval(a)} disabled={busy}
+                                className="ml-2 text-gray-600 hover:text-gray-900 hover:underline cursor-pointer">Withdraw request</button>
+                            )}
+                          </p>
+                        )}
                       </div>
                       {canManage && (
                         <div className="flex items-center gap-2 shrink-0 pt-0.5">
@@ -427,7 +451,7 @@ export default function EnquiryAttachments({
                             className={`text-xs cursor-pointer ${a.sent_at ? 'text-gray-500 hover:text-gray-800' : 'text-green-600 hover:text-green-800'}`}>
                             {a.sent_at ? 'Unmark sent' : 'Mark sent'}
                           </button>
-                          {canDelete && owns(a) && (
+                          {canDelete && owns(a) && !a.pending_approval && (
                             <button onClick={() => remove(a)} disabled={busy}
                               className="text-xs text-red-500 hover:text-red-700 cursor-pointer">Delete</button>
                           )}
