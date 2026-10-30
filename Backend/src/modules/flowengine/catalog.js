@@ -27,7 +27,7 @@ const SALES_STAGES = Object.freeze([
 const SALES_EVENTS = Object.freeze([
   { key: 'ENQUIRY_CREATED', label: 'Enquiry created', payload: [] },
   { key: 'STAGE_ENTERED', label: 'Enquiry enters a stage', payload: ['from', 'to', 'auto'] },
-  { key: 'OFFER_SENT', label: 'Offer marked sent', payload: ['attachment_id', 'offer_value', 'offer_value_inr', 'version'] },
+  { key: 'OFFER_SENT', label: 'Offer marked sent', payload: ['attachment_id', 'offer_value', 'offer_value_inr', 'version', 'cost_value', 'cost_value_inr', 'margin', 'margin_inr', 'margin_pct', 'markup_pct'] },
   { key: 'ENQUIRY_WON', label: 'Enquiry won', payload: ['from', 'order_value', 'order_value_inr'] },
   { key: 'ENQUIRY_LOST', label: 'Enquiry lost', payload: ['from', 'lost_reason', 'lost_to'] },
   { key: 'ENQUIRY_REOPENED', label: 'Enquiry reopened', payload: ['from'] },
@@ -38,7 +38,7 @@ const SALES_EVENTS = Object.freeze([
   // "Before …" events: a flow on one of these runs at the moment of the action
   // and can hold it for approval (guard: true). Not reported to the outbox.
   { key: 'BEFORE_STAGE_MOVE', label: 'Before moving to a stage', guard: true, action: 'Move to', payload: ['from', 'to'] },
-  { key: 'BEFORE_OFFER_SENT', label: 'Before marking an offer sent', guard: true, action: 'Mark offer sent', payload: ['attachment_id', 'offer_value', 'offer_value_inr', 'version'] },
+  { key: 'BEFORE_OFFER_SENT', label: 'Before marking an offer sent', guard: true, action: 'Mark offer sent', payload: ['attachment_id', 'offer_value', 'offer_value_inr', 'version', 'cost_value', 'cost_value_inr', 'margin', 'margin_inr', 'margin_pct', 'markup_pct'] },
   { key: 'BEFORE_WON', label: 'Before marking won', guard: true, action: 'Mark won', payload: ['from', 'order_value', 'order_value_inr'] },
   { key: 'BEFORE_LOST', label: 'Before marking lost', guard: true, action: 'Mark lost', payload: ['from', 'lost_reason', 'lost_to'] },
   { key: 'BEFORE_REOPEN', label: 'Before reopening', guard: true, action: 'Reopen', payload: ['from'] },
@@ -59,6 +59,7 @@ const SALES_FIELDS = Object.freeze([
   { key: 'value_inr', label: 'Value (₹) — order once won, else expected', type: 'number' },
   { key: 'expected_value_inr', label: 'Expected value (₹)', type: 'number' },
   { key: 'order_value_inr', label: 'Order value (₹)', type: 'number' },
+  { key: 'final_cost_inr', label: 'Costing value (₹)', type: 'number' },
   { key: 'temperature', label: 'Temperature', type: 'enum', options: opt([['HOT', 'Hot'], ['WARM', 'Warm'], ['COLD', 'Cold']]) },
   { key: 'application_id', label: 'Application', type: 'ref', ref: 'application' },
   { key: 'customer_id', label: 'Customer', type: 'ref', ref: 'customer' },
@@ -67,6 +68,11 @@ const SALES_FIELDS = Object.freeze([
   { key: 'event.from', label: 'Came from stage', type: 'stage', events: ['STAGE_ENTERED', 'ENQUIRY_WON', 'ENQUIRY_LOST', 'ENQUIRY_REOPENED', 'BEFORE_STAGE_MOVE', 'BEFORE_WON', 'BEFORE_LOST', 'BEFORE_REOPEN'] },
   { key: 'event.to', label: 'Entered stage', type: 'stage', events: ['STAGE_ENTERED', 'BEFORE_STAGE_MOVE'] },
   { key: 'event.offer_value_inr', label: 'Offer value (₹)', type: 'number', events: ['OFFER_SENT', 'BEFORE_OFFER_SENT'] },
+  // Margin over the final costing value (empty when no costing value is entered).
+  { key: 'event.cost_value_inr', label: 'Costing value (₹)', type: 'number', events: ['OFFER_SENT', 'BEFORE_OFFER_SENT'] },
+  { key: 'event.margin_inr', label: 'Margin (₹)', type: 'number', events: ['OFFER_SENT', 'BEFORE_OFFER_SENT'] },
+  { key: 'event.margin_pct', label: 'Margin % of offer', type: 'number', events: ['OFFER_SENT', 'BEFORE_OFFER_SENT'] },
+  { key: 'event.markup_pct', label: 'Margin % on cost', type: 'number', events: ['OFFER_SENT', 'BEFORE_OFFER_SENT'] },
   { key: 'event.order_value_inr', label: 'Order value (₹)', type: 'number', events: ['ENQUIRY_WON', 'BEFORE_WON'] },
   { key: 'event.lost_reason', label: 'Lost reason', type: 'text', events: ['ENQUIRY_LOST', 'BEFORE_LOST'] },
   { key: 'event.kind', label: 'Document kind', type: 'enum', events: ['DOCUMENT_UPLOADED'], options: opt([
@@ -84,6 +90,7 @@ const SALES_FIELDS = Object.freeze([
 const SALES_WORDS = Object.freeze([
   'ref_no', 'title', 'customer', 'stage_label', 'owner', 'handler', 'application', 'value_inr',
   'event.from', 'event.to', 'event.lost_reason', 'event.lost_to', 'event.offer_value_inr', 'event.order_value_inr', 'event.days',
+  'event.cost_value_inr', 'event.margin_inr', 'event.margin_pct', 'event.markup_pct',
   // After an Approval: who decided and what they said.
   'approval.decided_by', 'approval.comment', 'approval.status',
 ]);

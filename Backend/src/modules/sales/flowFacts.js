@@ -22,7 +22,7 @@ async function loadEnquiryFacts(id) {
     where: { id: Number(id), deleted_at: null },
     select: {
       id: true, ref_no: true, title: true, stage: true, enquiry_type: true, is_refurbishment: true, currency_code: true,
-      expected_value: true, order_value: true, order_fx_rate: true, application_id: true, customer_id: true,
+      expected_value: true, order_value: true, order_fx_rate: true, final_cost: true, application_id: true, customer_id: true,
       owner_id: true, handler_id: true, created_by: true, current_temperature: true,
       customer: { select: { name: true } }, owner: { select: { name: true } }, handler: { select: { name: true } },
       application: { select: { name: true } },
@@ -45,6 +45,7 @@ async function loadEnquiryFacts(id) {
     value_inr: e.stage === 'WON' && order !== null ? order : expected,
     expected_value_inr: expected,
     order_value_inr: order,
+    final_cost_inr: e.final_cost === null ? null : paise(toInr(e.final_cost, e.currency_code, rates)),
     application_id: e.application_id,
     application: e.application?.name ?? null,
     customer_id: e.customer_id,

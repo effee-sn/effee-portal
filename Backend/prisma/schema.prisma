@@ -955,6 +955,10 @@ model Enquiry {
   expected_value Decimal?  @db.Decimal(14, 2)
   expected_close DateTime?
 
+  // The final costing value (in the enquiry's currency), entered from Costing
+  // Review on: each offer's margin is its price minus this. Optional.
+  final_cost Decimal? @db.Decimal(14, 2)
+
   // The heat-treatment application (Annealing, Hardening, …) from the
   // configurable list in Sales → Configuration.
   application    SalesApplication? @relation(fields: [application_id], references: [id])

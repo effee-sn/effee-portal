@@ -6,11 +6,11 @@ const { asyncHandler, validate } = require('../../core');
 
 const {
   listEnquiriesQuery, enquiryIdParam, createEnquiryBody, updateEnquiryBody,
-  winEnquiryBody, loseEnquiryBody, reassignEnquiryBody, assignFromQueueBody,
+  winEnquiryBody, loseEnquiryBody, reassignEnquiryBody, assignFromQueueBody, finalCostBody,
 } = require('./enquiry.validation');
 const {
   getEnquiries, getEnquiryById, getEnquiryReadiness, createEnquiry, updateEnquiry,
-  winEnquiry, loseEnquiry, reopenEnquiry, reassignEnquiry, deleteEnquiry, getTeamQueue, assignFromQueue, getEnquiryFlows,
+  winEnquiry, loseEnquiry, reopenEnquiry, reassignEnquiry, deleteEnquiry, getTeamQueue, assignFromQueue, getEnquiryFlows, setFinalCost,
 } = require('./enquiry.controller');
 
 const activityValidation = require('./activity.validation');
@@ -165,6 +165,14 @@ router.post(
   authorize('SALES_REASSIGN'),
   validate({ params: enquiryIdParam }),
   asyncHandler(reopenEnquiry)
+);
+
+// The final costing value — the holder's work from Costing Review on (checked in the service).
+router.put(
+  '/enquiries/:id/final-cost',
+  authorize(...SEE),
+  validate({ params: enquiryIdParam, body: finalCostBody }),
+  asyncHandler(setFinalCost)
 );
 
 // Reassign has its own permission, granted per role.

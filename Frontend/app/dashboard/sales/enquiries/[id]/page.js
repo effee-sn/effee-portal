@@ -19,6 +19,9 @@ import useCurrencies, { MoneyText, formatMoney } from '@/lib/money';
 import { useDisplayCurrency } from '@/lib/displayCurrency';
 import { DetailPageSkeleton } from '@/components/Skeleton';
 
+// Stages where the final costing value can be entered (matches the API).
+const COSTED_STAGES = ['COSTING_REVIEW', 'OFFER_RELEASED', 'NEGOTIATION'];
+
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
 const toDateInput = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : '');
@@ -679,7 +682,8 @@ export default function EnquiryDetailPage() {
                 </div>
               </Section>
               <EnquiryAttachments enquiryId={enquiry.id} canEdit={canFlow} canManage={canFlow} canDelete={canManage} owns={owns} kinds={visibleDocKinds(enquiry.stage, enquiry.is_refurbishment)} onChanged={load}
-                currencyCode={enquiry.currency_code} currencySymbol={enquiry.currency?.symbol} />
+                currencyCode={enquiry.currency_code} currencySymbol={enquiry.currency?.symbol}
+                finalCost={enquiry.final_cost} canCost={canFlow && COSTED_STAGES.includes(enquiry.stage)} />
             </div>
             <div className="space-y-4 min-w-0">
               {showReviews && <EnquiryReviews enquiryId={enquiry.id} canCreate={canLogActivity} canEdit={canEditActivity} canDelete={canDeleteActivity} owns={owns} editableAt={editableAt} users={users} onChanged={load} />}

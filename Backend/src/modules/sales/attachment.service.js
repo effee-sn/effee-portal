@@ -8,6 +8,7 @@ const { auditService } = require('../audit/audit.service');
 const { notificationService } = require('../notification/notification.service');
 const { loadRates } = require('../master/fx');
 const { money } = require('./emailDetails');
+const { marginOf } = require('./margin');
 const { salesEvent } = require('./flowEvents');
 const { checkGuard } = require('../flowengine/guard');
 const { NotFoundError, BadRequestError, ConflictError, ValidationError } = require('../../core');
@@ -152,10 +153,20 @@ function createAttachmentService(repository) {
       // The rupee rate the offer goes out at — locked on it, and what a flow compares.
       const rate = sent ? ((await loadRates())[enquiry.currency_code] ?? 1) : null;
       const value = before.offer_value === null ? null : Number(before.offer_value);
-      const offer = { attachment_id: id, offer_value: value, offer_value_inr: value === null ? null : Math.round(value * rate * 100) / 100, version: before.version };
-      // A Flow Builder "Before marking an offer sent" flow may hold it for approval (this offer only).
+      const inr = (v) => (v === null ? null : Math.round(v * rate * 100) / 100);
+      // Its margin over the final costing value, when one is entered (all null otherwise).
+      const cost = enquiry.final_cost === null || enquiry.final_cost === undefined ? null : Number(enquiry.final_cost);
+      const m = marginOf(value, cost);
+      const offer = {
+        attachment_id: id, offer_value: value, offer_value_inr: inr(value), version: before.version,
+        cost_value: cost, cost_value_inr: sent ? inr(cost) : null,
+        margin: m?.margin ?? null, margin_inr: m && sent ? inr(m.margin) : null,
+        margin_pct: m?.margin_pct ?? null, markup_pct: m?.markup_pct ?? null,
+      };
+      // A Flow Builder "Before marking an offer sent" flow may hold it for approval
+      // (this offer at these figures: changing the price or the costing value asks again).
       const guard = sent ? await checkGuard({
-        module: 'SALES', type: 'BEFORE_OFFER_SENT', entityId: before.enquiry_id, actionKey: `OFFER:${id}`, actor, payload: offer,
+        module: 'SALES', type: 'BEFORE_OFFER_SENT', entityId: before.enquiry_id, actionKey: `OFFER:${id}:${value}:${cost ?? '-'}`, actor, payload: offer,
       }) : null;
 
       const attachment = await repository.update(id, {

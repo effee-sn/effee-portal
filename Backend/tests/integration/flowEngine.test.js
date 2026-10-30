@@ -666,9 +666,10 @@ describe('Flow engine part 4: approvals', () => {
       assert.equal(await stageOf(big.e.id), 'OFFER_RELEASED', 'held');
       const [req] = await requestsFor(big.e.id);
       assert.equal(req.status, 'PENDING');
-      assert.equal(req.action_key, `OFFER:${big.offer.id}`);
+      assert.equal(req.action_key, `OFFER:${big.offer.id}:7200000:-`);
       assert.match(req.title, /^Mark offer sent — ENQ-/);
       assert.match(req.summary, /Offer: Rev 1 · ₹72,00,000/);
+      assert.match(req.summary, /Costing value: not entered/);
       assert.deepEqual(req.approvers.map((x) => x.user_id), [fx.rev.id]);
       assert.equal(await prisma.notification.count({ where: { user_id: fx.rev.id, type: 'FLOW_APPROVAL', entity_id: String(big.e.id) } }), 1);
       const waitingRun = await prisma.flowRun.findUnique({ where: { id: req.run_id }, include: { steps: { orderBy: { id: 'asc' } } } });
@@ -706,6 +707,52 @@ describe('Flow engine part 4: approvals', () => {
       assert.equal(told.title, `Offer for ${big.e.ref_no} not approved`);
       assert.match(told.body, /FlowReviewer .*: Price too low for this spec/);
       await assert.rejects(attachmentService.markSent(big.offer.id, true, sa()), { code: 'APPROVAL_REQUIRED' }, 'asks again');
+      assert.equal((await requestsFor(big.e.id)).length, 2);
+    });
+  });
+
+  it('costing value: the holder sets it from Costing Review on; the margin reaches flows and the approval card', async () => {
+    const lowMargin = {
+      nodes: [
+        n('start', 'trigger', { event: 'BEFORE_OFFER_SENT' }),
+        n('low', 'if', { rules: [{ field: 'event.margin_pct', op: 'lt', value: 20 }] }),
+        n('ok', 'approval', { to: [{ who: 'PERSON', id: fx.rev.id }] }),
+        n('end', 'end', {}),
+      ],
+      edges: [a('start', 'low'), a('low', 'ok', 'yes'), a('low', 'end', 'no'), a('ok', 'end', 'approved')],
+    };
+    await withFlow(lowMargin, async () => {
+      const { e, offer } = await withOffer(1000000);
+      await assert.rejects(enquiryService.setFinalCost(e.id, { final_cost: 900000 }, as(fx.other)), { name: 'ForbiddenError' }, 'not the holder');
+      await enquiryService.setFinalCost(e.id, { final_cost: 900000 }, sa());
+      assert.equal(Number((await prisma.enquiry.findUnique({ where: { id: e.id } })).final_cost), 900000);
+
+      // 10% margin of offer (11.1% on cost) → under 20% → held, with the figures on the card.
+      await assert.rejects(attachmentService.markSent(offer.id, true, sa()), { code: 'APPROVAL_REQUIRED' });
+      const [req] = await requestsFor(e.id);
+      assert.match(req.summary, /Costing value: ₹9,00,000/);
+      assert.match(req.summary, /Offer: Rev 1 · ₹10,00,000/);
+      assert.match(req.summary, /Margin: ₹1,00,000 — 10% of offer · 11.1% on cost/);
+      await approvalsService.decide(req.id, { decision: 'REJECTED', comment: 'Margin too thin' }, as(fx.rev));
+      assert.equal(await stageOf(e.id), 'OFFER_RELEASED', 'rejected: stays at Offer to rework');
+
+      // Reworked: a better price clears the rule, no new request needed.
+      await attachmentService.setOfferValue(offer.id, 1200000, sa());
+      await attachmentService.markSent(offer.id, true, sa());
+      assert.equal(await stageOf(e.id), 'FOLLOW_UP');
+      assert.equal((await requestsFor(e.id)).length, 1);
+      await assert.rejects(enquiryService.setFinalCost(e.id, { final_cost: 1 }, sa()), { name: 'ConflictError' }, 'only Costing Review → Negotiation');
+    });
+  });
+
+  it('an approval holds for those figures only: changing the price asks again', async () => {
+    await withFlow(bigOfferFlow(), async () => {
+      const big = await withOffer(6000000);
+      await assert.rejects(attachmentService.markSent(big.offer.id, true, sa()), { code: 'APPROVAL_REQUIRED' });
+      const [req] = await requestsFor(big.e.id);
+      await approvalsService.decide(req.id, { decision: 'APPROVED', comment: 'ok' }, as(fx.rev));
+      await attachmentService.setOfferValue(big.offer.id, 5500000, sa());
+      await assert.rejects(attachmentService.markSent(big.offer.id, true, sa()), { code: 'APPROVAL_REQUIRED' }, 'new figures: asked again');
       assert.equal((await requestsFor(big.e.id)).length, 2);
     });
   });

@@ -78,6 +78,11 @@ const assignFromQueue = async (req, res) => {
   ApiResponse.ok(res, await enquiryService.assignFromQueue(req.params.id, req.body, requestContext(req)));
 };
 
+/** `PUT /sales/enquiries/:id/final-cost` */
+const setFinalCost = async (req, res) => {
+  ApiResponse.ok(res, await enquiryService.setFinalCost(req.params.id, req.body, requestContext(req)));
+};
+
 /** `DELETE /sales/enquiries/:id` */
 const deleteEnquiry = async (req, res) => {
   await enquiryService.remove(req.params.id, requestContext(req));
@@ -97,5 +102,6 @@ module.exports = {
   deleteEnquiry,
   getTeamQueue,
   assignFromQueue,
+  setFinalCost,
   getEnquiryFlows,
 };

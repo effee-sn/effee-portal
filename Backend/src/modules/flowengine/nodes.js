@@ -192,6 +192,7 @@ function render(text, facts, event, stageLabel = (s) => s) {
     const v = factOf(key, facts, event);
     if (v === null || v === undefined || v === '') return '—';
     if (/_inr$/.test(key)) return `₹${Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+    if (/_pct$/.test(key)) return `${v}%`;
     if (key === 'event.from' || key === 'event.to') return stageLabel(v);
     return String(v);
   });

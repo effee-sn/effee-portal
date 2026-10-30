@@ -88,7 +88,10 @@ export default function EnquiryAttachments({
   // edit) — defaults to canEdit.
   // owns(doc): only the uploader replaces or deletes a document (admins: any).
   // canDelete: Sales → Edit (defaults to canManage).
+  // finalCost: the enquiry's final costing value — each offer shows its margin
+  // over it. canCost: may enter it (the holder, Costing Review → Negotiation).
   enquiryId, canEdit, canManage = canEdit, canDelete = canManage, owns = () => true, kinds = ALL_KINDS, bare = false, onChanged, currencyCode = 'INR', currencySymbol,
+  finalCost = null, canCost = false,
 }) {
   const [items, setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
@@ -96,6 +99,7 @@ export default function EnquiryAttachments({
   const [error, setError]   = useState('');
   const [pending, setPending] = useState(null); // { kind, file, note, price } awaiting confirm
   const [priceEdit, setPriceEdit] = useState(null); // { id, value } — pricing an existing offer
+  const [costEdit, setCostEdit] = useState(null); // string while entering the costing value
   const [openHistory, setOpenHistory] = useState({}); // kind -> bool
   const fileRef = useRef(null);
   const pendingKind = useRef(null);
@@ -170,7 +174,26 @@ export default function EnquiryAttachments({
     finally { setBusy(false); }
   };
 
+  const saveCost = async () => {
+    setBusy(true); setError('');
+    try {
+      await apiPut(`/sales/enquiries/${enquiryId}/final-cost`, { final_cost: costEdit === '' ? null : costEdit });
+      setCostEdit(null);
+      onChanged?.();
+    } catch (err) { setError(err.message); }
+    finally { setBusy(false); }
+  };
+
   const money = (v) => formatMoney(v, currencyCode, currencySymbol);
+  const cost = finalCost == null ? null : Number(finalCost);
+  /** An offer's margin over the costing value (same sums as the API's sales/margin.js). */
+  const marginOf = (offerValue) => {
+    if (offerValue == null || cost == null) return null;
+    const offer = Number(offerValue);
+    const margin = Math.round((offer - cost) * 100) / 100;
+    const pct = (part, whole) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : null);
+    return { margin, pct: pct(margin, offer), markup: pct(margin, cost) };
+  };
   const needsPrice = pending?.kind === 'OFFER' && (pending.price === '' || Number(pending.price) < 0);
 
   const toggleSent = async (a) => {
@@ -317,6 +340,34 @@ export default function EnquiryAttachments({
                     className="text-xs font-medium text-blue-600 hover:underline cursor-pointer">＋ Add offer revision</button>
                 )}
               </div>
+              {(canCost || cost != null) && (
+                <div className="mb-2 rounded-md bg-gray-50 border border-gray-200 px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-sm">
+                  <span className="text-xs font-medium text-gray-600">Final costing value</span>
+                  {costEdit !== null ? (
+                    <>
+                      <input type="number" min="0" step="0.01" inputMode="decimal" value={costEdit} autoFocus
+                        onChange={(e) => setCostEdit(e.target.value)}
+                        aria-label="Final costing value" placeholder={currencyCode} className="w-36 text-sm border border-gray-300 rounded px-2 py-0.5 bg-white" />
+                      <button type="button" onClick={saveCost} disabled={busy}
+                        className="text-xs font-medium text-[var(--ams-primary)] hover:underline cursor-pointer disabled:opacity-40">Save</button>
+                      <button type="button" onClick={() => setCostEdit(null)} disabled={busy}
+                        className="text-xs text-gray-500 hover:text-gray-800 cursor-pointer">Cancel</button>
+                    </>
+                  ) : (
+                    <>
+                      {cost != null
+                        ? <span className="font-semibold text-gray-900 tabular-nums">{money(cost)}</span>
+                        : <span className="text-xs text-gray-400">Not entered — offers show their margin once it is</span>}
+                      {canCost && (
+                        <button type="button" onClick={() => setCostEdit(cost != null ? String(cost) : '')}
+                          className="text-xs text-gray-500 hover:text-gray-800 hover:underline cursor-pointer">
+                          {cost != null ? 'Edit' : 'Enter'}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
               {pendingUpload('OFFER')}
               {offers.length === 0 ? (
                 <p className="text-sm text-gray-300">No offers uploaded yet.</p>
@@ -356,6 +407,16 @@ export default function EnquiryAttachments({
                             )}
                           </p>
                         )}
+                        {(() => {
+                          const m = marginOf(a.offer_value);
+                          if (!m) return null;
+                          const pct = (v) => (v == null ? '—' : `${v}%`);
+                          return (
+                            <p className={`text-xs tabular-nums ${m.margin < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                              Margin {money(m.margin)} · {pct(m.pct)} of offer · {pct(m.markup)} on cost
+                            </p>
+                          );
+                        })()}
                         <Meta a={a} />
                         {a.sent_at && <span className="text-[11px] text-green-600">Sent to customer · {fmtDate(a.sent_at)}</span>}
                       </div>

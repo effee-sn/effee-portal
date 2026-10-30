@@ -98,13 +98,25 @@ async function checkGuard({ module, type, entityId, payload = {}, actionKey, act
   return pass;
 }
 
+/** An offer's figures for its approver: costing value, offer, and the margin between them. */
+function offerRows(payload, money) {
+  const pct = (v) => (v === null || v === undefined ? '—' : `${v}%`);
+  return [
+    ['Costing value', money(payload.cost_value_inr) ?? 'not entered'],
+    ['Offer', `Rev ${payload.version ?? '—'} · ${money(payload.offer_value_inr) ?? '—'}`],
+    ...(payload.margin_inr === null || payload.margin_inr === undefined ? [] : [
+      ['Margin', `${money(payload.margin_inr)} — ${pct(payload.margin_pct)} of offer · ${pct(payload.markup_pct)} on cost`],
+    ]),
+  ];
+}
+
 /** What approvers read: the record, and the figures that matter for this action. */
 function summaryOf(catalog, facts, type, payload, stage) {
   const money = (v) => (v === null || v === undefined ? null : `₹${Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`);
   const rows = [
     ...catalog.emailRows(facts),
     ['Value', money(facts.value_inr)],
-    ...(type === 'BEFORE_OFFER_SENT' ? [['Offer', `Rev ${payload.version ?? '—'} · ${money(payload.offer_value_inr) ?? '—'}`]] : []),
+    ...(type === 'BEFORE_OFFER_SENT' ? offerRows(payload, money) : []),
     ...(type === 'BEFORE_WON' ? [['Order value', money(payload.order_value_inr)]] : []),
     ...(type === 'BEFORE_LOST' ? [['Reason', payload.lost_reason], ['Went to', payload.lost_to]] : []),
     ...(type === 'BEFORE_STAGE_MOVE' ? [['Move', `${stage(payload.from)} → ${stage(payload.to)}`]] : []),

@@ -96,6 +96,11 @@ const winEnquiryBody = z.object({
   won_terms:       optionalText(5000),
 });
 
+// The final costing value; null (or empty) clears it.
+const finalCostBody = z.object({
+  final_cost: z.preprocess((x) => (x === "" ? null : x), z.coerce.number().nonnegative("Must be zero or more").max(999999999999, "Too large").nullable()),
+});
+
 const loseEnquiryBody = z.object({
   lost_reason: z.string().trim().min(1, 'A reason is required').max(1000),
   lost_to:     optionalText(191),
@@ -118,6 +123,7 @@ const assignFromQueueBody = z.object({
 
 module.exports = {
   assignFromQueueBody,
+  finalCostBody,
   TYPES,
   ACTIVE_STAGES,
   ALL_STAGES,

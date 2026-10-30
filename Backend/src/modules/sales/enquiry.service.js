@@ -21,6 +21,9 @@ function stageLabel(stage) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/** Stages where the final costing value can be entered (Costing Review on). */
+const COSTED_STAGES = Object.freeze(['COSTING_REVIEW', 'OFFER_RELEASED', 'NEGOTIATION']);
+
 /**
  * Which role holds the enquiry at a given stage. FIELD = the initiator who
  * raised it; INTERNAL = the configured Internal Sales handler. The initiator
@@ -857,6 +860,31 @@ function createEnquiryService(repository) {
         changes: { handler_id: { from: before.handler_id, to: dto.user_id }, assigned_from_queue: deptId },
       });
       await salesEvent('ENQUIRY_REASSIGNED', id, actor, { handler: { from: before.handler_id, to: dto.user_id }, from_queue: deptId });
+      return withMoney(enquiry);
+    },
+
+    /**
+     * The final costing value (enquiry currency) — set from Costing Review on
+     * by whoever holds the enquiry; each offer's margin is its price minus this.
+     * Optional: nothing waits on it. `null` clears it.
+     * @param {number} id
+     * @param {{ final_cost: number|null }} dto
+     * @param {import('../../core/http/requestContext').ActorContext} actor
+     */
+    async setFinalCost(id, dto, actor) {
+      const before = await repository.findById(id);
+      if (!before) throw new NotFoundError('Enquiry');
+      assertCanSeeEnquiry(before, actor);
+      assertFlowWork(before, actor, 'enter the costing value');
+      if (!COSTED_STAGES.includes(before.stage)) {
+        throw new ConflictError('The costing value is entered from Costing Review on');
+      }
+
+      const enquiry = await repository.update(id, { final_cost: dto.final_cost, updated_by: actor?.id ?? null });
+      await auditService.record({
+        action: auditService.Action.UPDATE, entity: 'Enquiry', entityId: id, actor,
+        changes: { final_cost: { from: before.final_cost === null ? null : Number(before.final_cost), to: dto.final_cost } },
+      });
       return withMoney(enquiry);
     },
 

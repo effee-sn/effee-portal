@@ -52,6 +52,7 @@ function createEnquiryRepository(db) {
     description: true,
     expected_value: true,
     expected_close: true,
+    final_cost: true,
     won_at: true,
     order_no: true,
     order_value: true,
