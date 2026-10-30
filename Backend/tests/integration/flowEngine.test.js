@@ -918,6 +918,122 @@ describe('Flow engine part 4: approvals', () => {
       await assert.rejects(approvalsService.list({ tab: 'all' }, as(fx.rev)), { name: 'ForbiddenError' });
     });
   });
+
+  // ── found in real-user testing ───────────────────────────────────────────
+  it('quick repeated clicks raise one request and tell the approver once', async () => {
+    await withFlow(bigOfferFlow(), async () => {
+      const big = await withOffer(6000000);
+      const tries = await Promise.allSettled([1, 2, 3].map(() => attachmentService.markSent(big.offer.id, true, sa())));
+      assert.ok(tries.every((t) => t.status === 'rejected' && ['APPROVAL_REQUIRED', 'APPROVAL_PENDING'].includes(t.reason.code)), 'all held');
+      assert.equal((await requestsFor(big.e.id)).length, 1);
+      assert.equal(await prisma.notification.count({ where: { user_id: fx.rev.id, type: 'FLOW_APPROVAL', entity_id: String(big.e.id) } }), 1);
+    });
+  });
+
+  it('after approval a double click sends the offer once and moves the stage once', async () => {
+    await withFlow(bigOfferFlow(), async () => {
+      const big = await withOffer(6000000);
+      await assert.rejects(attachmentService.markSent(big.offer.id, true, sa()), { code: 'APPROVAL_REQUIRED' });
+      const [req] = await requestsFor(big.e.id);
+      await approvalsService.decide(req.id, { decision: 'APPROVED' }, as(fx.rev));
+      const tries = await Promise.allSettled([attachmentService.markSent(big.offer.id, true, sa()), attachmentService.markSent(big.offer.id, true, sa())]);
+      assert.equal(tries.filter((t) => t.status === 'fulfilled').length, 1, 'one goes through');
+      assert.equal(await prisma.enquiryStageEvent.count({ where: { enquiry_id: big.e.id, to_stage: 'FOLLOW_UP' } }), 1);
+      await assert.rejects(attachmentService.markSent(big.offer.id, true, sa()), /already marked as sent/);
+    });
+  });
+
+  it('an offer cannot be priced at 0, and one recorded at 0 cannot be sent', async () => {
+    const { offerValueBody } = require('../../src/modules/sales/attachment.validation');
+    assert.equal(offerValueBody.safeParse({ offer_value: 0 }).success, false);
+    const big = await withOffer(100);
+    await prisma.enquiryAttachment.update({ where: { id: big.offer.id }, data: { offer_value: 0 } }); // an old record
+    await assert.rejects(attachmentService.markSent(big.offer.id, true, sa()), /more than 0/);
+  });
+
+  it('pausing a flow cancels what it is waiting on: unlocked, approvers and asker told', async () => {
+    const f = await newFlow(bigOfferFlow(), 'pause cancels');
+    await flowEngineService.publish(f.id, admin(fx.admin));
+    const big = await withOffer(6000000);
+    await assert.rejects(attachmentService.markSent(big.offer.id, true, sa()), { code: 'APPROVAL_REQUIRED' });
+    const [req] = await requestsFor(big.e.id);
+    const paused = await flowEngineService.pause(f.id, admin(fx.admin));
+    assert.equal(paused.cancelled_requests, 1);
+    const after = await prisma.approvalRequest.findUnique({ where: { id: req.id } });
+    assert.equal(after.status, 'CANCELLED');
+    assert.equal(after.open_key, null);
+    assert.equal((await prisma.flowRun.findUnique({ where: { id: req.run_id } })).status, 'CANCELLED');
+    assert.ok(await prisma.notification.findFirst({ where: { user_id: fx.rev.id, entity_id: String(big.e.id), title: { startsWith: 'Cancelled:' } } }));
+    await attachmentService.setOfferValue(big.offer.id, 6100000, sa()); // unlocked
+    await assert.rejects(approvalsService.decide(req.id, { decision: 'APPROVED' }, as(fx.rev)), /already cancelled/);
+  });
+
+  it('re-publishing without the Approval block cancels its requests; keeping it keeps them', async () => {
+    const f = await newFlow(bigOfferFlow(), 'republish');
+    await flowEngineService.publish(f.id, admin(fx.admin));
+    try {
+      const big = await withOffer(6000000);
+      await assert.rejects(attachmentService.markSent(big.offer.id, true, sa()), { code: 'APPROVAL_REQUIRED' });
+      const [req] = await requestsFor(big.e.id);
+      assert.equal((await flowEngineService.publish(f.id, admin(fx.admin))).cancelled_requests, 0, 'same blocks: it carries on');
+      const g = bigOfferFlow();
+      g.nodes = g.nodes.map((x) => (x.id === 'ok' ? { ...x, id: 'ok2' } : x));
+      g.edges = g.edges.map((e) => ({ ...e, source: e.source === 'ok' ? 'ok2' : e.source, target: e.target === 'ok' ? 'ok2' : e.target }));
+      await flowEngineService.update(f.id, { graph: g }, admin(fx.admin));
+      assert.equal((await flowEngineService.publish(f.id, admin(fx.admin))).cancelled_requests, 1);
+      assert.equal((await prisma.approvalRequest.findUnique({ where: { id: req.id } })).status, 'CANCELLED');
+    } finally { await flowEngineService.pause(f.id, admin(fx.admin)); }
+  });
+
+  it('everyone must approve: two approving at the same moment close it; an escalated Super Admin decides outright', async () => {
+    const graph = { nodes: [n('start', 'trigger', { event: 'BEFORE_STAGE_MOVE', stages: ['REVIEW'] }), n('ok', 'approval', { to: [{ who: 'PERSON', id: fx.d1.id }, { who: 'PERSON', id: fx.d2.id }], mode: 'ALL' }), n('end', 'end', {})], edges: [a('start', 'ok'), a('ok', 'end', 'approved')] };
+    await withFlow(graph, async () => {
+      const e = await newEnquiry();
+      await upload(e.id, 'FORMAT_PDF');
+      await assert.rejects(enquiryService.update(e.id, { stage: 'REVIEW' }, as(fx.field)), { code: 'APPROVAL_REQUIRED' });
+      const [req] = await requestsFor(e.id);
+      await Promise.all([approvalsService.decide(req.id, { decision: 'APPROVED' }, as(fx.d1)), approvalsService.decide(req.id, { decision: 'APPROVED' }, as(fx.d2))]);
+      assert.equal((await prisma.approvalRequest.findUnique({ where: { id: req.id } })).status, 'APPROVED', 'not stuck waiting');
+
+      const e2 = await newEnquiry();
+      await upload(e2.id, 'FORMAT_PDF');
+      await assert.rejects(enquiryService.update(e2.id, { stage: 'REVIEW' }, as(fx.field)), { code: 'APPROVAL_REQUIRED' });
+      const [req2] = await requestsFor(e2.id);
+      await approvalsService.decide(req2.id, { decision: 'APPROVED' }, as(fx.d1)); // d2 never answers
+      await prisma.approvalRequest.update({ where: { id: req2.id }, data: { created_at: new Date(Date.now() - 25 * 36e5) } });
+      await prisma.user.update({ where: { id: fx.other.id }, data: { role_id: 1 } }); // a Super Admin to escalate to
+      try {
+        await approvalsService.sweep();
+        const escalated = await prisma.approvalRequest.findUnique({ where: { id: req2.id }, include: { approvers: true } });
+        assert.ok(escalated.approvers.some((x) => x.user_id === fx.other.id && x.is_escalation));
+        const out = await approvalsService.decide(req2.id, { decision: 'APPROVED' }, { ...as(fx.other), is_system: true });
+        assert.equal(out.status, 'APPROVED', 'the escalated Super Admin settles it');
+      } finally { await prisma.user.update({ where: { id: fx.other.id }, data: { role_id: fx.role.id } }); }
+    });
+  });
+
+  it('a Won approval is for that order value, at that stage', async () => {
+    const graph = { nodes: [n('start', 'trigger', { event: 'BEFORE_WON' }), n('ok', 'approval', { to: [{ who: 'PERSON', id: fx.rev.id }] }), n('end', 'end', {})], edges: [a('start', 'ok'), a('ok', 'end', 'approved')] };
+    await withFlow(graph, async () => {
+      const big = await withOffer(6000000);
+      await attachmentService.markSent(big.offer.id, true, sa());
+      const win = (v) => enquiryService.win(big.e.id, { order_value: v, order_no: 'PO-1' }, sa());
+      await assert.rejects(win(6000000), { code: 'APPROVAL_REQUIRED' });
+      const [req] = (await requestsFor(big.e.id)).filter((x) => x.action === 'BEFORE_WON');
+      assert.equal(req.action_key, 'WON:FOLLOW_UP:6000000:INR');
+      await approvalsService.decide(req.id, { decision: 'APPROVED' }, as(fx.rev));
+      await assert.rejects(win(1), { code: 'APPROVAL_REQUIRED' }, 'another value needs its own approval');
+      await win(6000000);
+      assert.equal(await stageOf(big.e.id), 'WON');
+    });
+  });
+
+  it('“Before moving to a stage” only accepts stages people move into; Check warns about self-approval', async () => {
+    const auto = await newFlow({ nodes: [n('start', 'trigger', { event: 'BEFORE_STAGE_MOVE', stages: ['NEGOTIATION', 'COSTING'] }), n('ok', 'approval', { to: [{ who: 'HANDLER' }] }), n('end', 'end', {})], edges: [a('start', 'ok'), a('ok', 'end', 'approved')] }, 'auto stage');
+    const c = await flowEngineService.check(auto.id);
+    assert.ok(c.errors.some((x) => /Negotiation: not moved into by hand/.test(x.message)), JSON.stringify(c.errors));
+    assert.ok(c.warnings.some((x) => x.nodeId === 'ok' && /the holder/.test(x.message)));
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

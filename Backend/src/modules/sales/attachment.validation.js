@@ -11,7 +11,7 @@ const attachmentIdParam = schemas.idParam;
 // Offer price, in the enquiry's currency.
 const optionalPrice = z.preprocess(
   (v) => (v === '' || v === null ? undefined : v),
-  z.coerce.number({ invalid_type_error: 'Offer price must be a number' }).nonnegative('Must be zero or more').optional()
+  z.coerce.number({ invalid_type_error: 'Offer price must be a number' }).positive('The offer price must be more than 0').optional()
 );
 
 /** Multipart body — validated after multer has populated req.body. */
@@ -24,7 +24,7 @@ const uploadBody = z.object({
 
 const offerValueBody = z.object({
   offer_value: z.coerce.number({ required_error: 'Offer price is required', invalid_type_error: 'Offer price must be a number' })
-    .nonnegative('Must be zero or more'),
+    .positive('The offer price must be more than 0'),
 });
 
 const sentBody = z.object({

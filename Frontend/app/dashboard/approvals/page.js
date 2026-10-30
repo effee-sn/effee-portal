@@ -27,6 +27,7 @@ const STATUS = {
   APPROVED: { label: 'Approved', cls: 'bg-green-50 text-green-700' },
   REJECTED: { label: 'Rejected', cls: 'bg-red-50 text-red-700' },
   WITHDRAWN: { label: 'Withdrawn', cls: 'bg-gray-100 text-gray-600' },
+  CANCELLED: { label: 'Cancelled', cls: 'bg-gray-100 text-gray-600' },
 };
 const when = (d) => (d ? new Date(d).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '');
 
@@ -35,7 +36,8 @@ function Card({ a, me, onDecided, highlight }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const mine = a.approvers.find((x) => x.user_id === me?.id);
-  const canDecide = a.status === 'PENDING' && ((mine && mine.decision === 'PENDING') || me?.is_system);
+  // A Super Admin may decide in the approvers' place — but not twice.
+  const canDecide = a.status === 'PENDING' && (mine ? mine.decision === 'PENDING' : Boolean(me?.is_system));
   const canWithdraw = a.can_withdraw && (a.requested_by === me?.id || me?.is_system);
   const [withdrawing, setWithdrawing] = useState(false);
 
@@ -91,7 +93,7 @@ function Card({ a, me, onDecided, highlight }) {
 
       {a.status !== 'PENDING' && (
         <p className="text-sm text-gray-700">
-          {s.label} by {a.decided_by_name || '—'} · {when(a.decided_at)}
+          {s.label}{a.decided_by_name ? ` by ${a.decided_by_name}` : ''} · {when(a.decided_at)}
           {a.comment ? <span className="text-gray-600"> — “{a.comment}”</span> : null}
           {a.status === 'APPROVED' && (a.consumed_at ? ' · done' : ' · not done yet')}
         </p>

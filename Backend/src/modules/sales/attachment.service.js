@@ -194,6 +194,11 @@ function createAttachmentService(repository) {
       if (sent && before.offer_value === null) {
         throw new ConflictError('Add the offer price before marking this offer as sent');
       }
+      // An offer recorded at ₹0 before prices had to be positive cannot go out (it would skip any margin check).
+      if (sent && Number(before.offer_value) <= 0) throw new ConflictError('Set the offer price (more than 0) before marking this offer as sent');
+      // Already so: nothing to do (a second click must not re-send, re-rate or re-notify).
+      if (sent && before.sent_at) throw new ConflictError('This offer is already marked as sent');
+      if (!sent && !before.sent_at) throw new ConflictError('This offer is not marked as sent');
       // The rupee rate the offer goes out at — locked on it, and what a flow compares.
       const rate = sent ? ((await loadRates())[enquiry.currency_code] ?? 1) : null;
       const value = before.offer_value === null ? null : Number(before.offer_value);
@@ -213,14 +218,21 @@ function createAttachmentService(repository) {
         module: 'SALES', type: 'BEFORE_OFFER_SENT', entityId: before.enquiry_id, actionKey: offerKey(before, enquiry), actor, payload: offer,
       }) : null;
 
-      const attachment = await repository.update(id, {
-        sent_at: sent ? new Date() : null,
-        sent_by: sent ? (actor?.id ?? null) : null,
-        // Lock the rupee rate the offer went out at; unsending releases it.
-        offer_fx_rate: rate,
-        updated_by: actor?.id ?? null,
-      });
       if (guard) await guard.done();
+      let attachment;
+      try {
+        attachment = await repository.setSentIf(id, sent, {
+          sent_at: sent ? new Date() : null,
+          sent_by: sent ? (actor?.id ?? null) : null,
+          // Lock the rupee rate the offer went out at; unsending releases it.
+          offer_fx_rate: rate,
+          updated_by: actor?.id ?? null,
+        });
+      } catch (err) { if (guard) await guard.release(); throw err; }
+      if (!attachment) {
+        if (guard) await guard.release();
+        throw new ConflictError(sent ? 'This offer was just marked as sent' : 'This offer was just unmarked');
+      }
 
       await auditService.record({
         action: auditService.Action.UPDATE,

@@ -249,6 +249,7 @@ function Editor({ flowId, perms }) {
   const [selectedId, setSelectedId] = useState(null);
   const [dirty, setDirty] = useState(false);
   const [problems, setProblems] = useState(null);
+  const [warnings, setWarnings] = useState([]); // publish anyway, but worth a look
   const [lookups, setLookups] = useState(null);
   const [panel, setPanel] = useState('settings');
   const [tested, setTested] = useState({});
@@ -362,25 +363,32 @@ function Editor({ flowId, perms }) {
   const check = () => act(async () => {
     if (dirty) await save();
     const r = await apiPost(`/flow-engine/flows/${flowId}/check`, {});
-    setProblems(r.data.errors);
+    setProblems(r.data.errors); setWarnings(r.data.warnings || []);
     setNotice(r.data.ok ? 'No problems — ready to publish.' : '');
   });
   const publish = () => act(async () => {
     if (dirty) await save();
     const c = await apiPost(`/flow-engine/flows/${flowId}/check`, {});
-    setProblems(c.data.errors);
+    setProblems(c.data.errors); setWarnings(c.data.warnings || []);
     if (!c.data.ok) { setError('Fix the problems shown in red first.'); return; }
-    try { await apiPost(`/flow-engine/flows/${flowId}/publish`, {}); }
+    let published;
+    try { published = await apiPost(`/flow-engine/flows/${flowId}/publish`, {}); }
     catch (e) {
       if (e.details) setProblems(e.details.map((d) => ({ nodeId: d.field === 'flow' ? null : d.field, message: d.message })));
       throw e;
     }
     const f = await loadFlow();
-    setNotice(`Published — version ${f.versions[0]?.version} is live. Enquiries already with someone stay with them.`);
+    const gone = published?.data?.cancelled_requests || 0;
+    setNotice(`Published — version ${f.versions[0]?.version} is live. Enquiries already with someone stay with them.${gone ? ` ${gone} waiting approval request${gone === 1 ? '' : 's'} from a removed Approval block ${gone === 1 ? 'was' : 'were'} cancelled (people were told).` : ''}`);
     const a = await apiGet(`/flow-engine/flows/${flowId}/affected`);
     if (a.data.items.length) setMove(a.data.items);
   });
-  const setStatus = (to) => act(async () => { await apiPost(`/flow-engine/flows/${flowId}/${to}`, {}); await loadFlow(); });
+  const setStatus = (to) => act(async () => {
+    const r = await apiPost(`/flow-engine/flows/${flowId}/${to}`, {});
+    await loadFlow();
+    const gone = r?.data?.cancelled_requests || 0;
+    if (gone) setNotice(`Paused. ${gone} waiting approval request${gone === 1 ? '' : 's'} ${gone === 1 ? 'was' : 'were'} cancelled — those actions no longer need approval (people were told).`);
+  });
   const removeFlow = () => act(async () => {
     if (!window.confirm(`Delete the flow “${flow.name}”? Its versions and run log go with it. This cannot be undone.`)) return;
     await apiDelete(`/flow-engine/flows/${flowId}`);
@@ -433,11 +441,12 @@ function Editor({ flowId, perms }) {
         )}
         {perms.canPublish && !readOnly && <button type="button" onClick={publish} disabled={busy} className="btn-primary px-3 py-1 text-sm">Publish</button>}
       </div>
-      {(error || notice || flowProblems.length > 0 || flow.attention?.length > 0) && (
+      {(error || notice || flowProblems.length > 0 || warnings.length > 0 || flow.attention?.length > 0) && (
         <div className="px-4 py-2 space-y-1 bg-white border-b border-gray-200 text-sm">
           {error && <p className="text-red-700">{error}</p>}
           {notice && <p className="text-green-700">{notice}</p>}
           {flowProblems.map((p, i) => <p key={i} className="text-red-700">• {p.message}</p>)}
+          {warnings.map((w, i) => <p key={`w${i}`} className="text-amber-700">⚠ {w.message}</p>)}
           {flow.attention?.map((m, i) => <p key={`a${i}`} className="text-amber-700">⚠ Live version: {m}</p>)}
         </div>
       )}

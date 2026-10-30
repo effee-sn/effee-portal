@@ -1497,8 +1497,11 @@ model ApprovalRequest {
   payload     String?  @db.Text
   /// ANY: the first decision decides. ALL: everyone must approve (one reject rejects).
   mode        String   @default("ANY") @db.VarChar(5)
-  /// PENDING | APPROVED | REJECTED
+  /// PENDING | APPROVED | REJECTED | WITHDRAWN | CANCELLED (its flow was paused or changed)
   status      String   @default("PENDING") @db.VarChar(10)
+  /// Set only while PENDING: one waiting request per flow block + action (stops
+  /// double clicks raising two). A hash of flow, block, record and action key.
+  open_key    String?  @unique @db.VarChar(64)
   requested_by Int?
   decided_by   Int?
   decided_at   DateTime?

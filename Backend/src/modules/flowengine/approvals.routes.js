@@ -16,7 +16,7 @@ router.use(authenticate);
 
 const listQuery = schemas.listQuery.extend({
   tab: z.enum(['waiting', 'decided', 'requested', 'all']).optional().default('waiting'),
-  status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'WITHDRAWN']).optional(),
+  status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'WITHDRAWN', 'CANCELLED']).optional(),
 });
 const withdrawBody = z.object({
   comment: z.string().trim().max(1000).optional(),

@@ -84,6 +84,13 @@ function createAttachmentRepository(db) {
       return db.enquiryAttachment.update({ where: { id }, data, select: attachmentSelect });
     },
 
+    /** Marks sent / not sent, only if it is not already so (a double click sends once). @returns {Promise<object|null>} */
+    async setSentIf(id, sent, data) {
+      const r = await db.enquiryAttachment.updateMany({ where: { id, sent_at: sent ? null : { not: null } }, data });
+      if (r.count !== 1) return null;
+      return db.enquiryAttachment.findUnique({ where: { id }, select: attachmentSelect });
+    },
+
     softDelete(id, actorId = null) {
       return db.enquiryAttachment.update({
         where: { id },

@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { flowEngineRepository } = require('./flowengine.repository');
 const { catalogFor } = require('./catalog');
 const { nodeType } = require('./nodes');
@@ -66,7 +67,7 @@ function createApprovalsService(repository) {
   }
 
   const WAY = Object.freeze({ APPROVED: 'approved', REJECTED: 'rejected', WITHDRAWN: 'withdrawn' });
-  const STATUS_LABEL = Object.freeze({ APPROVED: 'Approved', REJECTED: 'Rejected', WITHDRAWN: 'Withdrawn' });
+  const STATUS_LABEL = Object.freeze({ APPROVED: 'Approved', REJECTED: 'Rejected', WITHDRAWN: 'Withdrawn', CANCELLED: 'Cancelled' });
 
   /**
    * Continues the flow down the decided way (Approved / Rejected / Withdrawn),
@@ -161,18 +162,30 @@ function createApprovalsService(repository) {
       const actorIsApprover = actorId !== null && approverIds.includes(actorId);
       const autoApproved = actorIsApprover && (mode === 'ANY' || approverIds.length === 1);
       const now = new Date();
-      const req = await repository.createRequest({
-        module, flow_id: flow.id, version_id: version.id, node_id: node.id, entity_type: entityType, entity_id: String(entityId),
-        action, action_key: actionKey, title, summary, link, payload: JSON.stringify(payload || {}), mode,
-        status: autoApproved ? 'APPROVED' : 'PENDING', requested_by: actorId,
-        ...(autoApproved ? { decided_by: actorId, decided_at: now, comment: 'Approved by doing it themselves (an approver)' } : {}),
-        remind_hours: Number(node.data.remind_hours) || 4,
-        escalate_hours: Number(node.data.escalate_hours) || 24,
-        ...(escalated ? { escalated_at: now } : {}),
-      }, approverIds.map((user_id) => ({
-        user_id, is_escalation: escalated,
-        ...(user_id === actorId ? { decision: 'APPROVED', decided_at: now, comment: 'Did it themselves' } : {}),
-      })));
+      // One waiting request per block + action: a second click at the same moment
+      // hits the unique key and gets the first request back (asked once, told once).
+      const openKey = autoApproved ? null : crypto.createHash('sha256')
+        .update(`${flow.id}|${node.id}|${entityType}|${entityId}|${actionKey}`).digest('hex');
+      let req;
+      try {
+        req = await repository.createRequest({
+          module, flow_id: flow.id, version_id: version.id, node_id: node.id, entity_type: entityType, entity_id: String(entityId),
+          action, action_key: actionKey, title, summary, link, payload: JSON.stringify(payload || {}), mode,
+          status: autoApproved ? 'APPROVED' : 'PENDING', requested_by: actorId, open_key: openKey,
+          ...(autoApproved ? { decided_by: actorId, decided_at: now, comment: 'Approved by doing it themselves (an approver)' } : {}),
+          remind_hours: Number(node.data.remind_hours) || 4,
+          escalate_hours: Number(node.data.escalate_hours) || 24,
+          ...(escalated ? { escalated_at: now } : {}),
+        }, approverIds.map((user_id) => ({
+          user_id, is_escalation: escalated,
+          ...(user_id === actorId ? { decision: 'APPROVED', decided_at: now, comment: 'Did it themselves' } : {}),
+        })));
+      } catch (err) {
+        if (err.code !== 'P2002' || !openKey) throw err;
+        const first = await repository.findOpenRequest(openKey);
+        if (!first) throw err;
+        return first; // already asked a moment ago — that one stands
+      }
       if (req.status === 'PENDING') {
         // The run log: the path up to the Approval, waiting.
         const run = await repository.createRun({
@@ -245,18 +258,25 @@ function createApprovalsService(repository) {
       }
       await repository.recordDecision(req.id, actor.id, { decision: dto.decision, comment, addAsOverride: !mine });
 
+      // A Super Admin — named, or brought in by escalation — decides outright;
+      // otherwise an ALL request waits for every named approver. Counted from a
+      // fresh read, so two approving at the same moment still close it.
+      const override = !mine || mine.is_escalation;
       let outcome = dto.decision;
-      if (dto.decision === 'APPROVED' && req.mode === 'ALL' && mine) {
-        const others = req.approvers.filter((a) => a.user_id !== actor.id && !a.is_escalation);
-        if (others.some((a) => a.decision !== 'APPROVED')) outcome = null; // still waiting for the rest
+      if (dto.decision === 'APPROVED' && req.mode === 'ALL' && !override) {
+        const now = await repository.findRequest(id);
+        if (now.approvers.some((a) => !a.is_escalation && a.decision !== 'APPROVED')) outcome = null; // still waiting for the rest
       }
       await auditService.record({
         action: auditService.Action.UPDATE, entity: 'ApprovalRequest', entityId: req.id, actor,
-        changes: { decision: dto.decision, ...(comment ? { comment } : {}), ...(mine ? {} : { as_super_admin: true }) },
+        changes: { decision: dto.decision, ...(comment ? { comment } : {}), ...(override ? { as_super_admin: true } : {}) },
       });
       if (!outcome) return shape(await repository.findRequest(id));
 
       if (!(await repository.closeRequest(req.id, { status: outcome, decidedBy: actor.id, comment }))) {
+        // The other approver closed it the same way a moment ago — that is fine.
+        const settled = await repository.findRequest(id);
+        if (settled.status === outcome) return shape(settled);
         throw new ConflictError('Someone decided this approval just now — reload to see it');
       }
       const closed = await repository.findRequest(id);
@@ -341,6 +361,44 @@ function createApprovalsService(repository) {
         }
       }
       return shape(await repository.findRequest(id));
+    },
+
+    /**
+     * Closes a flow's waiting requests when the flow is paused, deleted, or
+     * re-published without the Approval block that raised them: the action no
+     * longer needs that approval, so nothing should stay locked or keep
+     * reminding. Approvers are told "no action needed"; the person who asked is
+     * told to try again.
+     * @param {number} flowId
+     * @param {{ keepNodeIds?: string[], reason: string }} p
+     * @returns {Promise<number>} how many were cancelled
+     */
+    async cancelForFlow(flowId, { keepNodeIds, reason }, actor) {
+      let cancelled = 0;
+      for (const req of await repository.pendingForFlow(flowId, keepNodeIds)) {
+        if (!(await repository.closeRequest(req.id, { status: 'CANCELLED', decidedBy: actor?.id ?? null, comment: reason }))) continue;
+        cancelled += 1;
+        if (req.run_id) await repository.finishRun(req.run_id, { status: 'CANCELLED', error: reason });
+        const approvers = req.approvers.filter((a) => a.decision === 'PENDING').map((a) => a.user_id);
+        const base = { entityType: req.entity_type, entityId: req.entity_id, link: req.link || LINK(req.id), actorId: actor?.id ?? null, type: notificationService.Type.FLOW_APPROVAL_DECIDED };
+        if (approvers.length) {
+          await notificationService.notify({
+            ...base, userIds: approvers, title: `Cancelled: ${req.title}`, body: `No action needed — ${reason}.`,
+            email: { eyebrow: 'Cancelled', intro: `“${req.title}” no longer needs your approval — ${reason}.`, actionLabel: 'Open in the portal' },
+          });
+        }
+        if (req.requested_by) {
+          await notificationService.notify({
+            ...base, userIds: [req.requested_by], title: `Approval request cancelled: ${req.title}`, body: `${reason} — do it again and it follows the flow as it is now.`,
+            email: { eyebrow: 'Cancelled', intro: `Your approval request “${req.title}” was cancelled: ${reason}. Do it again in the portal and it follows the flow as it is now.`, actionLabel: 'Open in the portal' },
+          });
+        }
+        await auditService.record({
+          action: auditService.Action.UPDATE, entity: 'ApprovalRequest', entityId: req.id, actor,
+          changes: { status: { from: 'PENDING', to: 'CANCELLED' }, reason },
+        });
+      }
+      return cancelled;
     },
 
     /**

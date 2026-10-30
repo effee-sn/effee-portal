@@ -195,7 +195,7 @@ export default function EnquiryAttachments({
     const pct = (part, whole) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : null);
     return { margin, pct: pct(margin, offer), markup: pct(margin, cost) };
   };
-  const needsPrice = pending?.kind === 'OFFER' && (pending.price === '' || Number(pending.price) < 0);
+  const needsPrice = pending?.kind === 'OFFER' && (pending.price === '' || !(Number(pending.price) > 0));
   // An offer waiting for approval locks its price and the costing value it was asked on.
   const awaiting = offers.find((a) => a.pending_approval);
 
@@ -417,7 +417,7 @@ export default function EnquiryAttachments({
                             <input type="number" min="0" step="0.01" inputMode="decimal" value={priceEdit.value} autoFocus
                               onChange={(e) => setPriceEdit((p) => ({ ...p, value: e.target.value }))}
                               aria-label="Offer price" className="w-36 text-sm border border-gray-300 rounded px-2 py-0.5" />
-                            <button type="button" onClick={savePrice} disabled={busy || priceEdit.value === ''}
+                            <button type="button" onClick={savePrice} disabled={busy || !(Number(priceEdit.value) > 0)}
                               className="text-xs font-medium text-[var(--ams-primary)] hover:underline cursor-pointer disabled:opacity-40">Save</button>
                             <button type="button" onClick={() => setPriceEdit(null)} disabled={busy}
                               className="text-xs text-gray-500 hover:text-gray-800 cursor-pointer">Cancel</button>

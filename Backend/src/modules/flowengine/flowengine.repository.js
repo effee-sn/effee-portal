@@ -221,10 +221,37 @@ function createFlowEngineRepository(db) {
       });
     },
 
-    /** Uses up approved requests: the action they allowed went through. */
-    consumeRequests(ids) {
+    /** The waiting request holding this open key (see approvals.service request). */
+    findOpenRequest(openKey) {
+      return db.approvalRequest.findUnique({ where: { open_key: openKey }, include: { approvers: true } });
+    },
+
+    /**
+     * Uses up approved requests for the action they allowed — all or none, so two
+     * attempts at once cannot both ride one approval.
+     * @returns {Promise<boolean>} false when one was already used
+     */
+    async consumeRequests(ids) {
+      if (!ids.length) return true;
+      return db.$transaction(async (tx) => {
+        const r = await tx.approvalRequest.updateMany({ where: { id: { in: ids }, status: 'APPROVED', consumed_at: null }, data: { consumed_at: new Date() } });
+        if (r.count !== ids.length) throw Object.assign(new Error('approval already used'), { alreadyUsed: true });
+        return true;
+      }).catch((err) => { if (err.alreadyUsed) return false; throw err; });
+    },
+
+    /** Gives approvals back when the action they were used for did not happen. */
+    releaseRequests(ids) {
       if (!ids.length) return null;
-      return db.approvalRequest.updateMany({ where: { id: { in: ids }, status: 'APPROVED', consumed_at: null }, data: { consumed_at: new Date() } });
+      return db.approvalRequest.updateMany({ where: { id: { in: ids }, status: 'APPROVED' }, data: { consumed_at: null } });
+    },
+
+    /** Waiting requests of a flow (all, or — given `keepNodeIds` — those raised by other blocks). */
+    pendingForFlow(flowId, keepNodeIds) {
+      return db.approvalRequest.findMany({
+        where: { flow_id: flowId, status: 'PENDING', ...(keepNodeIds ? { node_id: { notIn: keepNodeIds } } : {}) },
+        include: { approvers: true },
+      });
     },
 
     findRequest(id) {
@@ -287,7 +314,7 @@ function createFlowEngineRepository(db) {
     async closeRequest(id, { status, decidedBy, comment }) {
       const r = await db.approvalRequest.updateMany({
         where: { id, status: 'PENDING' },
-        data: { status, decided_by: decidedBy, decided_at: new Date(), comment: comment || null },
+        data: { status, decided_by: decidedBy, decided_at: new Date(), comment: comment || null, open_key: null },
       });
       return r.count === 1;
     },

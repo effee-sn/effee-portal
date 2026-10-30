@@ -4,6 +4,7 @@ const { nodeType, NODE_TYPES } = require('./nodes');
 const { parseGraph, validateGraph, triggerNode, assignNodes } = require('./graph');
 const { assigneeFromFlows } = require('./assignment');
 const { simulate } = require('./simulate');
+const { approvalsService } = require('./approvals.service');
 const { auditService } = require('../audit/audit.service');
 const { NotFoundError, ConflictError, ValidationError } = require('../../core');
 
@@ -15,6 +16,27 @@ const { NotFoundError, ConflictError, ValidationError } = require('../../core');
  *
  * @param {ReturnType<typeof import('./flowengine.repository').createFlowEngineRepository>} repository
  */
+// Approvers who may well be the person doing the action: then it is approved
+// there and then (an approver doing it themselves needs no one else).
+const SELF_APPROVERS = Object.freeze({
+  HANDLER: 'the holder', OWNER: 'the owner', CREATOR: 'the person who raised it', ROLE: 'a role', DEPARTMENT: 'a whole department',
+});
+
+/** Warnings for a draft (they do not stop publishing). */
+function warningsOf(graph) {
+  if (!graph) return [];
+  const out = [];
+  for (const nd of graph.nodes.filter((x) => x.type === 'approval')) {
+    const kinds = [...new Set((nd.data?.to || []).map((r) => r.who).filter((w) => SELF_APPROVERS[w]))];
+    if (!kinds.length) continue;
+    out.push({
+      nodeId: nd.id,
+      message: `Approved by includes ${kinds.map((k) => SELF_APPROVERS[k]).join(', ')}: whoever is one of them and does the action is approved there and then. Name a specific person if someone else must approve.`,
+    });
+  }
+  return out;
+}
+
 function createFlowEngineService(repository) {
   const shape = (flow) => {
     if (!flow) return flow;
@@ -221,11 +243,15 @@ function createFlowEngineService(repository) {
       return shape(flow);
     },
 
-    /** The draft's problems — what would stop it being published. */
+    /**
+     * The draft's problems — what would stop it being published — and warnings:
+     * things that publish but may not do what was meant.
+     */
     async check(id) {
       const flow = await load(id);
-      const errors = problems(flow, parseGraph(flow.draft_graph));
-      return { ok: errors.length === 0, errors };
+      const graph = parseGraph(flow.draft_graph);
+      const errors = problems(flow, graph);
+      return { ok: errors.length === 0, errors, warnings: warningsOf(graph) };
     },
 
     /**
@@ -253,7 +279,11 @@ function createFlowEngineService(repository) {
         action: auditService.Action.UPDATE, entity: 'FlowDefinition', entityId: id, actor,
         changes: { published: { version, trigger }, status: { from: flow.status, to: 'ACTIVE' } },
       });
-      return { ...shape(result.flow), published: result.version };
+      // Requests raised by an Approval block this version no longer has can never be
+      // decided into anything — close them (those of a block still there carry on).
+      const keep = graph.nodes.filter((nd) => nd.type === 'approval').map((nd) => nd.id);
+      const cancelled = await approvalsService.cancelForFlow(id, { keepNodeIds: keep, reason: `the flow “${flow.name}” was changed` }, actor);
+      return { ...shape(result.flow), published: result.version, cancelled_requests: cancelled };
     },
 
     /** Stops the live version starting new runs (runs already going finish). */
@@ -262,7 +292,9 @@ function createFlowEngineService(repository) {
       if (flow.status !== 'ACTIVE') throw new ConflictError('Only an active flow can be paused');
       const updated = await repository.updateFlow(id, { status: 'PAUSED', updated_by: actor?.id ?? null });
       await auditService.record({ action: auditService.Action.UPDATE, entity: 'FlowDefinition', entityId: id, actor, changes: { status: { from: 'ACTIVE', to: 'PAUSED' } } });
-      return shape(updated);
+      // Paused, it asks nothing: what it was waiting on goes through freely now.
+      const cancelled = await approvalsService.cancelForFlow(id, { reason: `the flow “${flow.name}” was paused` }, actor);
+      return { ...shape(updated), cancelled_requests: cancelled };
     },
 
     async resume(id, actor) {
@@ -281,6 +313,7 @@ function createFlowEngineService(repository) {
       const flow = await load(id);
       if (flow.status === 'ACTIVE') throw new ConflictError('Pause the flow before deleting it');
       await repository.updateFlow(id, { deleted_at: new Date(), updated_by: actor?.id ?? null });
+      await approvalsService.cancelForFlow(id, { reason: `the flow “${flow.name}” was deleted` }, actor);
       await auditService.record({ action: auditService.Action.DELETE, entity: 'FlowDefinition', entityId: id, actor, changes: { name: flow.name, soft_deleted: true } });
     },
 

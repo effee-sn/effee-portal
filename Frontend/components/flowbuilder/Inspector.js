@@ -86,6 +86,9 @@ function RuleValue({ field, op, value, onChange, lookups }) {
         <input type="number" value={value ?? ''} onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))} className={input}
           placeholder={/_pct$/.test(field.key) ? 'Percent' : /_inr$/.test(field.key) ? 'Amount in ₹' : 'Number'} aria-label="Value" />
         {value !== '' && value !== undefined && value !== null && <p className={small}>{numberText(field.key, value)}</p>}
+        {/^event\.(margin|markup)/.test(field.key) && (
+          <p className={small}>Empty when no costing value is entered — then this rule never matches. To ask for approval in that case too, add “Costing value (₹) is empty” and set Yes when <b>any</b> rule is true.</p>
+        )}
       </div>
     );
   }
@@ -125,7 +128,8 @@ export default function Inspector({ node, event, lookups, errors, onChange, onDe
         {STAGE_EVENTS.includes(d.event) && (
           <div>
             <p className={label}>Only for these stages <span className="font-normal text-gray-400">(none ticked = any)</span></p>
-            <Checks value={d.stages || []} onChange={(stages) => set({ stages: stages.length ? stages : undefined })} options={catalog.stages} />
+            <Checks value={d.stages || []} onChange={(stages) => set({ stages: stages.length ? stages : undefined })}
+              options={d.event === 'BEFORE_STAGE_MOVE' && catalog.manualStages ? catalog.stages.filter((s) => catalog.manualStages.includes(s.key)) : catalog.stages} />
           </div>
         )}
         {catalog.events.find((e) => e.key === d.event)?.guard && (

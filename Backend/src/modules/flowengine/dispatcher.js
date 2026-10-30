@@ -52,6 +52,9 @@ async function handleEvent(repository, row) {
     const start = graph && triggerNode(graph);
     if (!start || !nodeType('trigger').matches(start.data, event)) continue;
 
+    // The record first: if loading it fails the event is retried, and no run
+    // is left behind that would make the retry skip this flow.
+    const runFacts = await loadFacts();
     let run;
     try {
       run = await repository.createRun({
@@ -66,7 +69,7 @@ async function handleEvent(repository, row) {
       mode: 'run',
       module: event.module,
       event,
-      facts: await loadFacts(),
+      facts: runFacts,
       flow,
       version: { id: version.id, version: version.version },
       helpers,

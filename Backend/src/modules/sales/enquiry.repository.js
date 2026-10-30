@@ -141,6 +141,17 @@ function createEnquiryRepository(db) {
     },
 
     /**
+     * A stage change, only if the enquiry is still at `fromStage` — two clicks (or
+     * two people) at once move it once; the other gets null.
+     * @returns {Promise<object|null>}
+     */
+    async moveFrom(id, fromStage, data) {
+      const r = await db.enquiry.updateMany({ where: { id, stage: fromStage, deleted_at: null }, data });
+      if (r.count !== 1) return null;
+      return db.enquiry.findUnique({ where: { id }, select: enquiryDetailSelect });
+    },
+
+    /**
      * Appends an immutable stage-transition record.
      * @param {{ enquiry_id: number, from_stage: string|null, to_stage: string, changed_by: number|null }} data
      */

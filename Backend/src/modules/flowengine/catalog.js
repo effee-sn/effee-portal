@@ -102,6 +102,11 @@ const CATALOGS = Object.freeze({
     entityType: 'Enquiry',
     events: SALES_EVENTS,
     stages: SALES_STAGES,
+    // Stages a person moves an enquiry into (a "Before moving to a stage" flow can
+    // hold these). Follow-up and Negotiation are entered on their own when an offer
+    // is sent or negotiation is flagged; Won, Lost and reopening have their own
+    // "Before …" triggers.
+    manualStages: Object.freeze(['CONTACTED', 'REVIEW', 'CONCEPT', 'COSTING', 'COSTING_REVIEW', 'OFFER_RELEASED']),
     fields: SALES_FIELDS,
     words: SALES_WORDS,
     // Required lazily: Sales depends on the engine, not the reverse, at load.

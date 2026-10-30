@@ -11,8 +11,8 @@ const { ConflictError } = require('../../core');
  * the last moment before doing the action:
  *
  *   const pass = await checkGuard({ ... });   // throws when the action is held
- *   … do the action …
- *   await pass.done();                         // uses up the approvals it relied on
+ *   await pass.done();                         // uses up the approvals it relied on (all or none)
+ *   try { … do the action … } catch (e) { await pass.release(); throw e; }
  *
  * Each live "Before …" flow for the action is walked through its If / Which
  * stage? blocks. At an Approval block:
@@ -44,7 +44,16 @@ function held(message, code) {
  */
 async function checkGuard({ module, type, entityId, payload = {}, actionKey, actor }, repository = flowEngineRepository) {
   const passed = [];
-  const pass = { done: async () => { await repository.consumeRequests(passed); } };
+  const pass = {
+    /** Uses up the approvals relied on — call just before doing the action. */
+    done: async () => {
+      if (!(await repository.consumeRequests(passed))) {
+        throw held('That approval was just used for this same action — reload to see where it stands.', 'APPROVAL_USED');
+      }
+    },
+    /** Gives them back when the action then failed. */
+    release: async () => { await repository.releaseRequests(passed); },
+  };
   const live = await repository.liveFlowsFor(module, type);
   if (!live.length) return pass;
 

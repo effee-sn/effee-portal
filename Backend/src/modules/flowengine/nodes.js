@@ -50,6 +50,13 @@ const trigger = Object.freeze({
         const known = new Set(catalog.stages.map((s) => s.key));
         const unknown = data.stages.filter((s) => !known.has(s));
         if (unknown.length) errors.push(`unknown stage: ${unknown.join(', ')}`);
+        // A held move must be one a person makes — the others never ask.
+        const manual = new Set(catalog.manualStages || []);
+        const auto = data.event === 'BEFORE_STAGE_MOVE' && catalog.manualStages ? data.stages.filter((s) => known.has(s) && !manual.has(s)) : [];
+        if (auto.length) {
+          const label = (k) => catalog.stages.find((st) => st.key === k)?.label || k;
+          errors.push(`${auto.map(label).join(', ')}: not moved into by hand, so a “Before moving” flow never runs for ${auto.length > 1 ? 'them' : 'it'} (Won, Lost and reopening have their own “Before …” triggers)`);
+        }
       }
     }
     return errors;

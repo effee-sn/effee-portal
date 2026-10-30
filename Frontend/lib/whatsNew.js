@@ -29,6 +29,12 @@ export const RELEASES = [
       },
       {
         icon: 'spark',
+        title: 'Costing value and margin',
+        text: 'From Costing Review on, enter the final costing value on the enquiry — each offer then shows its margin (amount, % of offer, % on cost). An offer waiting for approval shows “Waiting for approval”, and you can withdraw the request if you need to change it.',
+        perm: null,
+      },
+      {
+        icon: 'spark',
         title: 'Assign to my team',
         text: 'Department heads: enquiries a flow sends to your department wait in Sales → Assign to my team until you choose who takes them.',
         perm: null,

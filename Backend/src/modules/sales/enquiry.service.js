@@ -261,6 +261,23 @@ function createEnquiryService(repository) {
    * Tells everyone with a stake in the deal how it closed: the field owner, the
    * internal handler, and whoever raised it — minus the person who closed it.
    */
+  /**
+   * Changes the stage once: the approvals relied on are used up first (given back
+   * if the move does not happen), and the write only lands if the enquiry is
+   * still where it was read — a double click or two people at once move it once.
+   * @throws {ConflictError} when it was moved in the meantime
+   */
+  async function moveOnce(id, fromStage, data, guard) {
+    if (guard) await guard.done();
+    let enquiry;
+    try { enquiry = await repository.moveFrom(id, fromStage, data); } catch (err) { if (guard) await guard.release(); throw err; }
+    if (!enquiry) {
+      if (guard) await guard.release();
+      throw new ConflictError('This enquiry was just moved by someone else — reload to see where it is');
+    }
+    return enquiry;
+  }
+
   async function notifyClose(enquiry, actor, { type, title, body, email }) {
     await notificationService.notify({
       email,
@@ -490,7 +507,7 @@ function createEnquiryService(repository) {
       const ownerChanged = dto.owner_id !== undefined && dto.owner_id !== null && dto.owner_id !== before.owner_id;
       // A Flow Builder "Before moving to a stage" flow may hold the move for approval.
       const guard = stageChanged ? await checkGuard({
-        module: 'SALES', type: 'BEFORE_STAGE_MOVE', entityId: id, payload: { from: before.stage, to: dto.stage }, actionKey: `STAGE:${dto.stage}`, actor,
+        module: 'SALES', type: 'BEFORE_STAGE_MOVE', entityId: id, payload: { from: before.stage, to: dto.stage }, actionKey: `STAGE:${before.stage}>${dto.stage}`, actor,
       }) : null;
       const data = pickWritable(dto, { updated_by: actor?.id ?? null });
       if (stageChanged) {
@@ -502,8 +519,7 @@ function createEnquiryService(repository) {
         // follows them to the new owner.
         data.handler_id = dto.owner_id;
       }
-      const enquiry = await repository.update(id, data);
-      if (guard) await guard.done();
+      const enquiry = stageChanged ? await moveOnce(id, before.stage, data, guard) : await repository.update(id, data);
       if (stageChanged) {
         await repository.recordStageEvent({
           enquiry_id: id, from_stage: before.stage, to_stage: dto.stage, changed_by: actor?.id ?? null, handler_id: enquiry.handler_id ?? null,
@@ -542,9 +558,10 @@ function createEnquiryService(repository) {
 
       const hold = await holderFor(toStage, before.owner_id, before);
       const { handler_id } = hold;
-      const enquiry = await repository.update(id, {
+      const enquiry = await repository.moveFrom(id, before.stage, {
         stage: toStage, stage_since: new Date(), ...hold, updated_by: actor?.id ?? null,
       });
+      if (!enquiry) return repository.findById(id); // moved by someone else a moment ago
       await repository.recordStageEvent({
         enquiry_id: id, from_stage: before.stage, to_stage: toStage, changed_by: actor?.id ?? null, handler_id,
       });
@@ -575,7 +592,7 @@ function createEnquiryService(repository) {
       // Today's rate: locked on the order below, and what a "Before marking won" flow compares.
       const rate = (await loadRates())[before.currency_code] ?? 1;
       const guard = await checkGuard({
-        module: 'SALES', type: 'BEFORE_WON', entityId: id, actionKey: 'WON', actor,
+        module: 'SALES', type: 'BEFORE_WON', entityId: id, actionKey: `WON:${before.stage}:${Number(dto.order_value)}:${before.currency_code}`, actor,
         payload: { from: before.stage, order_value: Number(dto.order_value), order_value_inr: paise(Number(dto.order_value) * rate) },
       });
 
@@ -597,8 +614,7 @@ function createEnquiryService(repository) {
         lost_to: null,
         updated_by: actor?.id ?? null,
       };
-      const enquiry = await repository.update(id, data);
-      await guard.done();
+      const enquiry = await moveOnce(id, before.stage, data, guard);
       await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'WON', changed_by: actor?.id ?? null, handler_id: data.handler_id });
       // Its open follow-ups close with it.
       await activityRepository.closeFollowUpsOfEnquiry(id);
@@ -640,7 +656,7 @@ function createEnquiryService(repository) {
       assertCanLose(before, actor);
       if (before.stage === 'LOST') throw new ConflictError('Enquiry is already marked lost');
       const guard = await checkGuard({
-        module: 'SALES', type: 'BEFORE_LOST', entityId: id, actionKey: 'LOST', actor,
+        module: 'SALES', type: 'BEFORE_LOST', entityId: id, actionKey: `LOST:${before.stage}`, actor,
         payload: { from: before.stage, lost_reason: dto.lost_reason, lost_to: dto.lost_to ?? null },
       });
 
@@ -653,8 +669,7 @@ function createEnquiryService(repository) {
         ...(await holderFor('LOST', before.owner_id, before)),
         updated_by: actor?.id ?? null,
       };
-      const enquiry = await repository.update(id, data);
-      await guard.done();
+      const enquiry = await moveOnce(id, before.stage, data, guard);
       await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'LOST', changed_by: actor?.id ?? null, handler_id: data.handler_id });
       await activityRepository.closeFollowUpsOfEnquiry(id);
 
@@ -691,7 +706,7 @@ function createEnquiryService(repository) {
       if (before.stage !== 'WON' && before.stage !== 'LOST') {
         throw new ConflictError('Only a won or lost enquiry can be reopened');
       }
-      const guard = await checkGuard({ module: 'SALES', type: 'BEFORE_REOPEN', entityId: id, actionKey: 'REOPEN', actor, payload: { from: before.stage } });
+      const guard = await checkGuard({ module: 'SALES', type: 'BEFORE_REOPEN', entityId: id, actionKey: `REOPEN:${before.stage}`, actor, payload: { from: before.stage } });
 
       const data = {
         stage: 'FOLLOW_UP',
@@ -702,8 +717,7 @@ function createEnquiryService(repository) {
         lost_at: null, lost_reason: null, lost_to: null,
         updated_by: actor?.id ?? null,
       };
-      const enquiry = await repository.update(id, data);
-      await guard.done();
+      const enquiry = await moveOnce(id, before.stage, data, guard);
       await repository.recordStageEvent({ enquiry_id: id, from_stage: before.stage, to_stage: 'FOLLOW_UP', changed_by: actor?.id ?? null, handler_id: data.handler_id });
 
       await auditService.record({

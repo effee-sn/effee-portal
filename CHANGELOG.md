@@ -28,11 +28,35 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 - **Ready-made drafts** (none live): *Sales hand-offs (today's rules)* — the built-in rule drawn, ready to publish; *Big offers need approval* (above ₹50 Lakh); *Late-stage loss alert*; *Big order won* (above ₹1 Crore) — choose their people, then publish.
 - **Permissions:** Flow Builder → View / Create / Edit / Delete, and the new **Publish** (given to no role on upgrade — choose who in Roles; Super Admin always can).
 
+### Added — Sales: costing value and offer margin
+
+- **Final costing value** on the enquiry, entered by whoever holds it from Costing Review on (Costing Review, Offer, Negotiation). Optional — nothing waits on it.
+- Each offer shows its **margin** over it: amount, **% of the offer** and **% on cost** (red when it loses money).
+- Flows can use **Margin % of offer**, **Margin % on cost**, **Margin (₹)** and **Costing value (₹)** in If blocks and messages; the offer approval shows costing, offer and margin to the approver.
+- An offer price must now be **more than 0**.
+
+### Added — Approvals: lock, withdraw, clear states
+
+- While an offer waits for approval its **price, deletion and the costing value are locked**; rejected or withdrawn, they unlock for rework.
+- An approval is for **those figures**: change the price or costing value (or, for Won, the order value) and it asks again. Stage-move, Won, Lost and Reopen approvals are tied to the stage they were asked at.
+- **Withdraw request** — the person who asked (or a Super Admin) takes a waiting request back, with a reason. The Approval block has a **Withdrawn** way out for its own messages, and a **Can be withdrawn** setting.
+- Offers show where they stand: **⏳ Waiting for approval**, **✓ Approved — Mark sent**, or *Rejected by … : reason*. Being held is shown as information, not an error.
+- Pausing, deleting or re-publishing a flow **cancels** the requests it was waiting on (approvers told “no action needed”, the asker told to try again).
+- Check **warns** when approvers may be the person doing the action (holder, owner, raiser, a role or a department) — they would approve themselves.
+
+### Fixed (found in real-user testing before release)
+
+- Quick repeated clicks raised several approval requests and emails — now one.
+- A double click could mark an offer sent twice and move the stage twice; marking a sent offer again re-rated it — now refused.
+- “All must approve”: two approving at the same moment left it waiting; an escalated Super Admin could not approve it.
+- “Before moving to a stage” offered stages that are entered automatically (Follow-up, Negotiation…) where it never runs — now only stages people move into.
+- A background run could get stuck if loading the enquiry failed once.
+
 ### How Sales behaves on day one
 
 Exactly as before. With no live flow, every hand-off, notification and gate is the built-in rule; the engine only records what happens. Switch features on one at a time (suggested: publish the hand-offs flow → the offer approval → department routing), watching each for a week.
 
-**Upgrade:** 6 migrations — run `npx prisma migrate deploy` in `Backend`; a new frontend package (`@xyflow/react`) — run `npm install` in `Frontend`, then build.
+**Upgrade:** 8 migrations — run `npx prisma migrate deploy` in `Backend`; a new frontend package (`@xyflow/react`) — run `npm install` in `Frontend`, then build.
 
 ## [1.7.2] — 2026-10-28
 
