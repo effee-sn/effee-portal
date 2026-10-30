@@ -226,7 +226,11 @@ export default function Inspector({ node, event, lookups, errors, onChange, onDe
           <div><label className={label} htmlFor="eh">Escalate after (hours)</label><input id="eh" type="number" min={1} max={720} value={d.escalate_hours ?? 24} onChange={(e) => set({ escalate_hours: Number(e.target.value) })} className={input} /></div>
         </div>
         <p className={small}>Escalation passes it to the Super Admins. If the person acting is an approver, it is approved there and then.</p>
-        <p className={small}>Withdrawn: the person who asked took it back (with a reason). With nothing on that way, the approvers are told “no action needed”.</p>
+        <label className="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+          <input type="checkbox" checked={d.allow_withdraw !== false} onChange={(e) => set({ allow_withdraw: e.target.checked })} className="mt-0.5 cursor-pointer" />
+          <span>Can be withdrawn<span className="block text-xs text-gray-500">The person who asked can take it back (with a reason) while it waits. Off: only the approver can release it, by rejecting.</span></span>
+        </label>
+        {d.allow_withdraw !== false && <p className={small}>Withdrawn way: what happens when it is taken back. With nothing on it, the approvers are told “no action needed”.</p>}
       </>
     );
   } else if (kind === 'notify') {

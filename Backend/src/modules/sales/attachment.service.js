@@ -46,7 +46,9 @@ function createAttachmentService(repository) {
   async function assertNotAwaiting(offer, what) {
     if (offer.kind !== 'OFFER') return;
     const waiting = await offerApproval(offer);
-    if (waiting) throw new ConflictError(`Waiting for approval from ${waiting.waiting_for} — withdraw the request first to ${what}`);
+    if (waiting) {
+      throw new ConflictError(`Waiting for approval from ${waiting.waiting_for} — ${waiting.can_withdraw ? `withdraw the request first to ${what}` : `you can ${what} once it is decided`}`);
+    }
   }
 
   /** Best-effort removal of an orphaned upload when the request is rejected. */

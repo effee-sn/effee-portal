@@ -437,7 +437,7 @@ export default function EnquiryAttachments({
                         {a.pending_approval && (
                           <p className="text-[11px] text-amber-700">
                             Waiting for approval from {a.pending_approval.waiting_for} — price locked until it is decided
-                            {canManage && (
+                            {canManage && a.pending_approval.can_withdraw && (
                               <button type="button" onClick={() => withdrawApproval(a)} disabled={busy}
                                 className="ml-2 text-gray-600 hover:text-gray-900 hover:underline cursor-pointer">Withdraw request</button>
                             )}

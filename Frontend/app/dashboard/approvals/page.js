@@ -36,7 +36,7 @@ function Card({ a, me, onDecided, highlight }) {
   const [error, setError] = useState('');
   const mine = a.approvers.find((x) => x.user_id === me?.id);
   const canDecide = a.status === 'PENDING' && ((mine && mine.decision === 'PENDING') || me?.is_system);
-  const canWithdraw = a.status === 'PENDING' && (a.requested_by === me?.id || me?.is_system);
+  const canWithdraw = a.can_withdraw && (a.requested_by === me?.id || me?.is_system);
   const [withdrawing, setWithdrawing] = useState(false);
 
   const decide = async (decision) => {

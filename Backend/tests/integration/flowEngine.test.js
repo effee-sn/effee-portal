@@ -799,6 +799,23 @@ describe('Flow engine part 4: approvals', () => {
     });
   });
 
+  it('"Can be withdrawn" off: no Withdrawn way, and the request cannot be withdrawn', async () => {
+    const graph = bigOfferFlow();
+    graph.nodes.find((x) => x.id === 'ok').data.allow_withdraw = false;
+    const bad = await newFlow({ ...graph, edges: [...graph.edges, a('ok', 'end', 'withdrawn')] }, 'withdrawn way when off');
+    assert.ok((await flowEngineService.check(bad.id)).errors.some((x) => /no “withdrawn” way out/.test(x.message)));
+    await withFlow(graph, async () => {
+      const big = await withOffer(6000000);
+      await assert.rejects(attachmentService.markSent(big.offer.id, true, sa()), { code: 'APPROVAL_REQUIRED' });
+      const [req] = await requestsFor(big.e.id);
+      assert.equal((await approvalsService.get(req.id, sa())).can_withdraw, false);
+      await assert.rejects(approvalsService.withdraw(req.id, { comment: 'oops' }, sa()), /cannot be withdrawn/);
+      await assert.rejects(attachmentService.setOfferValue(big.offer.id, 1, sa()), /change the price once it is decided/);
+      const listed = (await attachmentService.listForEnquiry(big.e.id, sa())).find((x) => x.id === big.offer.id);
+      assert.equal(listed.pending_approval.can_withdraw, false);
+    });
+  });
+
   it('an approval holds for those figures only: changing the price asks again', async () => {
     await withFlow(bigOfferFlow(), async () => {
       const big = await withOffer(6000000);

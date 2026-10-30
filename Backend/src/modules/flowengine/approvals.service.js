@@ -113,6 +113,18 @@ function createApprovalsService(repository) {
     }
   }
 
+  // Published versions never change, so their Approval settings can be kept.
+  const versionGraphs = new Map();
+
+  /** Whether the Approval block that raised it lets the person who asked take it back. */
+  async function withdrawable(req) {
+    if (!versionGraphs.has(req.version_id)) {
+      versionGraphs.set(req.version_id, parseGraph((await repository.findVersion(req.version_id))?.graph));
+    }
+    const node = versionGraphs.get(req.version_id)?.nodes.find((x) => x.id === req.node_id);
+    return node?.data?.allow_withdraw !== false;
+  }
+
   /** What a requester / approver sees, with names. */
   async function shape(req) {
     const map = await repository.userNames([req.requested_by, req.decided_by, ...req.approvers.map((a) => a.user_id)]);
@@ -122,6 +134,7 @@ function createApprovalsService(repository) {
       requested_by: req.requested_by, requested_by_name: map.get(req.requested_by) || null,
       decided_by: req.decided_by, decided_by_name: map.get(req.decided_by) || null, decided_at: req.decided_at, comment: req.comment,
       consumed_at: req.consumed_at, created_at: req.created_at, escalated_at: req.escalated_at,
+      can_withdraw: req.status === 'PENDING' && await withdrawable(req),
       approvers: req.approvers.map((a) => ({
         user_id: a.user_id, name: map.get(a.user_id) || null, decision: a.decision, comment: a.comment, decided_at: a.decided_at, is_escalation: a.is_escalation,
       })),
@@ -290,6 +303,9 @@ function createApprovalsService(repository) {
       if (req.requested_by !== actor?.id && !actor?.is_system) {
         throw new ForbiddenError('Only the person who asked for this approval can withdraw it');
       }
+      if (!(await withdrawable(req))) {
+        throw new ConflictError('This approval cannot be withdrawn — ask the approver to reject it instead');
+      }
       const comment = (dto.comment || '').trim() || null;
       if (!comment) throw new ConflictError('Say why it is withdrawn — the approvers see it');
 
@@ -337,7 +353,10 @@ function createApprovalsService(repository) {
       const req = await repository.pendingRequest({ entityType, entityId, action, keyPrefix });
       if (!req) return null;
       const who = await names(req.approvers.filter((a) => a.decision === 'PENDING').map((a) => a.user_id));
-      return { id: req.id, action_key: req.action_key, requested_by: req.requested_by, waiting_for: joinNames(who, req.mode) };
+      return {
+        id: req.id, action_key: req.action_key, requested_by: req.requested_by, waiting_for: joinNames(who, req.mode),
+        can_withdraw: await withdrawable(req),
+      };
     },
 
     /** The reminder and escalation sweep (from the flow engine's loop). */

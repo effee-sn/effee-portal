@@ -253,7 +253,10 @@ const notify = Object.freeze({
 const approval = Object.freeze({
   type: 'approval',
   label: 'Approval',
-  handles: ['approved', 'rejected', 'withdrawn'],
+  // Withdrawn exists only while the person who asked may take it back (the default).
+  handlesFor(data) {
+    return data?.allow_withdraw === false ? ['approved', 'rejected'] : ['approved', 'rejected', 'withdrawn'];
+  },
   onlyFor: GUARD_EVENTS,
   isApproval: true,
   validate(data) {
@@ -262,6 +265,7 @@ const approval = Object.freeze({
     const hours = (v, min, max) => v === undefined || (Number.isInteger(Number(v)) && Number(v) >= min && Number(v) <= max);
     if (!hours(data?.remind_hours, 1, 168)) errors.push('remind after 1 to 168 hours');
     if (!hours(data?.escalate_hours, 1, 720)) errors.push('escalate after 1 to 720 hours');
+    if (data?.allow_withdraw !== undefined && typeof data.allow_withdraw !== 'boolean') errors.push('choose whether it can be withdrawn');
     return errors;
   },
   refs(data) {

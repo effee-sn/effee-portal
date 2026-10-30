@@ -883,7 +883,7 @@ function createEnquiryService(repository) {
       // An offer waiting for approval was asked on this cost — it stays until decided or withdrawn.
       const waiting = await approvalsService.pendingFor({ entityType: 'Enquiry', entityId: id, action: 'BEFORE_OFFER_SENT' });
       if (waiting) {
-        throw new ConflictError(`An offer is waiting for approval from ${waiting.waiting_for} — withdraw the request first to change the costing value`);
+        throw new ConflictError(`An offer is waiting for approval from ${waiting.waiting_for} — ${waiting.can_withdraw ? 'withdraw the request first to change the costing value' : 'the costing value can change once it is decided'}`);
       }
 
       const enquiry = await repository.update(id, { final_cost: dto.final_cost, updated_by: actor?.id ?? null });

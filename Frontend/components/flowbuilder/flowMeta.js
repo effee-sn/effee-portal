@@ -85,7 +85,7 @@ export function waysOut(type, data) {
   switch (type) {
     case 'trigger': case 'assign': case 'notify': return [{ id: 'next', label: '' }];
     case 'if': return [{ id: 'yes', label: 'Yes' }, { id: 'no', label: 'No' }];
-    case 'approval': return [{ id: 'approved', label: 'Approved' }, { id: 'rejected', label: 'Rejected' }, { id: 'withdrawn', label: 'Withdrawn' }];
+    case 'approval': return [{ id: 'approved', label: 'Approved' }, { id: 'rejected', label: 'Rejected' }, ...(data?.allow_withdraw === false ? [] : [{ id: 'withdrawn', label: 'Withdrawn' }])];
     case 'stage_switch': return [...(data?.cases || []).map((c) => ({ id: c.id, label: c.label || 'Group' })), { id: 'other', label: 'Other' }];
     default: return [];
   }
@@ -136,7 +136,7 @@ export function summary(type, data, catalog, names) {
       if (data.to === 'ROLE') return `${role(data.role_id)} · ${ROLE_PICK.find((p) => p.key === data.pick)?.label.toLowerCase() || 'choose who…'}`;
       if (data.to === 'SAME_AS_STAGE') return `Same as at ${data.stage ? stage(data.stage) : '…'}`;
       return ASSIGN_TO.find((a) => a.key === data.to)?.label || 'choose…';
-    case 'approval': return `${people(data.to)} · ${data.mode === 'ALL' ? 'all must approve' : 'any one'}`;
+    case 'approval': return `${people(data.to)} · ${data.mode === 'ALL' ? 'all must approve' : 'any one'}${data.allow_withdraw === false ? ' · cannot be withdrawn' : ''}`;
     case 'notify': return `${people(data.to)}${data.title ? ` — “${data.title}”` : ''}`;
     case 'end': return 'Finish';
     default: return '';
