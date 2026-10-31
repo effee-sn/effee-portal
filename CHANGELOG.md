@@ -13,7 +13,7 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
-## [1.8.0] — not yet released (branch feature/flow-engine)
+## [1.8.0] — 2026-10-31
 
 ### Added — Flow Builder: flows for Sales, on a canvas
 

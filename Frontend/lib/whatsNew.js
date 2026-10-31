@@ -13,7 +13,7 @@
 export const RELEASES = [
   {
     version: '1.8.0',
-    date: '2026-10-29',
+    date: '2026-10-31',
     items: [
       {
         icon: 'spark',
