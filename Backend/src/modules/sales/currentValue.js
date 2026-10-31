@@ -40,6 +40,51 @@ async function latestSentOffers(enquiryIds, db = prisma) {
 }
 
 /**
+ * The latest sent offer of each round on each enquiry: `offer` (sent before
+ * negotiation) and `negotiated` (a revision sent at Negotiation).
+ * @param {number[]} enquiryIds
+ * @returns {Promise<Map<number, { offer?: object, negotiated?: object }>>}
+ */
+async function sentOffersByRound(enquiryIds, db = prisma) {
+  const out = new Map();
+  if (!enquiryIds.length) return out;
+  const rows = await db.enquiryAttachment.findMany({
+    where: { kind: 'OFFER', deleted_at: null, offer_value: { not: null }, sent_at: { not: null }, enquiry_id: { in: enquiryIds } },
+    select: { enquiry_id: true, offer_value: true, offer_fx_rate: true, sent_at: true, stage: true, version: true },
+    orderBy: [{ sent_at: 'desc' }, { id: 'desc' }],
+  });
+  for (const r of rows) {
+    const round = NEGOTIATED_AT.has(r.stage) ? 'negotiated' : 'offer';
+    const e = out.get(r.enquiry_id) || {};
+    if (!e[round]) e[round] = r;
+    out.set(r.enquiry_id, e);
+  }
+  return out;
+}
+
+/**
+ * Every figure of an enquiry, each in its own currency and in the display
+ * currency — expected (today's rate), offer and negotiated (rate locked when
+ * sent), PO (rate locked when won) — for the enquiries list.
+ */
+function allValues(e, rounds, rates, conv) {
+  const num = (v) => (v === null || v === undefined ? null : Number(v));
+  const shown = (amount, locked, on) => (amount === null ? null : paise(conv.convert(amount, e.currency_code, rates, locked, on)));
+  const offer = num(rounds?.offer?.offer_value);
+  const negotiated = num(rounds?.negotiated?.offer_value);
+  const po = e.stage === 'WON' ? num(e.order_value) : null;
+  return {
+    expected_value_display: shown(num(e.expected_value), null, null),
+    offer_sent_value: offer,
+    offer_sent_display: shown(offer, num(rounds?.offer?.offer_fx_rate), rounds?.offer?.sent_at),
+    negotiated_value: negotiated,
+    negotiated_display: shown(negotiated, num(rounds?.negotiated?.offer_fx_rate), rounds?.negotiated?.sent_at),
+    po_value: po,
+    po_display: shown(po, num(e.order_fx_rate), e.won_at),
+  };
+}
+
+/**
  * @param {{ stage: string, expected_value?: unknown, order_value?: unknown, order_fx_rate?: unknown, won_at?: Date|null, currency_code?: string }} e
  * @param {object|undefined} offer  its latest sent offer (see latestSentOffers)
  * @returns {{ amount: number|null, basis: 'PO'|'NEGOTIATION'|'OFFER'|'EXPECTED'|null, currency: string, lockedRate: number|null, onDate: Date|null }}
@@ -85,4 +130,4 @@ function valueFields(e, offer, rates, conv) {
   };
 }
 
-module.exports = { latestSentOffers, currentValue, inInr, inDisplay, valueFields, BASIS_LABEL, NEGOTIATED_AT };
+module.exports = { latestSentOffers, sentOffersByRound, allValues, currentValue, inInr, inDisplay, valueFields, BASIS_LABEL, NEGOTIATED_AT };

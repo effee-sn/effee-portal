@@ -8,7 +8,7 @@ const { currencyService } = require('../master/currency.service');
 const { loadRates, toInr, paise, displayConverter } = require('../master/fx');
 const { NEXT_STEP, enquiryRows, money, sentence, stageName } = require('./emailDetails');
 const { salesEvent } = require('./flowEvents');
-const { latestSentOffers, valueFields } = require('./currentValue');
+const { latestSentOffers, sentOffersByRound, allValues, valueFields } = require('./currentValue');
 const { resolveAssignment } = require('../flowengine/assignment');
 const { checkGuard } = require('../flowengine/guard');
 const { approvalsService } = require('../flowengine/approvals.service');
@@ -333,12 +333,17 @@ function createEnquiryService(repository) {
       // else expected — see ./currentValue) in the chosen currency: as stored when
       // that is its own currency; else at the rate locked on the PO / offer, and an
       // expected value at today's.
-      const offers = await latestSentOffers(page.items.map((e) => e.id));
+      // Every figure too (expected, offer, negotiated, PO), for the list's columns.
+      const ids = page.items.map((e) => e.id);
+      const [offers, rounds] = await Promise.all([latestSentOffers(ids), sentOffersByRound(ids)]);
       return {
         ...page,
         items: page.items.map((e) => {
           const v = valueFields(e, offers.get(e.id), rates, conv);
-          return { ...withInr(e, rates), ...v, display_currency: conv.code, display_value: v.current_value_display };
+          return {
+            ...withInr(e, rates), ...v, ...allValues(e, rounds.get(e.id), rates, conv),
+            display_currency: conv.code, display_value: v.current_value_display,
+          };
         }),
       };
     },

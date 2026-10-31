@@ -13,7 +13,6 @@ import { formatMoney } from '@/lib/money';
 import usePageSize from '@/lib/usePageSize';
 import PageSizeSelect from '@/components/PageSizeSelect';
 import EnquiryKanban from '@/components/sales/EnquiryKanban';
-import ValueBasis from '@/components/sales/ValueBasis';
 import { useDisplayCurrency } from '@/lib/displayCurrency';
 
 // List or Kanban — remembered per browser.
@@ -351,7 +350,7 @@ export default function EnquiriesPage() {
           {rows.length === 0 ? (
             <div className="py-20 text-center text-sm text-gray-400">No enquiries {stage || appId || search ? 'match your filters' : 'yet'}.</div>
           ) : (
-            <table className="w-full text-sm" style={{ minWidth: 880 }}>
+            <table className="w-full text-sm" style={{ minWidth: 1120 }}>
               <thead>
                 <tr className="border-b border-gray-200 text-left text-gray-500 group">
                   <SortTh field="ref_no" label="Ref" sort={sort} onSort={onSort} />
@@ -360,7 +359,10 @@ export default function EnquiriesPage() {
                   <SortTh field="stage" label="Stage" sort={sort} onSort={onSort} title="In flow order, New to Lost" />
                   <SortTh label="Prob." sort={sort} onSort={onSort} align="right" title="Win probability at this stage" />
                   <SortTh field="owner" label="Owner" sort={sort} onSort={onSort} />
-                  <SortTh field="expected_value" label="Value" sort={sort} onSort={onSort} align="right" title="Shows the current value (PO, else the latest offer sent, else expected); sorts by the expected value as entered" />
+                  <SortTh field="expected_value" label="Expected" sort={sort} onSort={onSort} align="right" title="The expected value (an estimate) — sorts by it" />
+                  <SortTh label="Offer" sort={sort} onSort={onSort} align="right" title="The latest offer sent to the customer" />
+                  <SortTh label="Negotiated" sort={sort} onSort={onSort} align="right" title="The latest revised offer sent during negotiation" />
+                  <SortTh label="PO" sort={sort} onSort={onSort} align="right" title="The PO (order) value once won. The figure in bold is the one the pipeline uses." />
                   <SortTh label="Acts" sort={sort} onSort={onSort} align="center" />
                 </tr>
               </thead>
@@ -395,11 +397,21 @@ export default function EnquiriesPage() {
                       {config?.probability?.[e.stage] !== undefined ? `${config.probability[e.stage]}%` : '—'}
                     </td>
                     <td className="px-3 py-3 text-gray-600">{e.owner?.name || '—'}</td>
-                    <td className="px-3 py-3 text-gray-700 tabular-nums text-right whitespace-nowrap"
-                      title={e.current_value != null ? `${money.formatterFor(e.display_currency).format(e.display_value)} · ${e.current_value_label} ${formatMoney(e.current_value, e.currency_code, e.currency?.symbol)}` : undefined}>
-                      {money.formatterFor(e.display_currency).compact(e.display_value)}
-                      <ValueBasis basis={e.current_value_basis} label={e.current_value_label} className="ml-1 align-middle" />
-                    </td>
+                    {[
+                      ['EXPECTED', e.expected_value, e.expected_value_display],
+                      ['OFFER', e.offer_sent_value, e.offer_sent_display],
+                      ['NEGOTIATION', e.negotiated_value, e.negotiated_display],
+                      ['PO', e.po_value, e.po_display],
+                    ].map(([basis, own, shown]) => {
+                      // The figure the pipeline uses is in bold (see Backend sales/currentValue).
+                      const current = e.current_value_basis === basis;
+                      return (
+                        <td key={basis} className={`px-3 py-3 tabular-nums text-right whitespace-nowrap ${current ? 'font-semibold text-gray-900' : 'text-gray-500'}`}
+                          title={own != null ? `${formatMoney(own, e.currency_code, e.currency?.symbol)}${current ? ' · used for the pipeline' : ''}` : undefined}>
+                          {own == null ? <span className="text-gray-300">—</span> : money.formatterFor(e.display_currency).compact(shown)}
+                        </td>
+                      );
+                    })}
                     <td className="px-3 py-3 text-gray-500 tabular-nums text-center">{e._count?.activities ?? 0}</td>
                   </tr>
                 ))}

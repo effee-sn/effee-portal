@@ -965,11 +965,17 @@ describe('Flow engine part 4: approvals', () => {
     d = await detail();
     assert.deepEqual([d.current_value, d.current_value_basis], [1250000, 'NEGOTIATION']);
     assert.equal((await pipeline()).open_value - p0.open_value, -250000);
+    const row = await listed();
+    assert.deepEqual(
+      [row.expected_value, row.offer_sent_value, row.negotiated_value, row.po_value].map((v) => (v === null ? null : Number(v))),
+      [1500000, 1350000, 1250000, null], 'the list shows every figure'
+    );
 
     // 5. Won: the PO value; it leaves the open pipeline.
     await enquiryService.win(id, { order_value: 1240000, order_no: 'PO-77' }, sa());
     d = await detail();
     assert.deepEqual([d.current_value, d.current_value_basis], [1240000, 'PO']);
+    assert.deepEqual([(await listed()).po_value, (await listed()).po_display], [1240000, 1240000]);
     assert.equal((await pipeline()).open_value - p0.open_value, -1500000, 'no longer open');
     assert.deepEqual([(await register()).value, (await register()).value_basis], [1240000, 'PO']);
   });

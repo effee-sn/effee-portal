@@ -62,6 +62,22 @@ describe('sales: current value of an enquiry', () => {
     assert.equal(inInr(cv, rates), 102876.72); // 1234.57 × 83.33 = 102,876.7181 → 102,876.72
   });
 
+  test('the list’s four figures, each at its own rate', () => {
+    const { allValues } = require('../../src/modules/sales/currentValue');
+    const inr = { convert: (a, cur, r, locked) => Number(a) * (cur === 'INR' ? 1 : (locked ?? r[cur])) };
+    const rounds = { offer: sent(1000, 'OFFER_RELEASED', 83), negotiated: sent(900, 'NEGOTIATION', 85) };
+    const open = allValues({ stage: 'NEGOTIATION_FOLLOW_UP', expected_value: 1200, currency_code: 'USD' }, rounds, rates, inr);
+    assert.deepEqual(open, {
+      expected_value_display: 100800, // today's 84
+      offer_sent_value: 1000, offer_sent_display: 83000, // locked 83
+      negotiated_value: 900, negotiated_display: 76500, // locked 85
+      po_value: null, po_display: null,
+    });
+    const won = allValues({ stage: 'WON', expected_value: 1200, order_value: 880, order_fx_rate: 86, currency_code: 'USD' }, rounds, rates, inr);
+    assert.deepEqual([won.po_value, won.po_display], [880, 75680]);
+    assert.deepEqual([allValues({ stage: 'NEW', expected_value: null, currency_code: 'INR' }, undefined, rates, inr).offer_sent_value], [null]);
+  });
+
   test('the fields screens use', () => {
     const v = valueFields({ stage: 'FOLLOW_UP', expected_value: 5, currency_code: 'INR' }, sent(7), rates);
     assert.deepEqual(v, { current_value: 7, current_value_basis: 'OFFER', current_value_label: 'Offer', current_value_inr: 7 });
