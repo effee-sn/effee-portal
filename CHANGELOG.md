@@ -13,6 +13,18 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.10.1] — 2026-10-31
+
+### Added — Flow Builder: help on every block
+
+- An **i** button beside "Remove block" opens a popup explaining the block and every term in its dropdowns. Works on published (read-only) flows too.
+- **If:** the fields are split into **The enquiry (as it is right now)** and **This action** (only what the chosen When brings). Look-alike names such as "Order value (₹)" and "Costing value (₹)" are tagged and explained (use the action's figure for what is being entered now), with margin % of offer vs on cost, every test, all/any and empty values.
+- **When, Assign, Approval, Notify, Which stage?, End:** each choice explained — triggers that can hold an action, owner vs holder vs raiser, least busy / turn by turn, and every `{{word}}`.
+
+**Upgrade:** no migrations — pull, `npm install` and build in Frontend, restart.
+
+---
+
 ## [1.10.0] — 2026-10-31
 
 ### Added — Reporting manager and Organisation chart

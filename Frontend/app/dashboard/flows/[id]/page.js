@@ -513,8 +513,8 @@ function Editor({ flowId, perms }) {
           {panel === 'runs' ? <RunLog flowId={flowId} nodes={nodes} onClose={() => setPanel('settings')} />
             : panel === 'test'
             ? <TestPanel flowId={flowId} event={event} catalog={lookups.catalog} onResult={onTestResult} onClose={() => { setPanel('settings'); setTested({}); }} />
-            : <fieldset disabled={readOnly} className="min-w-0"><Inspector node={selected} event={event} lookups={lookups} errors={selected ? byNode[selected.id] : null}
-              onChange={(s) => updateSettings(selected.id, s)} onDelete={removeSelected} /></fieldset>}
+            : <Inspector node={selected} event={event} lookups={lookups} errors={selected ? byNode[selected.id] : null} readOnly={readOnly}
+              onChange={(s) => updateSettings(selected.id, s)} onDelete={removeSelected} />}
         </aside>
       </div>
       {move && <MoveCurrentModal flowId={flowId} items={move} onClose={() => setMove(null)} />}

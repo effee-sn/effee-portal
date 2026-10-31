@@ -12,6 +12,18 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|string[]|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.10.1',
+    date: '2026-10-31',
+    items: [
+      {
+        icon: 'grid',
+        title: 'Flow Builder: help on every block',
+        text: 'Click the “i” beside Remove block to see what each dropdown term means — including look-alikes such as the enquiry’s Order value vs the one from this action.',
+        perm: ['FLOW_VIEW', 'FLOW_EDIT'],
+      },
+    ],
+  },
+  {
     version: '1.10.0',
     date: '2026-10-31',
     items: [

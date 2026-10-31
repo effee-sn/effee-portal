@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+import BlockHelp from './BlockHelp';
 import {
   BLOCK, STAGE_EVENTS, OPERATORS, OPS_FOR, NO_VALUE, LIST_VALUE, ASSIGN_TO, DEPARTMENT_PICK, ROLE_PICK, PEOPLE, numberText,
 } from './flowMeta';
@@ -95,7 +97,8 @@ function RuleValue({ field, op, value, onChange, lookups }) {
   return <input value={value ?? ''} onChange={(e) => onChange(e.target.value)} className={input} aria-label="Value" />;
 }
 
-export default function Inspector({ node, event, lookups, errors, onChange, onDelete }) {
+export default function Inspector({ node, event, lookups, errors, onChange, onDelete, readOnly = false }) {
+  const [help, setHelp] = useState(false);
   if (!node) {
     return (
       <div className="p-4 text-sm text-gray-500 space-y-2">
@@ -265,14 +268,20 @@ export default function Inspector({ node, event, lookups, errors, onChange, onDe
       <div className="flex items-center gap-2">
         <span className="w-6 h-6 rounded flex items-center justify-center text-white text-xs" style={{ backgroundColor: meta?.color }}>{meta?.icon}</span>
         <p className="font-semibold text-gray-800">{meta?.label}</p>
-        {kind !== 'trigger' && <button type="button" onClick={onDelete} className="ml-auto text-xs text-red-600 hover:underline cursor-pointer">Remove block</button>}
+        {/* Help stays usable on a published (read-only) flow — it sits outside the disabled fieldset. */}
+        <button type="button" onClick={() => setHelp(true)} title="What these choices mean" aria-label={`Help: ${meta?.label} block`}
+          className="ml-auto w-5 h-5 rounded-full border border-gray-300 text-[11px] font-semibold italic font-serif text-gray-500 hover:text-[var(--ams-primary)] hover:border-[var(--ams-primary)] cursor-pointer">i</button>
+        {kind !== 'trigger' && <button type="button" onClick={onDelete} disabled={readOnly} className="text-xs text-red-600 hover:underline disabled:opacity-40 disabled:no-underline cursor-pointer disabled:cursor-default">Remove block</button>}
       </div>
-      {errors?.length > 0 && (
-        <ul className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 list-disc pl-5">
-          {errors.map((m, i) => <li key={i}>{m}</li>)}
-        </ul>
-      )}
-      {body}
+      <fieldset disabled={readOnly} className="min-w-0 space-y-3">
+        {errors?.length > 0 && (
+          <ul className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 list-disc pl-5">
+            {errors.map((m, i) => <li key={i}>{m}</li>)}
+          </ul>
+        )}
+        {body}
+      </fieldset>
+      {help && <BlockHelp kind={kind} catalog={catalog} event={event} onClose={() => setHelp(false)} />}
     </div>
   );
 }
