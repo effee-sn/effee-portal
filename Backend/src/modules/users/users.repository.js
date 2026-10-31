@@ -42,6 +42,8 @@ function createUsersRepository(db) {
     updated_at: true,
     role: { select: { id: true, name: true, slug: true } },
     department: { select: { id: true, name: true } },
+    reports_to_id: true,
+    reports_to: { select: { id: true, name: true, status: true } },
   });
 
   /**
@@ -91,6 +93,23 @@ function createUsersRepository(db) {
      */
     findById(id) {
       return db.user.findFirst({ where: active({ id }), select: userSelect });
+    },
+
+    /**
+     * Everyone active, with what places them in the organisation (their
+     * department and who they report to), and every department's head.
+     * @returns {Promise<{ people: object[], departments: { id: number, name: string, head_user_id: number|null }[] }>}
+     */
+    async organisation() {
+      const [people, departments] = await Promise.all([
+        db.user.findMany({
+          where: active({ status: 'ACTIVE' }),
+          select: { id: true, name: true, email: true, designation: true, reports_to_id: true, department_id: true, department: { select: { id: true, name: true } }, role: { select: { name: true } } },
+          orderBy: { name: 'asc' },
+        }),
+        db.department.findMany({ where: { deleted_at: null }, select: { id: true, name: true, head_user_id: true }, orderBy: { name: 'asc' } }),
+      ]);
+      return { people, departments };
     },
 
     /**

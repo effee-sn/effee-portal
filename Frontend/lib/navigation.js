@@ -111,6 +111,7 @@ export const AREAS = [
       { label: 'Users',        href: '/dashboard/users',       perm: 'USER_VIEW' },
       { label: 'Roles',        href: '/dashboard/roles',       perm: 'ROLE_VIEW' },
       { label: 'Departments',  href: '/dashboard/departments', perm: 'DEPT_VIEW' },
+      { label: 'Organisation chart', href: '/dashboard/org-chart', perm: 'USER_VIEW' },
       { label: 'Flow Builder', href: '/dashboard/flows',       perm: 'FLOW_VIEW' },
       { label: 'Audit Log',    href: '/dashboard/audit',       perm: null, system: true },
       { label: 'Backup',       href: '/dashboard/backup',      perm: null, system: true },

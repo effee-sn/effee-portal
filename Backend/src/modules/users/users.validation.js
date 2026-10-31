@@ -62,6 +62,8 @@ const createUserBody = z.object({
   status:  schemas.userStatus.optional(),
   department_id: createDepartmentId,
   designation,
+  // Reporting manager (optional; without one, the department head is).
+  reports_to_id: createDepartmentId,
 });
 
 /**
@@ -88,6 +90,11 @@ const updateUserBody = z.object({
   designation: z.preprocess(
     (v) => (v === '' || v === null ? null : v),
     z.string().trim().max(120).nullable().optional()
+  ),
+  // Blank clears it: the department head is then their manager.
+  reports_to_id: z.preprocess(
+    (v) => (v === '' || v === null ? null : v),
+    z.coerce.number().int().positive().nullable().optional()
   ),
 }).refine(
   (data) => Object.keys(data).length > 0,

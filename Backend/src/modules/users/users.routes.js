@@ -4,7 +4,7 @@ const authenticate = require('../../middleware/authenticate');
 const authorize    = require('../../middleware/authorize');
 const { asyncHandler, validate } = require('../../core');
 const { listUsersQuery, userIdParam, createUserBody, updateUserBody } = require('./users.validation');
-const { getUsers, getUserById, createUser, updateUser, deleteUser, resendInvite } = require('./users.controller');
+const { getUsers, getOrgChart, getUserById, createUser, updateUser, deleteUser, resendInvite } = require('./users.controller');
 
 const router = Router();
 
@@ -32,6 +32,9 @@ router.get(
   validate({ query: listUsersQuery }),
   asyncHandler(getUsers)
 );
+
+// Before /:id, which would otherwise take "org-chart" for an id.
+router.get('/org-chart', authorize('USER_VIEW'), asyncHandler(getOrgChart));
 
 router.get(
   '/:id',

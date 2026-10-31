@@ -25,18 +25,21 @@ function UserModal({ user, onClose, onSaved }) {
     name: user?.name || '', email: user?.email || '', phone: user?.phone || '',
     password: '', role_id: user?.role?.id || '', status: user?.status || 'ACTIVE',
     department_id: user?.department?.id || '', designation: user?.designation || '',
+    reports_to_id: user?.reports_to_id || '',
     send_invite: true,
   });
   const [inviteMsg, setInviteMsg] = useState({ type: '', text: '' });
   const [inviting, setInviting]   = useState(false);
   const [roles, setRoles]             = useState([]);
   const [departments, setDepartments] = useState([]);
+  const [people, setPeople]           = useState([]); // for Reports to
   const [error, setError]             = useState('');
   const [loading, setLoading]         = useState(false);
 
   useEffect(() => {
     apiGet('/lookup/roles').then(setRoles).catch((e) => setError(e.message));
     apiGet('/lookup/departments').then(setDepartments).catch(() => {});
+    apiGet('/lookup/users').then(setPeople).catch(() => {});
   }, []);
 
   const handleChange = (e) => { setForm({ ...form, [e.target.name]: e.target.value }); setError(''); };
@@ -125,6 +128,14 @@ function UserModal({ user, onClose, onSaved }) {
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Designation</label>
             <input name="designation" value={form.designation} onChange={handleChange} placeholder="e.g. Senior Engineer" className="ams-input" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Reports to</label>
+            <select name="reports_to_id" value={form.reports_to_id} onChange={handleChange} className="ams-input">
+              <option value="">— The head of their department —</option>
+              {people.filter((p) => p.id !== user?.id).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <p className="mt-1 text-xs text-gray-400">Their reporting manager. Leave empty when it is the head of their department.</p>
           </div>
           {isEdit && (
             <div>
@@ -443,6 +454,7 @@ function UsersPageInner() {
                     <th className="px-3 py-3 text-left text-gray-500 font-normal">Phone</th>
                     <th className="px-3 py-3 text-left text-gray-500 font-normal">Role</th>
                     <th className="px-3 py-3 text-left text-gray-500 font-normal">Department</th>
+                    <th className="px-3 py-3 text-left text-gray-500 font-normal">Reports to</th>
                     <th className="px-3 py-3 text-left text-gray-500 font-normal">Status</th>
                     <th className="pl-3 pr-3 py-3 w-16 text-right">
                       <svg className="w-4 h-4 text-gray-400 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -479,6 +491,9 @@ function UsersPageInner() {
                       <td className="px-3 py-3 text-gray-600">
                         {user.department?.name || '—'}
                         {user.designation && <span className="block text-xs text-gray-400">{user.designation}</span>}
+                      </td>
+                      <td className="px-3 py-3 text-gray-600">
+                        {user.reports_to?.name || <span className="text-gray-400 text-xs">Department head</span>}
                       </td>
                       <td className="px-3 py-3">
                         <span className={`inline-flex items-center gap-1.5 text-sm ${

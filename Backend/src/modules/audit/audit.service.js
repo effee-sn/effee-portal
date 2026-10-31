@@ -194,7 +194,7 @@ function createAuditService(repository) {
  * assigned_user_id, head_user_id, created_by, …).
  * @param {string} key
  */
-const isUserKey = (key) => /(^|_)(user_id|owner_id|handler_id|created_by|updated_by|actor_id)$/.test(key)
+const isUserKey = (key) => /(^|_)(user_id|owner_id|handler_id|reports_to_id|created_by|updated_by|actor_id)$/.test(key)
   || /_user_id$/.test(key);
 
 /**

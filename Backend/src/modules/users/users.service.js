@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt');
 
 const config = require('../../config/env');
 const { usersRepository } = require('./users.repository');
+const { makesLoop, buildChart } = require('./orgChart');
 const { auditService } = require('../audit/audit.service');
 const { authService } = require('../auth/auth.service');
 const crypto = require('crypto');
@@ -65,6 +66,25 @@ function createUsersService(repository) {
   }
 
   /**
+   * Asserts a reporting manager is allowed: an active person, not the user
+   * themselves, and not someone below them in the chart (that would make a
+   * loop — A reports to B who reports to A).
+   * @param {number|null} userId  null when creating
+   * @param {number|null|undefined} managerId
+   * @throws {ValidationError}
+   */
+  async function assertReportsTo(userId, managerId) {
+    if (managerId === null || managerId === undefined) return;
+    const bad = (message) => new ValidationError('Validation failed', [{ field: 'reports_to_id', message }]);
+    if (managerId === userId) throw bad('Someone cannot report to themselves');
+    const { people, departments } = await repository.organisation();
+    if (!people.some((p) => p.id === managerId)) throw bad('Choose an active user');
+    if (userId !== null && makesLoop(userId, managerId, people, departments)) {
+      throw bad('That person already reports to this user (directly or further up) — it would make a loop');
+    }
+  }
+
+  /**
    * Asserts that email and phone are not already taken.
    *
    * Checked before writing so the caller gets a precise message naming the
@@ -113,6 +133,23 @@ function createUsersService(repository) {
     },
 
     /**
+     * The organisation chart: every active person with their manager (Reports
+     * to, else their department head), how many report to them, who sits at the
+     * top, who is not placed yet, and any loop that had to be broken.
+     */
+    async orgChart() {
+      const { people, departments } = await repository.organisation();
+      const chart = buildChart(people, departments);
+      const headOf = new Map();
+      for (const d of departments) if (d.head_user_id) headOf.set(d.head_user_id, [...(headOf.get(d.head_user_id) || []), d.name]);
+      return {
+        ...chart,
+        people: chart.people.map(({ department_id, ...p }) => ({ ...p, head_of: headOf.get(p.id) || [] })),
+        departments,
+      };
+    },
+
+    /**
      * @param {number} id
      * @returns {Promise<object>}
      * @throws {NotFoundError}
@@ -138,6 +175,7 @@ function createUsersService(repository) {
     async create(dto, actor) {
       await assertRoleExists(dto.role_id);
       await assertDepartmentExists(dto.department_id);
+      await assertReportsTo(null, dto.reports_to_id);
       await assertUnique({ email: dto.email, phone: dto.phone });
 
       // With no password the account is reachable only through the invite
@@ -159,6 +197,7 @@ function createUsersService(repository) {
         status: dto.status || 'ACTIVE',
         department_id: dto.department_id ?? null,
         designation: dto.designation ?? null,
+        reports_to_id: dto.reports_to_id ?? null,
         created_by: actor?.id ?? null,
         updated_by: actor?.id ?? null,
       });
@@ -214,6 +253,7 @@ function createUsersService(repository) {
       if (dto.department_id !== undefined && dto.department_id !== null) {
         await assertDepartmentExists(dto.department_id);
       }
+      if (dto.reports_to_id !== undefined) await assertReportsTo(id, dto.reports_to_id);
 
       if (dto.email !== undefined || dto.phone !== undefined) {
         await assertUnique({ email: dto.email, phone: dto.phone, excludeId: id });
@@ -231,6 +271,8 @@ function createUsersService(repository) {
       // `department_id` accepts null to clear the assignment.
       if (dto.department_id !== undefined) data.department_id = dto.department_id;
       if (dto.designation   !== undefined) data.designation = dto.designation;
+      // `reports_to_id` accepts null: the department head is then their manager.
+      if (dto.reports_to_id !== undefined) data.reports_to_id = dto.reports_to_id;
 
       // Tracked separately so the audit entry records *that* the password
       // changed without the hash appearing in the trail.

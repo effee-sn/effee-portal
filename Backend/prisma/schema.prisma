@@ -64,6 +64,13 @@ model User {
   department    Department? @relation("DepartmentMembers", fields: [department_id], references: [id])
   department_id Int?
   designation   String?
+  // Who this person reports to (their reporting manager). Optional: when
+  // empty, their department head is their manager — the organisation chart
+  // follows reports-to, else the department head. No index declared: MySQL
+  // makes one for the foreign key (see the note below).
+  reports_to    User?  @relation("ReportsTo", fields: [reports_to_id], references: [id], onDelete: SetNull)
+  reports_to_id Int?
+  reports       User[] @relation("ReportsTo")
 
   // Screen theme the user picked: LIGHT, DARK or SYSTEM (follow the device).
   theme String @default("SYSTEM") @db.VarChar(10)

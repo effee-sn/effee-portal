@@ -153,6 +153,9 @@ export default function UserProfilePage() {
           <DetailRow label="Designation">
             {user.designation || <span className="text-gray-300">—</span>}
           </DetailRow>
+          <DetailRow label="Reports to">
+            {user.reports_to?.name || <span className="text-gray-400">The head of their department</span>}
+          </DetailRow>
           <DetailRow label="Status">
             <span className={`inline-flex items-center gap-1 text-xs font-medium ${
               user.status === 'ACTIVE' ? 'text-green-700' : 'text-red-600'

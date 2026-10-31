@@ -47,6 +47,15 @@ const getUsers = async (req, res) => {
 };
 
 /**
+ * `GET /users/org-chart` — who reports to whom (bare object, like the rest).
+ *
+ * @type {import('express').RequestHandler}
+ */
+const getOrgChart = async (req, res) => {
+  res.json(await usersService.orgChart());
+};
+
+/**
  * `GET /users/:id`
  *
  * @type {import('express').RequestHandler}
@@ -92,4 +101,4 @@ const resendInvite = async (req, res) => {
   res.json(result);
 };
 
-module.exports = { getUsers, getUserById, createUser, updateUser, deleteUser, resendInvite };
+module.exports = { getUsers, getOrgChart, getUserById, createUser, updateUser, deleteUser, resendInvite };
