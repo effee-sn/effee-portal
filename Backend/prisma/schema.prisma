@@ -217,6 +217,7 @@ enum PermissionAction {
   FINANCE
   EXPORT
   REASSIGN
+  PUBLISH
 }
 
 model RolePermission {

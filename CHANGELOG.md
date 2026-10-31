@@ -13,6 +13,14 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.8.1] — 2026-10-31
+
+### Fixed — v1.8.0 migration failed on MySQL in strict mode
+
+- The migration `20261029140000_flow_publish_permission` added the **Flow Builder → Publish** permission without first adding `PUBLISH` to the permission actions, so a strict database (the VPS) refused it: *Data truncated for column 'action'*. It now adds the action first. Checked by recreating the v1.7.2 database in strict mode and applying all eight v1.8.0 migrations, then re-running every test and the real-user QA in strict mode.
+
+**Upgrade from a failed v1.8.0 deploy:** `npx prisma migrate resolve --rolled-back 20261029140000_flow_publish_permission`, then `npx prisma migrate deploy` (the four migrations already applied stay as they are). A fresh upgrade from v1.7.2 needs nothing extra.
+
 ## [1.8.0] — 2026-10-31
 
 ### Added — Flow Builder: flows for Sales, on a canvas
