@@ -13,6 +13,17 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.10.0] — 2026-10-31
+
+### Added — Reporting manager and Organisation chart
+
+- **Users → Reports to:** an optional reporting manager for each person. Left empty, their manager is the **head of their department**. Refused when it is themselves, an inactive user, or someone below them (a loop). Shown in the users list and on the user's page, and recorded in the audit log.
+- **Administrator → Organisation chart** (`USER_VIEW`): a top-down tree of who reports to whom — each person's Reports to, else their department head. Solid card = chosen manager, dashed = through the department head; "Head of …" tags, report counts, expand / collapse, search (opens the branches above the matches), a **Not placed** list (no manager and nobody under them), and a warning if department heads ever form a circle.
+
+**Upgrade:** one migration (`user_reports_to` — a `reports_to_id` column on users) — pull, `npx prisma migrate deploy` and `npx prisma generate` in Backend, `npm install` and build in Frontend, restart.
+
+---
+
 ## [1.9.0] — 2026-10-31
 
 ### Changed — Sales: the pipeline uses the most confirmed value

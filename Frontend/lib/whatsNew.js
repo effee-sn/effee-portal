@@ -12,6 +12,18 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|string[]|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.10.0',
+    date: '2026-10-31',
+    items: [
+      {
+        icon: 'grid',
+        title: 'Organisation chart',
+        text: 'Administrator → Organisation chart shows who reports to whom. Set each person’s Reports to in Users; left empty, their manager is the head of their department.',
+        perm: 'USER_VIEW',
+      },
+    ],
+  },
+  {
     version: '1.9.0',
     date: '2026-10-31',
     items: [
