@@ -8,6 +8,7 @@ const { currencyService } = require('../master/currency.service');
 const { loadRates, toInr, paise, displayConverter } = require('../master/fx');
 const { NEXT_STEP, enquiryRows, money, sentence, stageName } = require('./emailDetails');
 const { salesEvent } = require('./flowEvents');
+const { latestSentOffers, valueFields } = require('./currentValue');
 const { resolveAssignment } = require('../flowengine/assignment');
 const { checkGuard } = require('../flowengine/guard');
 const { approvalsService } = require('../flowengine/approvals.service');
@@ -328,17 +329,16 @@ function createEnquiryService(repository) {
       const orderBy = [field === 'customer' ? { customer: { name: dir } } : field === 'owner' ? { owner: { name: dir } } : { [field]: dir }, { id: 'desc' }];
       const page = await repository.findPage({ where, orderBy, skip: query.skip, take: query.take });
       const [rates, conv] = await Promise.all([loadRates(), displayConverter(query.display_currency)]);
-      // display_value: the value shown (order once won, else expected) in the chosen
-      // currency — as stored when that is its own currency; else a won order at the
-      // rate on the day it was won, and an open one at today's.
+      // display_value: the current value (PO once won, else the latest offer sent,
+      // else expected — see ./currentValue) in the chosen currency: as stored when
+      // that is its own currency; else at the rate locked on the PO / offer, and an
+      // expected value at today's.
+      const offers = await latestSentOffers(page.items.map((e) => e.id));
       return {
         ...page,
         items: page.items.map((e) => {
-          const r = withInr(e, rates);
-          const won = e.stage === 'WON';
-          const amount = won ? e.order_value : e.expected_value;
-          const shown = amount === null ? null : paise(conv.convert(amount, e.currency_code, rates, won ? e.order_fx_rate : null, won ? e.won_at : null));
-          return { ...r, display_currency: conv.code, display_value: shown };
+          const v = valueFields(e, offers.get(e.id), rates, conv);
+          return { ...withInr(e, rates), ...v, display_currency: conv.code, display_value: v.current_value_display };
         }),
       };
     },
@@ -360,6 +360,8 @@ function createEnquiryService(repository) {
         display_currency: conv.code,
         expected_value_display: enquiry.expected_value === null ? null : paise(conv.convert(enquiry.expected_value, enquiry.currency_code, rates)),
         order_value_display: enquiry.order_value === null ? null : paise(conv.convert(enquiry.order_value, enquiry.currency_code, rates, enquiry.order_fx_rate, enquiry.won_at)),
+        // The current value (PO / latest offer sent / expected) and what it is.
+        ...valueFields(enquiry, (await latestSentOffers([enquiry.id])).get(enquiry.id), rates, conv),
       };
     },
 
@@ -483,6 +485,11 @@ function createEnquiryService(repository) {
         // its currency — reopen it first to change.
         if (before.stage === 'WON' || before.stage === 'LOST') {
           throw new ConflictError('The currency of a closed enquiry cannot be changed — reopen it first');
+        }
+        // Offer prices and the costing value are amounts in this currency: changing it
+        // would silently turn ₹10,00,000 into $10,00,000. Price them again instead.
+        if (before.final_cost !== null || await repository.hasPricedOffer(id)) {
+          throw new ConflictError('The currency cannot change once an offer is priced or the costing value is entered — they are amounts in this currency');
         }
         await currencyService.assertSelectable(dto.currency_code);
       }

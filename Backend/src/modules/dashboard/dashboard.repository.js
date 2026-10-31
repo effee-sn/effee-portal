@@ -1,6 +1,7 @@
 const prisma = require('../../lib/prisma');
 const { STAGE_AGING_DAYS } = require('../sales/followup.service');
 const { loadRates, toInr, displayConverter } = require('../master/fx');
+const { latestSentOffers, currentValue } = require('../sales/currentValue');
 
 /**
  * Dashboard data-access layer.
@@ -127,7 +128,7 @@ function createDashboardRepository(db) {
       const [rates, conv, byStage, wonMonth, lostMonth, won90, lost90, stalled, hot] = await Promise.all([
         loadRates(db),
         displayConverter(currency, db),
-        db.enquiry.groupBy({ by: ['stage', 'currency_code'], where: open, _count: { _all: true }, _sum: { expected_value: true } }),
+        db.enquiry.findMany({ where: open, select: { id: true, stage: true, expected_value: true, currency_code: true, order_value: true, order_fx_rate: true, won_at: true } }),
         db.enquiry.findMany({
           where: { deleted_at: null, stage: 'WON', won_at: { gte: monthStart } },
           select: { order_value: true, currency_code: true, order_fx_rate: true, won_at: true },
@@ -139,13 +140,16 @@ function createDashboardRepository(db) {
         db.enquiry.count({ where: { ...open, current_temperature: 'HOT' } }),
       ]);
 
-      // One row per stage, summing every currency's amount in INR.
+      // One row per stage, summing each open enquiry's current value (latest offer
+      // sent, else expected — see sales/currentValue) in the display currency.
+      const offers = await latestSentOffers(byStage.map((e) => e.id), db);
       const perStage = new Map();
-      for (const row of byStage) {
-        const p = perStage.get(row.stage) || { stage: row.stage, count: 0, value: 0 };
-        p.count += row._count._all;
-        p.value += conv.convert(row._sum.expected_value, row.currency_code, rates);
-        perStage.set(row.stage, p);
+      for (const e of byStage) {
+        const p = perStage.get(e.stage) || { stage: e.stage, count: 0, value: 0 };
+        const cv = currentValue(e, offers.get(e.id));
+        p.count += 1;
+        if (cv.amount !== null) p.value += conv.convert(cv.amount, cv.currency, rates, cv.lockedRate, cv.onDate);
+        perStage.set(e.stage, p);
       }
       const pipeline = [...perStage.values()].map((p) => ({ ...p, value: Math.round(p.value) }));
 

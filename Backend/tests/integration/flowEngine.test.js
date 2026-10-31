@@ -919,6 +919,70 @@ describe('Flow engine part 4: approvals', () => {
     });
   });
 
+  // ── current value: PO / latest offer sent / expected, the same on every screen ──
+  it('current value: expected → offer sent → unmarked → negotiated → PO, on the enquiry, the list, the dashboards and the reports', async () => {
+    const { analyticsService } = require('../../src/modules/sales/analytics.service');
+    const { dashboardRepository } = require('../../src/modules/dashboard/dashboard.repository');
+    const { reportsService } = require('../../src/modules/reports/reports.service');
+    const big = await withOffer(1350000);
+    const id = big.e.id;
+    await prisma.enquiry.update({ where: { id }, data: { expected_value: 1500000 } });
+    const detail = () => enquiryService.getById(id, sa());
+    const listed = async () => (await enquiryService.list({ skip: 0, take: 200, search: big.e.ref_no }, sa())).items.find((x) => x.id === id);
+    const pipeline = async () => (await analyticsService.overview({ owner_id: fx.field.id })).headline;
+    const home = async () => (await dashboardRepository.salesSnapshot()).open_value;
+    const register = async () => (await reportsService.run('sales', 'enquiry-register', { customer_id: fx.customer.id, from: '2020-01-01' }, sa())).rows.find((r) => r.id === id);
+
+    // 1. Offer uploaded but not sent: still the expected value.
+    let d = await detail();
+    assert.deepEqual([d.current_value, d.current_value_basis], [1500000, 'EXPECTED']);
+    const p0 = await pipeline(); const h0 = await home();
+
+    // 2. Sent: the offer price everywhere.
+    await attachmentService.markSent(big.offer.id, true, sa());
+    d = await detail();
+    assert.deepEqual([d.current_value, d.current_value_basis, d.current_value_label, d.current_value_inr], [1350000, 'OFFER', 'Offer', 1350000]);
+    const l = await listed();
+    assert.deepEqual([l.display_value, l.current_value_basis], [1350000, 'OFFER']);
+    const p1 = await pipeline();
+    assert.equal(p1.open_value - p0.open_value, -150000, 'open pipeline uses the offer, not the expected value');
+    assert.equal(await home() - h0, -150000, 'home dashboard too');
+    const r = await register();
+    assert.deepEqual([r.expected, r.value, r.value_basis, r.value_inr], [1500000, 1350000, 'Offer', 1350000]);
+
+    // 3. Unmarked: back to the expected value.
+    await attachmentService.markSent(big.offer.id, false, admin(fx.admin));
+    assert.equal((await detail()).current_value_basis, 'EXPECTED');
+    assert.equal((await pipeline()).open_value, p0.open_value);
+
+    // 4. Sent again, then a revised offer sent at Negotiation replaces it.
+    await attachmentService.markSent(big.offer.id, true, sa());
+    await activityService.create(id, { type: 'CALL', activity_at: new Date(), subject: 'wants less', needs_negotiation: true, follow_up_ended: true }, sa());
+    assert.equal(await stageOf(id), 'NEGOTIATION');
+    const rev = await upload(id, 'OFFER', { offer_value: 1250000 });
+    assert.equal((await detail()).current_value, 1350000, 'an unsent revision changes nothing');
+    await attachmentService.markSent(rev.id, true, sa());
+    d = await detail();
+    assert.deepEqual([d.current_value, d.current_value_basis], [1250000, 'NEGOTIATION']);
+    assert.equal((await pipeline()).open_value - p0.open_value, -250000);
+
+    // 5. Won: the PO value; it leaves the open pipeline.
+    await enquiryService.win(id, { order_value: 1240000, order_no: 'PO-77' }, sa());
+    d = await detail();
+    assert.deepEqual([d.current_value, d.current_value_basis], [1240000, 'PO']);
+    assert.equal((await pipeline()).open_value - p0.open_value, -1500000, 'no longer open');
+    assert.deepEqual([(await register()).value, (await register()).value_basis], [1240000, 'PO']);
+  });
+
+  it('the currency of an enquiry cannot change once an offer is priced or the costing value is entered', async () => {
+    const big = await withOffer(500000);
+    const usd = await prisma.currency.findFirst({ where: { code: { not: 'INR' } }, select: { code: true } });
+    if (!usd) return; // no second currency set up
+    await assert.rejects(enquiryService.update(big.e.id, { currency_code: usd.code }, sa()), /cannot change once an offer is priced/);
+    const plain = await toReview();
+    await enquiryService.update(plain.id, { currency_code: usd.code }, sa()); // nothing priced yet: fine
+  });
+
   // ── found in real-user testing ───────────────────────────────────────────
   it('quick repeated clicks raise one request and tell the approver once', async () => {
     await withFlow(bigOfferFlow(), async () => {

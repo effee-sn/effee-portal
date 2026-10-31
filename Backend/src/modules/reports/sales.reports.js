@@ -2,6 +2,7 @@ const { salesReportsRepository } = require('./sales.reports.repository');
 const { salesConfigService } = require('../sales/config.service');
 const { loadRates, paise, displayConverter } = require('../master/fx');
 const { STAGE_AGING_DAYS } = require('../sales/followup.service');
+const { currentValue, BASIS_LABEL } = require('../sales/currentValue');
 
 /**
  * Sales MIS report definitions.
@@ -37,6 +38,19 @@ function createSalesReports(repository, config = salesConfigService) {
   const sum = (rows, key) => paise(rows.reduce((n, r) => n + (Number(r[key]) || 0), 0));
 
   /**
+   * An enquiry's current value (PO once won, else the latest offer sent, else
+   * expected — see sales/currentValue; `e.offer` from the repository), its own
+   * amount, what it is, and in the report's currency (null when there is none).
+   */
+  const valueOf = (e, conv, rates) => {
+    const cv = currentValue(e, e.offer);
+    return {
+      amount: cv.amount, basis: cv.basis ? BASIS_LABEL[cv.basis] : null,
+      shown: cv.amount === null ? null : conv.convert(cv.amount, cv.currency, rates, cv.lockedRate, cv.onDate),
+    };
+  };
+
+  /**
    * Per-customer / per-application breakdown, shared by both "-wise" reports:
    * raised, offers sent and won/lost in the period; open right now.
    * @param {'customer_id'|'application_id'} dim
@@ -44,7 +58,7 @@ function createSalesReports(repository, config = salesConfigService) {
   async function breakdown(f, dim, names) {
     const conv = f.conv ?? await displayConverter();
     const [rates, raised, open, offers, won, lost] = await Promise.all([
-      loadRates(), repository.raisedBy(f, dim), repository.openBy(f, dim), repository.offersSent(f),
+      loadRates(), repository.raisedBy(f, dim), repository.openValues(f), repository.offersSent(f),
       repository.won(f), repository.lost(f),
     ]);
     const groups = new Map();
@@ -54,7 +68,7 @@ function createSalesReports(repository, config = salesConfigService) {
       return groups.get(k);
     };
     for (const r of raised) { const x = g(r[dim]); x.raised = r._count._all; x.last_raised = day(r._max.created_at); }
-    for (const r of open) { const x = g(r[dim]); x.open += r._count._all; x.open_inr += conv.convert(r._sum.expected_value, r.currency_code, rates); }
+    for (const e of open) { const x = g(e[dim]); x.open += 1; x.open_inr += valueOf(e, conv, rates).shown ?? 0; }
     // Offers: the last priced offer sent per enquiry in the period.
     const lastOffer = new Map();
     for (const o of offers) lastOffer.set(o.enquiry_id, o);
@@ -90,7 +104,7 @@ function createSalesReports(repository, config = salesConfigService) {
     { key: 'raised', label: 'Raised', type: 'int' },
     { key: 'last_raised', label: 'Last enquiry', type: 'date' },
     { key: 'open', label: 'Open now', type: 'int' },
-    { key: 'open_inr', label: 'Open value (₹)', type: 'inr', hint: 'Right now, at the current rate' },
+    { key: 'open_inr', label: 'Open value (₹)', type: 'inr', hint: 'Right now: each open enquiry’s latest offer sent (at its locked rate), else its expected value (at the current rate)' },
     { key: 'offers', label: 'Offers sent', type: 'int' },
     { key: 'offered_inr', label: 'Offered (₹)', type: 'inr', hint: 'Last priced offer sent per enquiry in the period' },
     { key: 'won', label: 'Won', type: 'int' },
@@ -182,8 +196,10 @@ function createSalesReports(repository, config = salesConfigService) {
         { key: 'owner', label: 'Owner', type: 'text' },
         { key: 'holder', label: 'With', type: 'text' },
         { key: 'currency', label: 'Currency', type: 'text' },
-        { key: 'value', label: 'Expected value', type: 'amount' },
-        { key: 'value_inr', label: 'Value (₹)', type: 'inr', hint: 'Won: order value at the locked rate; otherwise expected value at the current rate' },
+        { key: 'expected', label: 'Expected value', type: 'amount' },
+        { key: 'value', label: 'Current value', type: 'amount', hint: 'PO once won, else the latest offer sent, else the expected value — in the enquiry’s currency' },
+        { key: 'value_basis', label: 'Based on', type: 'text' },
+        { key: 'value_inr', label: 'Value (₹)', type: 'inr', hint: 'PO and offers at the rate locked when won / sent; expected value at the current rate' },
         { key: 'probability', label: 'Probability %', type: 'pct' },
         { key: 'weighted_inr', label: 'Weighted (₹)', type: 'inr' },
         { key: 'temperature', label: 'Temperature', type: 'text' },
@@ -196,11 +212,9 @@ function createSalesReports(repository, config = salesConfigService) {
         const now = Date.now();
         const out = rows.map((e) => {
           const won = e.stage === 'WON';
-          const amount = won ? e.order_value : e.expected_value;
           // No amount entered → blank, not ₹0.
-          const valueInr = amount === null ? null : won
-            ? conv.convert(e.order_value, e.currency_code, rates, e.order_fx_rate, e.won_at)
-            : conv.convert(e.expected_value, e.currency_code, rates);
+          const v = valueOf(e, conv, rates);
+          const valueInr = v.shown;
           const p = probability[e.stage] ?? 0;
           const closed = won || e.stage === 'LOST';
           return {
@@ -215,7 +229,9 @@ function createSalesReports(repository, config = salesConfigService) {
             owner: e.owner?.name ?? null,
             holder: closed ? null : (e.handler ?? e.owner)?.name ?? null,
             currency: e.currency_code,
-            value: num(amount),
+            expected: num(e.expected_value),
+            value: v.amount,
+            value_basis: v.basis,
             value_inr: valueInr === null ? null : paise(valueInr),
             probability: p,
             weighted_inr: valueInr === null ? null : paise(e.stage === 'LOST' ? 0 : valueInr * (p / 100)),
@@ -314,8 +330,9 @@ function createSalesReports(repository, config = salesConfigService) {
         { key: 'reason', label: 'Reason', type: 'text' },
         { key: 'went_to', label: 'Went to', type: 'text' },
         { key: 'currency', label: 'Currency', type: 'text' },
-        { key: 'value', label: 'Expected value', type: 'amount' },
-        { key: 'value_inr', label: 'Value lost (₹)', type: 'inr', hint: 'At the current rate' },
+        { key: 'value', label: 'Value', type: 'amount' },
+        { key: 'value_basis', label: 'Based on', type: 'text' },
+        { key: 'value_inr', label: 'Value lost (₹)', type: 'inr', hint: 'The latest offer sent (at its locked rate), else the expected value (at the current rate)' },
       ],
       async build(f) {
         const conv = f.conv ?? await displayConverter();
@@ -332,8 +349,7 @@ function createSalesReports(repository, config = salesConfigService) {
           reason: e.lost_reason,
           went_to: e.lost_to,
           currency: e.currency_code,
-          value: num(e.expected_value),
-          value_inr: e.expected_value === null ? null : paise(conv.convert(e.expected_value, e.currency_code, rates)),
+          ...(() => { const v = valueOf(e, conv, rates); return { value: v.amount, value_basis: v.basis, value_inr: v.shown === null ? null : paise(v.shown) }; })(),
         }));
         return { rows, totals: { ref_no: `Total · ${rows.length}`, value_inr: sum(rows, 'value_inr') } };
       },
@@ -399,7 +415,7 @@ function createSalesReports(repository, config = salesConfigService) {
         { key: 'name', label: 'Field person', type: 'text' },
         { key: 'raised', label: 'Raised', type: 'int' },
         { key: 'open', label: 'Open now', type: 'int' },
-        { key: 'open_inr', label: 'Open value (₹)', type: 'inr', hint: 'Right now, at the current rate' },
+        { key: 'open_inr', label: 'Open value (₹)', type: 'inr', hint: 'Right now: each open enquiry’s latest offer sent (at its locked rate), else its expected value (at the current rate)' },
         { key: 'offers', label: 'Offers sent', type: 'int' },
         { key: 'won', label: 'Won', type: 'int' },
         { key: 'won_inr', label: 'Won value (₹)', type: 'inr' },
@@ -410,7 +426,7 @@ function createSalesReports(repository, config = salesConfigService) {
       async build(f) {
         const conv = f.conv ?? await displayConverter();
         const [rates, raised, open, offers, won, lost, activities] = await Promise.all([
-          loadRates(), repository.raisedByOwner(f), repository.openByOwner(f), repository.offersSent(f),
+          loadRates(), repository.raisedByOwner(f), repository.openValues(f), repository.offersSent(f),
           repository.won(f), repository.lost(f), repository.activitiesByLogger(f),
         ]);
         const people = new Map();
@@ -419,7 +435,7 @@ function createSalesReports(repository, config = salesConfigService) {
           return people.get(id);
         };
         for (const r of raised) row(r.owner_id).raised = r._count._all;
-        for (const r of open) { const p = row(r.owner_id); p.open += r._count._all; p.open_inr += conv.convert(r._sum.expected_value, r.currency_code, rates); }
+        for (const e of open) { const p = row(e.owner_id); p.open += 1; p.open_inr += valueOf(e, conv, rates).shown ?? 0; }
         for (const o of offers) row(o.enquiry.owner_id).offers += 1;
         for (const e of won) { const p = row(e.owner_id); p.won += 1; p.won_inr += conv.convert(e.order_value, e.currency_code, rates, e.order_fx_rate, e.won_at); }
         for (const e of lost) row(e.owner_id).lost += 1;
@@ -535,8 +551,9 @@ function createSalesReports(repository, config = salesConfigService) {
         { key: 'last_activity', label: 'Last activity', type: 'date' },
         { key: 'age', label: 'Enquiry age (days)', type: 'int' },
         { key: 'currency', label: 'Currency', type: 'text' },
-        { key: 'value', label: 'Expected value', type: 'amount' },
-        { key: 'value_inr', label: 'Value (₹)', type: 'inr', hint: 'At the current rate' },
+        { key: 'value', label: 'Current value', type: 'amount', hint: 'The latest offer sent, else the expected value — in the enquiry’s currency' },
+        { key: 'value_basis', label: 'Based on', type: 'text' },
+        { key: 'value_inr', label: 'Value (₹)', type: 'inr', hint: 'Offers at the rate locked when sent; expected value at the current rate' },
         { key: 'temperature', label: 'Temperature', type: 'text' },
       ],
       async build(f) {
@@ -565,8 +582,7 @@ function createSalesReports(repository, config = salesConfigService) {
               last_activity: day(last[e.id] ?? null),
               age: Math.floor((now - e.created_at.getTime()) / DAY_MS),
               currency: e.currency_code,
-              value: num(e.expected_value),
-              value_inr: e.expected_value === null ? null : paise(conv.convert(e.expected_value, e.currency_code, rates)),
+              ...(() => { const v = valueOf(e, conv, rates); return { value: v.amount, value_basis: v.basis, value_inr: v.shown === null ? null : paise(v.shown) }; })(),
               temperature: e.current_temperature ? TEMP[e.current_temperature] : null,
             };
           })

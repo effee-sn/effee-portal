@@ -1,4 +1,5 @@
 const prisma = require('../../lib/prisma');
+const { latestSentOffers } = require('../sales/currentValue');
 
 /**
  * Data access for the Sales MIS reports. Every query takes the same filter
@@ -9,6 +10,12 @@ const prisma = require('../../lib/prisma');
  * @param {import('@prisma/client').PrismaClient} db
  */
 function createSalesReportsRepository(db) {
+  /** Each row with its latest sent offer (`offer`), for its current value (sales/currentValue). */
+  const withOffers = async (rows) => {
+    const offers = await latestSentOffers(rows.map((r) => r.id), db);
+    return rows.map((r) => ({ ...r, offer: offers.get(r.id) }));
+  };
+
   /**
    * @typedef {{ from: Date, to: Date, ownerId?: number, type?: string, applicationId?: number,
    *   customerId?: number, stage?: string }} Filter  `to` is exclusive.
@@ -46,8 +53,8 @@ function createSalesReportsRepository(db) {
     },
 
     /** Enquiries lost in the period, with the stage they were lost from. @param {Filter} f */
-    lost(f) {
-      return db.enquiry.findMany({
+    async lost(f) {
+      return withOffers(await db.enquiry.findMany({
         where: { ...base(f), stage: 'LOST', lost_at: inPeriod(f) },
         select: {
           id: true, ref_no: true, title: true, lost_at: true, lost_reason: true, lost_to: true, owner_id: true,
@@ -57,7 +64,7 @@ function createSalesReportsRepository(db) {
           stageEvents: { where: { to_stage: 'LOST' }, orderBy: { created_at: 'desc' }, take: 1, select: { from_stage: true } },
         },
         orderBy: { lost_at: 'asc' },
-      });
+      }));
     },
 
     /** Priced offers sent in the period. @param {Filter} f */
@@ -76,8 +83,8 @@ function createSalesReportsRepository(db) {
     },
 
     /** Enquiries raised in the period (optionally at one stage), full register detail. @param {Filter} f */
-    register(f) {
-      return db.enquiry.findMany({
+    async register(f) {
+      return withOffers(await db.enquiry.findMany({
         where: { ...base(f), created_at: inPeriod(f), ...(f.stage ? { stage: f.stage } : {}) },
         select: {
           id: true, ref_no: true, title: true, created_at: true, enquiry_type: true, stage: true, stage_since: true,
@@ -87,7 +94,7 @@ function createSalesReportsRepository(db) {
           owner: person, handler: person,
         },
         orderBy: { created_at: 'asc' },
-      });
+      }));
     },
 
     /** Offer revisions uploaded in the period. @param {Filter} f */
@@ -124,14 +131,19 @@ function createSalesReportsRepository(db) {
       return rows.filter((r) => (seen.has(r.enquiry_id) ? false : seen.add(r.enquiry_id)));
     },
 
-    /** Open enquiries right now, per owner and currency. @param {Filter} f */
-    openByOwner(f) {
-      return db.enquiry.groupBy({
-        by: ['owner_id', 'currency_code'],
+    /**
+     * Open enquiries right now, each with what its current value is made of
+     * (summed per owner / customer / application in the service).
+     * @param {Filter} f
+     */
+    async openValues(f) {
+      return withOffers(await db.enquiry.findMany({
         where: { ...base(f), stage: { notIn: ['WON', 'LOST'] } },
-        _count: { _all: true },
-        _sum: { expected_value: true },
-      });
+        select: {
+          id: true, owner_id: true, customer_id: true, application_id: true, stage: true,
+          expected_value: true, currency_code: true, order_value: true, order_fx_rate: true, won_at: true,
+        },
+      }));
     },
 
     /** Raised in the period, per owner. @param {Filter} f */
@@ -164,18 +176,6 @@ function createSalesReportsRepository(db) {
       });
     },
 
-    /**
-     * Open enquiries right now, grouped by a dimension and currency.
-     * @param {Filter} f @param {'customer_id'|'application_id'} dim
-     */
-    openBy(f, dim) {
-      return db.enquiry.groupBy({
-        by: [dim, 'currency_code'],
-        where: { ...base(f), stage: { notIn: ['WON', 'LOST'] } },
-        _count: { _all: true },
-        _sum: { expected_value: true },
-      });
-    },
 
     /** @param {number[]} ids */
     async customerNames(ids) {
@@ -234,15 +234,15 @@ function createSalesReportsRepository(db) {
     },
 
     /** Open enquiries right now (for aging), optionally at one stage. @param {Filter} f */
-    openEnquiries(f) {
-      return db.enquiry.findMany({
+    async openEnquiries(f) {
+      return withOffers(await db.enquiry.findMany({
         where: { ...base(f), stage: f.stage ? f.stage : { notIn: ['WON', 'LOST'] } },
         select: {
           id: true, ref_no: true, title: true, stage: true, stage_since: true, created_at: true,
           expected_value: true, currency_code: true, current_temperature: true,
           customer: { select: { name: true } }, owner: person, handler: person,
         },
-      });
+      }));
     },
 
     /** Latest logged activity per enquiry. @param {number[]} enquiryIds */

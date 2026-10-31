@@ -140,6 +140,11 @@ function createEnquiryRepository(db) {
       return db.enquiry.update({ where: { id }, data, select: enquiryDetailSelect });
     },
 
+    /** Whether any (not deleted) offer on the enquiry has a price. */
+    async hasPricedOffer(id) {
+      return (await db.enquiryAttachment.count({ where: { enquiry_id: id, kind: 'OFFER', deleted_at: null, offer_value: { not: null } } })) > 0;
+    },
+
     /**
      * A stage change, only if the enquiry is still at `fromStage` — two clicks (or
      * two people) at once move it once; the other gets null.

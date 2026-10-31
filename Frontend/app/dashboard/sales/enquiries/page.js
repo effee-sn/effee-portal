@@ -13,6 +13,7 @@ import { formatMoney } from '@/lib/money';
 import usePageSize from '@/lib/usePageSize';
 import PageSizeSelect from '@/components/PageSizeSelect';
 import EnquiryKanban from '@/components/sales/EnquiryKanban';
+import ValueBasis from '@/components/sales/ValueBasis';
 import { useDisplayCurrency } from '@/lib/displayCurrency';
 
 // List or Kanban — remembered per browser.
@@ -359,7 +360,7 @@ export default function EnquiriesPage() {
                   <SortTh field="stage" label="Stage" sort={sort} onSort={onSort} title="In flow order, New to Lost" />
                   <SortTh label="Prob." sort={sort} onSort={onSort} align="right" title="Win probability at this stage" />
                   <SortTh field="owner" label="Owner" sort={sort} onSort={onSort} />
-                  <SortTh field="expected_value" label="Value" sort={sort} onSort={onSort} align="right" title="Sorted by the amount as entered" />
+                  <SortTh field="expected_value" label="Value" sort={sort} onSort={onSort} align="right" title="Shows the current value (PO, else the latest offer sent, else expected); sorts by the expected value as entered" />
                   <SortTh label="Acts" sort={sort} onSort={onSort} align="center" />
                 </tr>
               </thead>
@@ -395,8 +396,9 @@ export default function EnquiriesPage() {
                     </td>
                     <td className="px-3 py-3 text-gray-600">{e.owner?.name || '—'}</td>
                     <td className="px-3 py-3 text-gray-700 tabular-nums text-right whitespace-nowrap"
-                      title={(e.stage === 'WON' ? e.order_value : e.expected_value) != null ? `${money.formatterFor(e.display_currency).format(e.display_value)} · entered as ${formatMoney(e.stage === 'WON' ? e.order_value : e.expected_value, e.currency_code, e.currency?.symbol)}` : undefined}>
+                      title={e.current_value != null ? `${money.formatterFor(e.display_currency).format(e.display_value)} · ${e.current_value_label} ${formatMoney(e.current_value, e.currency_code, e.currency?.symbol)}` : undefined}>
                       {money.formatterFor(e.display_currency).compact(e.display_value)}
+                      <ValueBasis basis={e.current_value_basis} label={e.current_value_label} className="ml-1 align-middle" />
                     </td>
                     <td className="px-3 py-3 text-gray-500 tabular-nums text-center">{e._count?.activities ?? 0}</td>
                   </tr>

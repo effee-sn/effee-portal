@@ -132,7 +132,7 @@ describe('flow engine: If conditions', () => {
     const v = (rules, ev = 'ENQUIRY_LOST') => validateConditions({ rules }, catalog, ev);
     assert.deepEqual(v([]), ['add at least one rule']);
     assert.deepEqual(v([{ field: 'nope', op: 'eq', value: 1 }]), ['rule 1: choose a field']);
-    assert.deepEqual(v([{ field: 'value_inr', op: 'contains', value: 1 }]), ['rule 1: “contains” does not apply to Value (₹) — order once won, else expected']);
+    assert.deepEqual(v([{ field: 'value_inr', op: 'contains', value: 1 }]), ['rule 1: “contains” does not apply to Value (₹) — PO once won, else the latest offer sent, else expected']);
     assert.deepEqual(v([{ field: 'value_inr', op: 'gt', value: 'lots' }]), ['rule 1: the value must be a number']);
     assert.deepEqual(v([{ field: 'stage', op: 'in', value: ['MOON'] }]), ['rule 1: unknown stage']);
     assert.deepEqual(v([{ field: 'event.offer_value_inr', op: 'gt', value: 1 }]), ['rule 1: “Offer value (₹)” is not part of this flow’s event']);

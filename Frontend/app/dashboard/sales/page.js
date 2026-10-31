@@ -14,6 +14,7 @@ import useSalesConfig from '@/lib/useSalesConfig';
 import { PRESETS, presetRange } from '@/lib/periods';
 import PeriodPicker from '@/components/PeriodPicker';
 import { formatMoney } from '@/lib/money';
+import ValueBasis from '@/components/sales/ValueBasis';
 import { DisplayCurrencyContext, useDisplayCurrency, useMoney } from '@/lib/displayCurrency';
 
 /**
@@ -377,10 +378,13 @@ export default function SalesDashboardPage() {
           {/* 1. Headline numbers */}
           <section aria-label="Headline numbers" className="rounded-lg border border-gray-200 overflow-hidden">
             <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-px bg-gray-100">
-              <Stat label="Open pipeline" value={money.compact(h.open_value)} title={money.format(h.open_value)}
-                sub={`${h.open_count} open · right now`} />
+              <Stat label="Open pipeline" value={money.compact(h.open_value)}
+                title={`${money.format(h.open_value)} — each open enquiry’s latest offer sent, else its expected value.
+Offers ${money.format(h.open_value_by_basis?.OFFER ?? 0)} · Negotiation ${money.format(h.open_value_by_basis?.NEGOTIATION ?? 0)} · Expected only ${money.format(h.open_value_by_basis?.EXPECTED ?? 0)}${h.open_without_value ? `
+${h.open_without_value} open with no value yet` : ''}`}
+                sub={`${h.open_count} open · right now${h.open_without_value ? ` · ${h.open_without_value} without a value` : ''}`} />
               <Stat label="Weighted pipeline" value={money.compact(h.weighted_value)} title={money.format(h.weighted_value)}
-                sub="Value × stage probability" />
+                sub="Current value × stage probability" />
               <Stat label="Won" value={h.won} sub={h.won ? money.compact(h.won_value) : 'No orders yet'} title={money.format(h.won_value)} />
               <Stat label="Lost" value={h.lost} sub="In the period" />
               <Stat label="Win rate" value={h.win_rate === null ? '—' : `${h.win_rate}%`}
@@ -503,8 +507,9 @@ export default function SalesDashboardPage() {
                     sub={`${e.customer?.name || '—'} · ${e.owner?.name || '—'}`}
                     right={<><StageChip stage={e.stage} />
                       <p className="text-xs text-gray-700 tabular-nums mt-1"
-                        title={e.expected_value != null ? `Entered as ${formatMoney(e.expected_value, e.currency_code || 'INR')}` : undefined}>
-                        {e.expected_value == null ? '—' : money.compact(e.expected_value_display ?? e.expected_value_inr)}
+                        title={e.current_value != null ? `${e.current_value_label} ${formatMoney(e.current_value, e.currency_code || 'INR')}` : undefined}>
+                        {e.current_value == null ? '—' : money.compact(e.current_value_display ?? e.current_value_inr)}
+                        <ValueBasis basis={e.current_value_basis} label={e.current_value_label} className="ml-1" />
                       </p></>} />
                 )} />
               <WatchList title="Overdue follow-ups" data={data.watch.overdue} empty="No follow-ups are overdue."

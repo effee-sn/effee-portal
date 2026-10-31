@@ -278,7 +278,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
           <Card title={<>Sales overview <span className="font-normal text-gray-400" title="Other currencies converted at their rates (Master Data → Currencies)">· in ₹</span></>} className="lg:col-span-1" action={<CardLink href="/dashboard/sales">Sales dashboard →</CardLink>}>
             <div className="grid grid-cols-2 gap-px bg-gray-100 rounded-b-lg overflow-hidden">
-              <Stat label="Open pipeline" value={salesMoney.compact(sales.open_value)} title={salesMoney.format(sales.open_value)}
+              <Stat label="Open pipeline" value={salesMoney.compact(sales.open_value)} title={`${salesMoney.format(sales.open_value)} — each open enquiry’s latest offer sent, else its expected value`}
                 sub={`${sales.open_count} open ${sales.open_count === 1 ? 'enquiry' : 'enquiries'}`} />
               <Stat label="Won this month" value={salesMoney.compact(sales.won_this_month.value)} title={salesMoney.format(sales.won_this_month.value)}
                 sub={`${sales.won_this_month.count} ${sales.won_this_month.count === 1 ? 'order' : 'orders'}`} />

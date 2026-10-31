@@ -18,6 +18,7 @@ import useSalesConfig from '@/lib/useSalesConfig';
 import useCurrencies, { MoneyText, formatMoney } from '@/lib/money';
 import { useDisplayCurrency } from '@/lib/displayCurrency';
 import { DetailPageSkeleton } from '@/components/Skeleton';
+import ValueBasis from '@/components/sales/ValueBasis';
 
 // Stages where the final costing value can be entered (matches the API).
 const COSTED_STAGES = ['COSTING_REVIEW', 'OFFER_RELEASED', 'NEGOTIATION'];
@@ -478,6 +479,7 @@ export default function EnquiryDetailPage() {
     : undefined);
   const shownExpected = shownIn(enquiry.expected_value_display);
   const shownOrder = shownIn(enquiry.order_value_display);
+  const shownCurrent = shownIn(enquiry.current_value_display);
 
   const isClosed = enquiry.stage === 'WON' || enquiry.stage === 'LOST';
   const handlerId = enquiry.handler_id ?? enquiry.owner_id;
@@ -532,7 +534,7 @@ export default function EnquiryDetailPage() {
             <h1 className="text-xl font-semibold text-gray-800 mt-0.5 break-words">{enquiry.title}</h1>
             {(() => {
               const prob = salesConfig?.probability?.[enquiry.stage];
-              const showWeighted = prob !== undefined && Number(enquiry.expected_value) > 0 && !['WON', 'LOST'].includes(enquiry.stage);
+              const showWeighted = prob !== undefined && Number(enquiry.current_value) > 0 && !['WON', 'LOST'].includes(enquiry.stage);
               if (prob === undefined && !enquiry.application) return null;
               return (
                 <div className="mt-0.5 flex items-center gap-2 flex-wrap">
@@ -542,7 +544,7 @@ export default function EnquiryDetailPage() {
                       <span className="text-gray-500 font-normal">Probability:</span> {prob}%
                       {showWeighted && (
                         <span className="text-gray-500 font-normal">
-                          · weighted {dc.formatterFor(enquiry.display_currency).format(Number(enquiry.expected_value_display ?? enquiry.expected_value_inr ?? enquiry.expected_value) * prob / 100)}
+                          · weighted {dc.formatterFor(enquiry.display_currency).format(Number(enquiry.current_value_display ?? enquiry.current_value_inr ?? enquiry.current_value) * prob / 100)}
                         </span>
                       )}
                     </span>
@@ -567,8 +569,9 @@ export default function EnquiryDetailPage() {
                   {enquiry.queue_department_id && <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 rounded px-1 py-0.5">to assign</span>}
                 </span>
               )}
-              {enquiry.expected_value != null && (
-                <span>Value: <MoneyText value={enquiry.expected_value} inr={enquiry.expected_value_inr} code={enquiry.currency_code} symbol={enquiry.currency?.symbol} shown={shownExpected} /></span>
+              {enquiry.current_value != null && (
+                <span className="inline-flex items-center gap-1">Value: <MoneyText value={enquiry.current_value} inr={enquiry.current_value_inr} code={enquiry.currency_code} symbol={enquiry.currency?.symbol} shown={shownCurrent} />
+                  <ValueBasis basis={enquiry.current_value_basis} label={enquiry.current_value_label} /></span>
               )}
             </div>
             {enquiry.queue_department_id && !isClosed && (
@@ -671,6 +674,11 @@ export default function EnquiryDetailPage() {
                   <Field label="Expected Value">
                     {enquiry.expected_value != null
                       ? <MoneyText value={enquiry.expected_value} inr={enquiry.expected_value_inr} code={enquiry.currency_code} symbol={enquiry.currency?.symbol} shown={shownExpected} />
+                      : null}
+                  </Field>
+                  <Field label="Current Value">
+                    {enquiry.current_value != null
+                      ? <span className="inline-flex items-center gap-1"><MoneyText value={enquiry.current_value} inr={enquiry.current_value_inr} code={enquiry.currency_code} symbol={enquiry.currency?.symbol} shown={shownCurrent} /><ValueBasis basis={enquiry.current_value_basis} label={enquiry.current_value_label} /></span>
                       : null}
                   </Field>
                   <Field label="Expected Close">{fmtDate(enquiry.expected_close)}</Field>

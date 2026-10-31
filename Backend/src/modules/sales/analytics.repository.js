@@ -1,5 +1,6 @@
 const prisma = require('../../lib/prisma');
 const { STAGE_AGING_DAYS } = require('./followup.service');
+const { latestSentOffers } = require('./currentValue');
 
 /**
  * Sales dashboard data-access layer.
@@ -46,17 +47,19 @@ function createAnalyticsRepository(db) {
   const person = { select: { id: true, name: true } };
 
   return {
-    /** @param {Filter} f */
-    openByOwner(f) {
-      return db.enquiry.groupBy({
-        // Split by currency too — sums are converted to INR in the service.
-        by: ['owner_id', 'currency_code'], where: open(f), _count: { _all: true }, _sum: { expected_value: true },
+    /**
+     * Every open enquiry with what its current value is made of (expected value,
+     * latest sent offer) — totals, per owner and per stage, are summed in the
+     * service from each one's current value (see ./currentValue).
+     * @param {Filter} f
+     */
+    async openValues(f) {
+      const rows = await db.enquiry.findMany({
+        where: open(f),
+        select: { id: true, owner_id: true, stage: true, expected_value: true, currency_code: true, order_value: true, order_fx_rate: true, won_at: true },
       });
-    },
-
-    /** Open value per stage — weighted by the stage probabilities in the service. @param {Filter} f */
-    openByStage(f) {
-      return db.enquiry.groupBy({ by: ['stage', 'currency_code'], where: open(f), _sum: { expected_value: true } });
+      const offers = await latestSentOffers(rows.map((r) => r.id), db);
+      return rows.map((r) => ({ ...r, offer: offers.get(r.id) }));
     },
 
     /** @param {Filter} f */
@@ -180,16 +183,18 @@ function createAnalyticsRepository(db) {
       const [total, items] = await Promise.all([
         db.enquiry.count({ where }),
         db.enquiry.findMany({
-          // Over-fetch: amounts are in mixed currencies, so the service ranks
-          // them in INR and keeps the top 15.
-          where, orderBy: [{ expected_value: 'desc' }, { stage_since: 'asc' }], take: 60,
+          // Every hot one: their current values (offers sent, mixed currencies) are
+          // ranked in INR by the service, which keeps the top 15.
+          where, orderBy: [{ stage_since: 'asc' }],
           select: {
             id: true, ref_no: true, title: true, stage: true, expected_value: true, expected_close: true, currency_code: true,
+            order_value: true, order_fx_rate: true, won_at: true,
             customer: { select: { name: true } }, owner: person,
           },
         }),
       ]);
-      return { total, items };
+      const offers = await latestSentOffers(items.map((r) => r.id), db);
+      return { total, items: items.map((r) => ({ ...r, offer: offers.get(r.id) })) };
     },
 
     /**

@@ -56,7 +56,7 @@ const SALES_FIELDS = Object.freeze([
   { key: 'stage', label: 'Stage', type: 'stage' },
   { key: 'enquiry_type', label: 'Enquiry type', type: 'enum', options: opt([['GENERATED', 'Generated'], ['INCOMING', 'Incoming']]) },
   { key: 'is_refurbishment', label: 'Refurbishment', type: 'boolean' },
-  { key: 'value_inr', label: 'Value (₹) — order once won, else expected', type: 'number' },
+  { key: 'value_inr', label: 'Value (₹) — PO once won, else the latest offer sent, else expected', type: 'number' },
   { key: 'expected_value_inr', label: 'Expected value (₹)', type: 'number' },
   { key: 'order_value_inr', label: 'Order value (₹)', type: 'number' },
   { key: 'final_cost_inr', label: 'Costing value (₹)', type: 'number' },

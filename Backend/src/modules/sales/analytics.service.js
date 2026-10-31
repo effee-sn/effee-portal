@@ -1,6 +1,7 @@
 const { analyticsRepository } = require('./analytics.repository');
 const { salesConfigService } = require('./config.service');
 const { loadRates, toInr, paise, displayConverter } = require('../master/fx');
+const { currentValue, valueFields } = require('./currentValue');
 
 /**
  * Sales dashboard business logic: turns the repository's rows into the
@@ -137,10 +138,9 @@ function createAnalyticsService(repository, config = salesConfigService) {
       // won orders at the rate locked when they were won — then shown in the
       // chosen currency (conv): open ones at its rate today, won orders and sent
       // offers at its rate on their day.
-      const [rates, openRows, stageRows, probability, won, lost, raised, exits, closed, offers, stalled, hot, overdue, owners] = await Promise.all([
+      const [rates, openRows, probability, won, lost, raised, exits, closed, offers, stalled, hot, overdue, owners] = await Promise.all([
         loadRates(),
-        repository.openByOwner(f),
-        repository.openByStage(f),
+        repository.openValues(f),
         config.probabilityMap(),
         repository.won(f),
         repository.lost(f),
@@ -155,7 +155,13 @@ function createAnalyticsService(repository, config = salesConfigService) {
       ]);
 
       const orderInr = (e) => conv.convert(e.order_value, e.currency_code, rates, e.order_fx_rate, e.won_at);
-      const openInr = (r) => conv.convert(r._sum.expected_value, r.currency_code, rates);
+      // An open enquiry's current value (latest sent offer, else expected) in the display currency.
+      const open = openRows.map((r) => {
+        const cv = currentValue(r, r.offer);
+        return { ...r, basis: cv.basis, value: cv.amount === null ? 0 : conv.convert(cv.amount, cv.currency, rates, cv.lockedRate, cv.onDate) };
+      });
+      const byBasis = { OFFER: 0, NEGOTIATION: 0, EXPECTED: 0 };
+      for (const o of open) if (o.basis) byBasis[o.basis] = (byBasis[o.basis] || 0) + o.value;
       const wonValue = Math.round(won.reduce((n, e) => n + orderInr(e), 0));
       const daysToClose = won.map((e) => (e.won_at.getTime() - e.created_at.getTime()) / DAY_MS);
 
@@ -180,7 +186,7 @@ function createAnalyticsService(repository, config = salesConfigService) {
         if (!team.has(id)) team.set(id, { owner_id: id, raised: 0, open: 0, open_value: 0, won: 0, won_value: 0, lost: 0 });
         return team.get(id);
       };
-      for (const r of openRows) { const t = row(r.owner_id); t.open += r._count._all; t.open_value += openInr(r); }
+      for (const o of open) { const t = row(o.owner_id); t.open += 1; t.open_value += o.value; }
       for (const e of raised) row(e.owner_id).raised += 1;
       for (const e of won) { const t = row(e.owner_id); t.won += 1; t.won_value += orderInr(e); }
       for (const e of lost) row(e.owner_id).lost += 1;
@@ -194,12 +200,14 @@ function createAnalyticsService(repository, config = salesConfigService) {
         period: { from: f.from, to: lastDay },
         owners,
         headline: {
-          open_count: openRows.reduce((n, r) => n + r._count._all, 0),
-          open_value: Math.round(openRows.reduce((n, r) => n + openInr(r), 0)),
-          // Expected value × the stage's win probability, summed.
-          weighted_value: Math.round(stageRows.reduce(
-            (n, r) => n + openInr(r) * ((probability[r.stage] ?? 0) / 100), 0
-          )),
+          open_count: open.length,
+          // Each open enquiry's current value: the latest offer sent, else the expected value.
+          open_value: Math.round(open.reduce((n, o) => n + o.value, 0)),
+          // How much of it is offered / negotiated / only expected, and how many have no value yet.
+          open_value_by_basis: Object.fromEntries(Object.entries(byBasis).map(([k, v]) => [k, Math.round(v)])),
+          open_without_value: open.filter((o) => !o.basis).length,
+          // Current value × the stage's win probability, summed.
+          weighted_value: Math.round(open.reduce((n, o) => n + o.value * ((probability[o.stage] ?? 0) / 100), 0)),
           raised: raised.length,
           won: won.length,
           won_value: wonValue,
@@ -235,13 +243,14 @@ function createAnalyticsService(repository, config = salesConfigService) {
           hot: {
             total: hot.total,
             items: hot.items
-              .map((e) => ({
+              .map(({ offer, order_value, order_fx_rate, won_at, ...e }) => ({
                 ...e,
                 expected_value: e.expected_value === null ? null : num(e.expected_value),
                 expected_value_inr: e.expected_value === null ? null : paise(toInr(e.expected_value, e.currency_code, rates)),
                 expected_value_display: e.expected_value === null ? null : paise(conv.convert(e.expected_value, e.currency_code, rates)),
+                ...valueFields({ ...e, order_value, order_fx_rate, won_at }, offer, rates, conv),
               }))
-              .sort((a, b) => (b.expected_value_inr ?? -1) - (a.expected_value_inr ?? -1))
+              .sort((a, b) => (b.current_value_inr ?? -1) - (a.current_value_inr ?? -1))
               .slice(0, 15),
           },
           overdue,
