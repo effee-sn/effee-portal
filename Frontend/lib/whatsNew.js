@@ -12,6 +12,18 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|string[]|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.9.0',
+    date: '2026-10-31',
+    items: [
+      {
+        icon: 'spark',
+        title: 'Pipeline uses offers and POs',
+        text: 'Open pipeline and reports now use each enquiry’s most confirmed value: the PO once won, else the latest offer sent (or negotiated), else the expected value. The Enquiries list shows Expected, Offer, Negotiated and PO side by side — the one counted is in bold.',
+        perm: null,
+      },
+    ],
+  },
+  {
     version: '1.8.0',
     date: '2026-10-31',
     items: [

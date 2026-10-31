@@ -13,6 +13,21 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.9.0] — 2026-10-31
+
+### Changed — Sales: the pipeline uses the most confirmed value
+
+- Every enquiry now has a **current value**: the **PO value** once won, else the **latest offer sent** to the customer (a revised offer sent at Negotiation replaces the first), else the **expected value**. Offers not yet sent, unmarked or deleted never count; no figure at all shows blank, never ₹0.
+- Used everywhere money is added up: the Home and Sales dashboards (open and **weighted** pipeline, team table, Hot list), the enquiry page, the MIS Reports (register, lost, aging, salesperson, customer- and application-wise) and the Flow Builder **Value (₹)** field.
+- Converted to ₹ (or the chosen display currency) at the right rate: an offer at the rate locked when it was sent, a PO at the rate locked when won, an expected value at today's rate.
+- **Enquiries list:** four columns — **Expected, Offer, Negotiated, PO** — with the figure the pipeline uses in **bold**. The enquiry page shows a **Current Value** with what it is based on (Expected / Offer / Negotiation / PO); the Sales dashboard's open pipeline shows how much is offered, negotiated or only expected.
+
+### Fixed
+
+- An open enquiry's **currency could be changed after offers were priced**, silently turning ₹10,00,000 into €10,00,000. It is now refused once an offer is priced or the costing value is entered.
+
+**Upgrade:** no migrations — pull, `npm install` and build in Frontend, restart.
+
 ## [1.8.1] — 2026-10-31
 
 ### Fixed — v1.8.0 migration failed on MySQL in strict mode
