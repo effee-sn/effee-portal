@@ -2,7 +2,10 @@ const { settingsService } = require('./settings.service');
 const { sendTestMail } = require('../../lib/mailer');
 const { testEmail: testEmailTemplate } = require('../../lib/emailTemplates');
 const config = require('../../config/env');
-const { BadRequestError } = require('../../core');
+const { BadRequestError, ApiResponse } = require('../../core');
+const { requestContext } = require('../../core/http/requestContext');
+const fileStore = require('../../lib/fileStore');
+const { storageService } = require('./storage.service');
 
 /**
  * Settings HTTP controller. SMTP is configured from `.env`, not here; the
@@ -67,11 +70,29 @@ const testEmail = async (req, res) => {
 const uploadLogo = async (req, res) => {
   if (!req.file) throw new BadRequestError('No file uploaded');
 
+  // To Blob when Blob storage is on; the URL stays /uploads/… either way.
+  await fileStore.saveFile(`uploads/logos/${req.file.filename}`, req.file.path, req.file.mimetype);
   const result = await settingsService.setLogo(`/uploads/logos/${req.file.filename}`);
   res.json(result);
 };
 
+/** `GET /settings/storage` — where files are kept, Blob set-up, the last transfer. */
+const getStorage = async (req, res) => ApiResponse.ok(res, await storageService.status());
+
+/** `PUT /settings/storage` — switch the store (and optionally copy the files there). */
+const updateStorage = async (req, res) => {
+  ApiResponse.ok(res, await storageService.update(req.body, requestContext(req)));
+};
+
+/** `POST /settings/storage/transfer` — copy the files again (after failures or an interruption). */
+const transferStorage = async (req, res) => {
+  ApiResponse.ok(res, await storageService.transfer(req.body.direction, requestContext(req)));
+};
+
 module.exports = {
+  getStorage,
+  updateStorage,
+  transferStorage,
   getSettings,
   getBranding,
   updateCompanyInfo,

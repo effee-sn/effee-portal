@@ -267,6 +267,13 @@ model CompanySettings {
   sso_auto_create       Boolean @default(false)
   sso_default_role_id   Int?
 
+  // Where uploaded files are kept: LOCAL (the server's storage/ and uploads/
+  // folders) or BLOB (Azure Blob Storage — account and key in .env, AZURE_STORAGE_*).
+  storage_driver        String  @default("LOCAL") @db.VarChar(10)
+  // The last file transfer between the two (JSON: direction, status, counts,
+  // times, error), so every server instance and the Settings page can follow it.
+  storage_transfer      String? @db.Text
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
   updated_by Int?

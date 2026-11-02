@@ -6,6 +6,7 @@ import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPut, apiPost, readBody } from '@/lib/api';
 import { UPLOADS_URL } from '@/lib/config';
 import SsoSettings from '@/components/SsoSettings';
+import StorageSettings from '@/components/StorageSettings';
 import { APP_VERSION } from '@/lib/version';
 import { applyTheme, storedTheme, THEME_EVENT } from '@/lib/theme';
 
@@ -552,6 +553,7 @@ export default function SettingsPage() {
     ...(isSystemAdmin ? [
       { key: 'company',  label: 'Company'  },
       { key: 'security', label: 'Security' },
+      { key: 'storage',  label: 'Storage'  },
     ] : []),
   ];
 
@@ -594,6 +596,7 @@ export default function SettingsPage() {
       {activeTab === 'profile'  && <ProfileTab  me={me} />}
       {activeTab === 'company'  && <CompanyTab  />}
       {activeTab === 'security' && <SecurityTab />}
+      {activeTab === 'storage'  && <div className="max-w-3xl"><StorageSettings /></div>}
     </div>
   );
 }

@@ -1,8 +1,8 @@
 const fs = require('fs');
-const path = require('path');
 
 const { attachmentRepository } = require('./attachment.repository');
-const { storageDir } = require('./attachment.upload');
+const { docKey } = require('./attachment.upload');
+const fileStore = require('../../lib/fileStore');
 const { enquiryService } = require('./enquiry.service');
 const { auditService } = require('../audit/audit.service');
 const { notificationService } = require('../notification/notification.service');
@@ -129,6 +129,13 @@ function createAttachmentService(repository) {
           try { assertOwnItem(current, actor, 'replace this document'); }
           catch (err) { discard(file); throw err; }
         }
+      }
+
+      // The file goes to its store (Azure Blob when that is on) before anything is recorded.
+      try { await fileStore.saveFile(docKey(file.filename), file.path, file.mimetype); }
+      catch (err) { discard(file); throw err; }
+
+      if (SINGLE_KINDS.has(dto.kind)) {
         await repository.supersedeCurrent(enquiryId, dto.kind, actor?.id ?? null);
       }
 
@@ -163,20 +170,20 @@ function createAttachmentService(repository) {
     },
 
     /**
-     * Resolves an attachment to an absolute on-disk path for streaming.
+     * Opens an attachment's file for streaming, from this server or Azure Blob.
      * @param {number} id
-     * @returns {Promise<{ absPath: string, file_name: string, mime_type: string }>}
+     * @returns {Promise<{ file: { stream: NodeJS.ReadableStream, size?: number }, file_name: string, mime_type: string }>}
      */
     async fileFor(id, actor) {
       const row = await repository.findByIdWithFile(id);
       if (!row) throw new NotFoundError('Attachment');
       if (row.enquiry_id) await loadEnquiry(row.enquiry_id, actor);
       // stored_name is a server-generated random name; still guard against any
-      // separator before joining, so a bad row can never escape the store.
+      // separator, so a bad row can never escape the store.
       if (/[\\/]/.test(row.stored_name)) throw new NotFoundError('Attachment');
-      const absPath = path.join(storageDir, row.stored_name);
-      if (!fs.existsSync(absPath)) throw new NotFoundError('File');
-      return { absPath, file_name: row.file_name, mime_type: row.mime_type };
+      const file = await fileStore.open(docKey(row.stored_name));
+      if (!file) throw new NotFoundError('File');
+      return { file, file_name: row.file_name, mime_type: row.mime_type };
     },
 
     /**

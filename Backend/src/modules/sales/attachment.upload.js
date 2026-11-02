@@ -68,4 +68,11 @@ function handleUploadErrors(handler) {
   });
 }
 
-module.exports = { storageDir, ALLOWED_TYPES, MAX_DOC_BYTES, docUpload, handleUploadErrors };
+/**
+ * A document's key in the file store (see lib/fileStore): uploads land in
+ * `storageDir` first and move to Azure Blob when that is on.
+ * @param {string} storedName
+ */
+const docKey = (storedName) => `storage/sales-docs/${storedName}`;
+
+module.exports = { storageDir, docKey, ALLOWED_TYPES, MAX_DOC_BYTES, docUpload, handleUploadErrors };

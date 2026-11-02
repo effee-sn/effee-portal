@@ -8,11 +8,12 @@ const authenticate      = require('../../middleware/authenticate');
 const requireSystemRole = require('../../middleware/requireSystemRole');
 const { asyncHandler, validate, BadRequestError } = require('../../core');
 const {
-  updateCompanyBody, updateSecurityBody, testEmailBody, updateSsoBody,
+  updateCompanyBody, updateSecurityBody, testEmailBody, updateSsoBody, updateStorageBody, storageTransferBody,
 } = require('./settings.validation');
 const {
   getSettings, getBranding, updateCompanyInfo,
   updateSecuritySettings, testEmail, uploadLogo,
+  getStorage, updateStorage, transferStorage,
 } = require('./settings.controller');
 const { getSsoSettings, updateSsoSettings } = require('../auth/sso.controller');
 
@@ -145,6 +146,11 @@ router.post(
   handleUploadErrors(logoUpload.single('logo')),
   asyncHandler(uploadLogo)
 );
+
+// File storage (this server / Azure Blob) — Super Admin only.
+router.get('/storage', requireSystemRole, asyncHandler(getStorage));
+router.put('/storage', requireSystemRole, validate({ body: updateStorageBody }), asyncHandler(updateStorage));
+router.post('/storage/transfer', requireSystemRole, validate({ body: storageTransferBody }), asyncHandler(transferStorage));
 
 // Microsoft sign-in (SSO) — Super Admin only.
 router.get('/sso', requireSystemRole, asyncHandler(getSsoSettings));

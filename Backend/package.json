@@ -12,6 +12,7 @@
     "test:currency": "node --test --test-reporter=spec tests/integration/currency.test.js",
     "test:invite": "node --test --test-reporter=spec --test-concurrency=1 tests/integration/userInvite.test.js",
     "test:service-access": "node --test --test-reporter=spec --test-concurrency=1 tests/integration/serviceAccess.test.js",
+    "test:storage": "node --test --test-reporter=spec --test-concurrency=1 tests/integration/fileStore.test.js",
     "test:sso": "node --test --test-reporter=spec --test-concurrency=1 tests/integration/sso.test.js",
     "test:flow": "node --test --test-reporter=spec --test-concurrency=1 tests/integration/flowEngine.test.js",
     "test:integration": "node --test --test-reporter=spec --test-concurrency=1 \"tests/integration/**/*.test.js\"",
@@ -30,6 +31,7 @@
   "license": "ISC",
   "description": "Odoo-style RBAC boilerplate — Express + Prisma + MySQL",
   "dependencies": {
+    "@azure/storage-blob": "~12.32.0",
     "@prisma/client": "^5.22.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",

@@ -156,6 +156,23 @@ const config = Object.freeze({
   },
 
   /**
+   * Azure Blob Storage for uploaded files. All optional — files stay on the
+   * server's disk until these are set AND an administrator switches Blob on in
+   * Settings → Storage. Give either the connection string, or the account name
+   * and key. The container is private (created if missing); files are only
+   * ever served through the API.
+   *   AZURE_STORAGE_CONNECTION_STRING  from the storage account's "Access keys"
+   *   AZURE_STORAGE_ACCOUNT_NAME / AZURE_STORAGE_ACCOUNT_KEY  instead of the string
+   *   AZURE_STORAGE_CONTAINER  default "effee-portal"
+   */
+  AZURE_STORAGE: {
+    CONNECTION_STRING: (process.env.AZURE_STORAGE_CONNECTION_STRING || '').trim(),
+    ACCOUNT_NAME:      (process.env.AZURE_STORAGE_ACCOUNT_NAME || '').trim(),
+    ACCOUNT_KEY:       (process.env.AZURE_STORAGE_ACCOUNT_KEY || '').trim(),
+    CONTAINER:         (process.env.AZURE_STORAGE_CONTAINER || 'effee-portal').trim().toLowerCase(),
+  },
+
+  /**
    * bcrypt work factor. 12 is the current sensible floor for new applications;
    * raising it later is safe because the cost is embedded in each stored hash.
    */

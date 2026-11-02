@@ -6,6 +6,7 @@ const helmet  = require('helmet');
 const path    = require('path');
 
 const { requestLogger, errorHandler, notFoundHandler } = require('./core');
+const { serveUploads } = require('./lib/sendFile');
 
 const app = express();
 
@@ -60,6 +61,8 @@ app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads'), {
   dotfiles: 'deny',
   index: false,
 }));
+// Not on this server's disk: from Azure Blob Storage (when Blob storage is on).
+app.use('/uploads', serveUploads);
 
 const routes = require('./routes');
 

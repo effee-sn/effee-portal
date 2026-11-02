@@ -1,6 +1,7 @@
 const { attachmentService } = require('./attachment.service');
 const { ApiResponse } = require('../../core');
 const { requestContext } = require('../../core/http/requestContext');
+const { sendFile } = require('../../lib/sendFile');
 
 /** Enquiry attachment HTTP controller. */
 
@@ -15,10 +16,10 @@ const uploadAttachment = async (req, res) => {
   ApiResponse.created(res, attachment);
 };
 
-/** `GET /sales/attachments/:id/download` — streams the file as an attachment. */
+/** `GET /sales/attachments/:id/download` — streams the file as an attachment (from disk or Azure Blob). */
 const downloadAttachment = async (req, res) => {
-  const { absPath, file_name } = await attachmentService.fileFor(req.params.id, requestContext(req));
-  res.download(absPath, file_name);
+  const { file, file_name, mime_type } = await attachmentService.fileFor(req.params.id, requestContext(req));
+  sendFile(res, file, { name: file_name, type: mime_type });
 };
 
 /** `POST /sales/attachments/:id/sent` */

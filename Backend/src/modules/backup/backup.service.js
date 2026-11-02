@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const config = require('../../config/env');
+const fileStore = require('../../lib/fileStore');
 const { BadRequestError, NotFoundError } = require('../../core');
 
 /**
@@ -13,6 +14,8 @@ const { BadRequestError, NotFoundError } = require('../../core');
  *   - `database.sql` — a full `mysqldump` (schema + data, DROP/CREATE);
  *   - `storage/`     — the sales documents (formats, concept, costing, offers…);
  *   - `uploads/`     — the company logo and other public uploads;
+ *     (both gathered from wherever files are kept — this server and/or Azure
+ *     Blob, see lib/fileStore; a restore puts them back on Blob when Blob is on)
  *   - `backup-info.json` — when it was made and what it contains.
  * `.env` is never included: it holds the passwords and secrets.
  *
@@ -141,14 +144,14 @@ module.exports = {
     const full = path.join(BACKUP_DIR, filename);
     try {
       await this.dumpDatabase(path.join(stage, 'database.sql'));
-      const folders = FILE_DIRS.filter((d) => fs.existsSync(path.join(APP_DIR, d)));
+      // The files from wherever they are kept — this server's disk and Azure
+      // Blob — gathered into the staging folder, so the archive holds them all.
+      const folders = await fileStore.exportAll(stage);
       fs.writeFileSync(path.join(stage, 'backup-info.json'), JSON.stringify({
         created_at: new Date().toISOString(),
         contains: ['database.sql', ...folders.map((d) => `${d}/`)],
       }, null, 2));
-      // Two -C hops: the dump + info from the staging folder, the file folders
-      // from the backend folder — all at the archive's top level.
-      await run(TAR, ['-czf', full, '-C', stage, 'database.sql', 'backup-info.json', '-C', APP_DIR, ...folders]);
+      await run(TAR, ['-czf', full, '-C', stage, 'database.sql', 'backup-info.json', ...folders]);
     } catch (err) {
       fs.rmSync(full, { force: true });
       throw err instanceof BadRequestError ? err : new BadRequestError(`Backup failed: ${err.message}`);
@@ -228,6 +231,11 @@ module.exports = {
         fs.rmSync(to, { recursive: true, force: true });
         fs.cpSync(from, to, { recursive: true, verbatimSymlinks: true });
         restored.push(dir);
+      }
+      // Files are kept on Azure Blob: put the restored ones there too.
+      if (restored.length && await fileStore.driver() === 'BLOB') {
+        const p = await fileStore.transfer('TO_BLOB');
+        if (p.failed) throw new BadRequestError(`Restored, but ${p.failed} file(s) could not be copied to Azure Blob — run the transfer again in Settings → Storage`);
       }
       return { type: 'full', folders: restored };
     } finally {

@@ -56,7 +56,18 @@ const updateSsoBody = z.object({
   default_role_id: z.preprocess((v) => (v === '' ? null : v), z.coerce.number().int().positive().nullable().optional()),
 }).refine((d) => Object.values(d).some((v) => v !== undefined), { message: 'Nothing to update' });
 
+// Settings → Storage: which store new files go to, and whether to copy the existing ones there.
+const updateStorageBody = z.object({
+  driver:   z.enum(['LOCAL', 'BLOB'], { message: 'Choose this server or Azure Blob Storage' }),
+  transfer: z.boolean().optional().default(false),
+});
+const storageTransferBody = z.object({
+  direction: z.enum(['TO_BLOB', 'TO_LOCAL'], { message: 'Choose which way to copy' }),
+});
+
 module.exports = {
+  updateStorageBody,
+  storageTransferBody,
   updateSsoBody,
   updateCompanyBody,
   updateSecurityBody,
