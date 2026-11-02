@@ -68,7 +68,7 @@ const SALES_FIELDS = Object.freeze([
   { key: 'offer_value_inr', label: 'Offer value (₹) — latest offer revision sent', type: 'number', fromEvent: 'offer_value_inr' },
   { key: 'negotiated_value_inr', label: 'Negotiated value (₹) — latest revision sent in Negotiation', type: 'number', fromEvent: 'negotiated_value_inr' },
   { key: 'order_value_inr', label: 'PO value (₹)', type: 'number', fromEvent: 'order_value_inr' },
-  { key: 'value_inr', label: 'Current value (₹) — PO, else latest offer sent, else expected', type: 'number' },
+  { key: 'value_inr', label: 'Current value (₹) — the latest price', type: 'number' },
   { key: 'temperature', label: 'Temperature', type: 'enum', options: opt([['HOT', 'Hot'], ['WARM', 'Warm'], ['COLD', 'Cold']]) },
   { key: 'application_id', label: 'Application', type: 'ref', ref: 'application' },
   { key: 'customer_id', label: 'Customer', type: 'ref', ref: 'customer' },

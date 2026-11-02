@@ -13,6 +13,17 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.10.3] — 2026-11-02
+
+### Fixed — Flow Builder: a figure still showing twice
+
+- A rule made before v1.10.2 on the older Offer value, Costing value or Order value entry showed that entry under **This action**, next to the same name under **The enquiry**. Opening a flow now switches such rules to the one name (Offer value, Costing value, PO value) — the same figures, so the flow behaves the same; the draft keeps it on the next save, the live flow on the next publish. No money figure appears under This action any more.
+- **Current value** is labelled **"the latest price"** (expected → offer → negotiated → PO, whichever is the latest), so it no longer reads like the PO value.
+
+**Upgrade:** no migrations — pull, `npm install` and build in Frontend, restart both.
+
+---
+
 ## [1.10.2] — 2026-11-02
 
 ### Changed — one name per money figure

@@ -12,6 +12,18 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|string[]|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.10.3',
+    date: '2026-11-02',
+    items: [
+      {
+        icon: 'grid',
+        title: 'Flow Builder: no figure shown twice',
+        text: 'Older If rules now use the single names (Offer value, Costing value, PO value), and Current value is labelled “the latest price”. Flows work the same.',
+        perm: ['FLOW_VIEW', 'FLOW_EDIT'],
+      },
+    ],
+  },
+  {
     version: '1.10.2',
     date: '2026-11-02',
     items: [

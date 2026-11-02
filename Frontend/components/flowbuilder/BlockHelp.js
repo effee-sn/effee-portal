@@ -21,7 +21,7 @@ const FIELD_HELP = {
   offer_value_inr: 'The latest offer revision sent — picked on its own; drafts and deleted revisions never count. With an offer trigger it is the revision being sent right now (any round). Empty until an offer is sent.',
   negotiated_value_inr: 'The latest revision sent during Negotiation — picked on its own. With an offer trigger at Negotiation it is the revision being sent right now. Empty until one is sent.',
   order_value_inr: 'The PO value. With a won trigger (“Before marking won” too) it is the PO being entered; otherwise empty until won.',
-  value_inr: 'The figure the pipeline and reports count (Current value on the enquiry page): the PO value once won, else the latest offer sent (negotiated or not), else the expected value.',
+  value_inr: 'The latest price: expected → offer → negotiated → PO, whichever is the latest. The same figure the pipeline, dashboards and the enquiry page show as Current value.',
   temperature: 'Hot, Warm or Cold, as set on the enquiry.',
   application_id: 'The application chosen on the enquiry.',
   customer_id: 'The customer of the enquiry.',
@@ -144,7 +144,7 @@ function IfHelp({ catalog, event }) {
           </li>
         ))}
       </ol>
-      <P>Each has one name, the same as on the enquiry page and the Enquiries list. <b>Current value</b> (what the pipeline counts) is not typed: it is the PO value once won, else the latest offer sent, else the expected value. <b>Margin</b> compares the offer value with the costing value.</P>
+      <P>Each has one name, the same as on the enquiry page and the Enquiries list. <b>Current value</b> is not typed: it is the latest price — the expected value, then the latest offer, then the negotiated price, then the PO. <b>Margin</b> compares the offer value with the costing value.</P>
 
       <H>The enquiry</H>
       <P>Offered with every trigger. Offer revisions are picked on their own — you never choose one.</P>

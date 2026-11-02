@@ -157,12 +157,27 @@ export function toGraph(nodes, edges) {
   };
 }
 
+/**
+ * Older If fields for the same figures (hidden in the catalog) → the one name
+ * each now has. Same numbers, so a rule is switched over when the flow opens;
+ * it is saved that way with the next change.
+ */
+const SAME_AS = Object.freeze({
+  'event.offer_value_inr': 'offer_value_inr',
+  'event.cost_value_inr': 'final_cost_inr',
+  'event.order_value_inr': 'order_value_inr',
+});
+
+const upgradeRules = (type, data) => (type === 'if' && Array.isArray(data?.rules)
+  ? { ...data, rules: data.rules.map((r) => (SAME_AS[r?.field] ? { ...r, field: SAME_AS[r.field] } : r)) }
+  : data);
+
 export function fromGraph(graph) {
   const g = graph?.nodes?.length ? graph : { nodes: [{ id: 'start', type: 'trigger', data: defaultData('trigger'), position: { x: 260, y: 40 } }], edges: [] };
   return {
     nodes: g.nodes.map((n) => ({
       id: n.id, type: 'block', position: n.position || { x: 0, y: 0 }, deletable: n.type !== 'trigger',
-      data: { kind: n.type, settings: n.data || {} },
+      data: { kind: n.type, settings: upgradeRules(n.type, n.data) || {} },
     })),
     edges: g.edges.map((e) => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle || 'next' })),
   };
