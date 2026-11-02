@@ -27,7 +27,7 @@ const SALES_STAGES = Object.freeze([
 const SALES_EVENTS = Object.freeze([
   { key: 'ENQUIRY_CREATED', label: 'Enquiry created', payload: [] },
   { key: 'STAGE_ENTERED', label: 'Enquiry enters a stage', payload: ['from', 'to', 'auto'] },
-  { key: 'OFFER_SENT', label: 'Offer marked sent', payload: ['attachment_id', 'offer_value', 'offer_value_inr', 'version', 'cost_value', 'cost_value_inr', 'margin', 'margin_inr', 'margin_pct', 'markup_pct'] },
+  { key: 'OFFER_SENT', label: 'Offer marked sent', payload: ['attachment_id', 'offer_value', 'offer_value_inr', 'negotiated_value_inr', 'version', 'cost_value', 'cost_value_inr', 'margin', 'margin_inr', 'margin_pct', 'markup_pct'] },
   { key: 'ENQUIRY_WON', label: 'Enquiry won', payload: ['from', 'order_value', 'order_value_inr'] },
   { key: 'ENQUIRY_LOST', label: 'Enquiry lost', payload: ['from', 'lost_reason', 'lost_to'] },
   { key: 'ENQUIRY_REOPENED', label: 'Enquiry reopened', payload: ['from'] },
@@ -38,7 +38,7 @@ const SALES_EVENTS = Object.freeze([
   // "Before …" events: a flow on one of these runs at the moment of the action
   // and can hold it for approval (guard: true). Not reported to the outbox.
   { key: 'BEFORE_STAGE_MOVE', label: 'Before moving to a stage', guard: true, action: 'Move to', payload: ['from', 'to'] },
-  { key: 'BEFORE_OFFER_SENT', label: 'Before marking an offer sent', guard: true, action: 'Mark offer sent', payload: ['attachment_id', 'offer_value', 'offer_value_inr', 'version', 'cost_value', 'cost_value_inr', 'margin', 'margin_inr', 'margin_pct', 'markup_pct'] },
+  { key: 'BEFORE_OFFER_SENT', label: 'Before marking an offer sent', guard: true, action: 'Mark offer sent', payload: ['attachment_id', 'offer_value', 'offer_value_inr', 'negotiated_value_inr', 'version', 'cost_value', 'cost_value_inr', 'margin', 'margin_inr', 'margin_pct', 'markup_pct'] },
   { key: 'BEFORE_WON', label: 'Before marking won', guard: true, action: 'Mark won', payload: ['from', 'order_value', 'order_value_inr'] },
   { key: 'BEFORE_LOST', label: 'Before marking lost', guard: true, action: 'Mark lost', payload: ['from', 'lost_reason', 'lost_to'] },
   { key: 'BEFORE_REOPEN', label: 'Before reopening', guard: true, action: 'Reopen', payload: ['from'] },
@@ -51,29 +51,39 @@ const opt = (pairs) => pairs.map(([key, label]) => ({ key, label }));
  * number, boolean, text, enum (fixed options), stage, ref (a record picked from
  * a list: user, customer, application). `event.*` fields come from the event
  * itself and are offered only for the events listed.
+ *
+ * One name per figure. `fromEvent`: when the event carries this figure (the
+ * offer being sent, the PO being entered), the If block uses it instead of the
+ * saved one — so "Offer value" before marking an offer sent is that offer's
+ * price, and "PO value" before marking won is the PO being typed.
+ * `hidden`: an older key for the same figure, kept so published flows still
+ * run and show, but no longer offered in the dropdown.
  */
 const SALES_FIELDS = Object.freeze([
-  { key: 'stage', label: 'Stage', type: 'stage' },
+  { key: 'stage', label: 'Stage — for a stage move, the stage it is moving into', type: 'stage' },
   { key: 'enquiry_type', label: 'Enquiry type', type: 'enum', options: opt([['GENERATED', 'Generated'], ['INCOMING', 'Incoming']]) },
   { key: 'is_refurbishment', label: 'Refurbishment', type: 'boolean' },
-  { key: 'value_inr', label: 'Value (₹) — PO once won, else the latest offer sent, else expected', type: 'number' },
   { key: 'expected_value_inr', label: 'Expected value (₹)', type: 'number' },
-  { key: 'order_value_inr', label: 'Order value (₹)', type: 'number' },
   { key: 'final_cost_inr', label: 'Costing value (₹)', type: 'number' },
+  { key: 'offer_value_inr', label: 'Offer value (₹) — latest offer revision sent', type: 'number', fromEvent: 'offer_value_inr' },
+  { key: 'negotiated_value_inr', label: 'Negotiated value (₹) — latest revision sent in Negotiation', type: 'number', fromEvent: 'negotiated_value_inr' },
+  { key: 'order_value_inr', label: 'PO value (₹)', type: 'number', fromEvent: 'order_value_inr' },
+  { key: 'value_inr', label: 'Current value (₹) — PO, else latest offer sent, else expected', type: 'number' },
   { key: 'temperature', label: 'Temperature', type: 'enum', options: opt([['HOT', 'Hot'], ['WARM', 'Warm'], ['COLD', 'Cold']]) },
   { key: 'application_id', label: 'Application', type: 'ref', ref: 'application' },
   { key: 'customer_id', label: 'Customer', type: 'ref', ref: 'customer' },
-  { key: 'owner_id', label: 'Owner', type: 'ref', ref: 'user' },
+  { key: 'owner_id', label: 'Enquiry owner', type: 'ref', ref: 'user' },
   { key: 'currency_code', label: 'Currency', type: 'text' },
-  { key: 'event.from', label: 'Came from stage', type: 'stage', events: ['STAGE_ENTERED', 'ENQUIRY_WON', 'ENQUIRY_LOST', 'ENQUIRY_REOPENED', 'BEFORE_STAGE_MOVE', 'BEFORE_WON', 'BEFORE_LOST', 'BEFORE_REOPEN'] },
-  { key: 'event.to', label: 'Entered stage', type: 'stage', events: ['STAGE_ENTERED', 'BEFORE_STAGE_MOVE'] },
-  { key: 'event.offer_value_inr', label: 'Offer value (₹)', type: 'number', events: ['OFFER_SENT', 'BEFORE_OFFER_SENT'] },
-  // Margin over the final costing value (empty when no costing value is entered).
-  { key: 'event.cost_value_inr', label: 'Costing value (₹)', type: 'number', events: ['OFFER_SENT', 'BEFORE_OFFER_SENT'] },
+  { key: 'event.from', label: 'From stage', type: 'stage', events: ['STAGE_ENTERED', 'ENQUIRY_WON', 'ENQUIRY_LOST', 'ENQUIRY_REOPENED', 'BEFORE_STAGE_MOVE', 'BEFORE_WON', 'BEFORE_LOST', 'BEFORE_REOPEN'] },
+  { key: 'event.to', label: 'To stage', type: 'stage', events: ['STAGE_ENTERED', 'BEFORE_STAGE_MOVE'] },
+  // The offer being sent against the costing value (empty when no costing value is entered).
   { key: 'event.margin_inr', label: 'Margin (₹)', type: 'number', events: ['OFFER_SENT', 'BEFORE_OFFER_SENT'] },
-  { key: 'event.margin_pct', label: 'Margin % of offer', type: 'number', events: ['OFFER_SENT', 'BEFORE_OFFER_SENT'] },
-  { key: 'event.markup_pct', label: 'Margin % on cost', type: 'number', events: ['OFFER_SENT', 'BEFORE_OFFER_SENT'] },
-  { key: 'event.order_value_inr', label: 'Order value (₹)', type: 'number', events: ['ENQUIRY_WON', 'BEFORE_WON'] },
+  { key: 'event.margin_pct', label: 'Margin % of offer value', type: 'number', events: ['OFFER_SENT', 'BEFORE_OFFER_SENT'] },
+  { key: 'event.markup_pct', label: 'Markup % on costing value', type: 'number', events: ['OFFER_SENT', 'BEFORE_OFFER_SENT'] },
+  // Older keys for figures above (the same numbers): published flows still run and show them.
+  { key: 'event.offer_value_inr', label: 'Offer value (₹)', type: 'number', events: ['OFFER_SENT', 'BEFORE_OFFER_SENT'], hidden: true },
+  { key: 'event.cost_value_inr', label: 'Costing value (₹)', type: 'number', events: ['OFFER_SENT', 'BEFORE_OFFER_SENT'], hidden: true },
+  { key: 'event.order_value_inr', label: 'PO value (₹)', type: 'number', events: ['ENQUIRY_WON', 'BEFORE_WON'], hidden: true },
   { key: 'event.lost_reason', label: 'Lost reason', type: 'text', events: ['ENQUIRY_LOST', 'BEFORE_LOST'] },
   { key: 'event.kind', label: 'Document kind', type: 'enum', events: ['DOCUMENT_UPLOADED'], options: opt([
     ['FORMAT_PDF', 'Enquiry format (PDF)'], ['FORMAT_EXCEL', 'Enquiry format (Excel)'], ['CONCEPT', 'Concept'], ['POWER_CALC', 'Power-source calculation'],

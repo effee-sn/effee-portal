@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 const { parseGraph, validateGraph, triggerNode, nextNodes } = require('../../src/modules/flowengine/graph');
 const { nodeType, render } = require('../../src/modules/flowengine/nodes');
 const { catalogFor } = require('../../src/modules/flowengine/catalog');
-const { testRule, testConditions, validateConditions } = require('../../src/modules/flowengine/conditions');
+const { testRule, testConditions, validateConditions, withEventFigures } = require('../../src/modules/flowengine/conditions');
 
 const catalog = catalogFor('SALES');
 const check = (g) => validateGraph(g, { catalog, nodeType }).map((e) => e.message);
@@ -122,6 +122,26 @@ describe('flow engine: If conditions', () => {
     assert.equal(testRule({ field: 'expected_value_inr', op: 'gt', value: 0 }, {}, event), false);
     assert.equal(testRule({ field: 'expected_value_inr', op: 'lt', value: 100 }, {}, event), false);
   });
+  test('one name per figure: the offer being sent / PO being entered wins over the saved one', () => {
+    const { fields } = catalog;
+    const saved = { offer_value_inr: 950000, negotiated_value_inr: null, order_value_inr: null };
+    const sending = withEventFigures(saved, { type: 'BEFORE_OFFER_SENT', payload: { offer_value_inr: 800000, negotiated_value_inr: 800000 } }, fields);
+    assert.deepEqual([sending.offer_value_inr, sending.negotiated_value_inr], [800000, 800000], 'the revision being sent');
+    const firstRound = withEventFigures(saved, { type: 'BEFORE_OFFER_SENT', payload: { offer_value_inr: 900000, negotiated_value_inr: null } }, fields);
+    assert.deepEqual([firstRound.offer_value_inr, firstRound.negotiated_value_inr], [900000, null], 'not a negotiation revision: Negotiated stays the saved one');
+    const won = withEventFigures(saved, { type: 'BEFORE_WON', payload: { order_value_inr: 1200000 } }, fields);
+    assert.equal(won.order_value_inr, 1200000, 'PO value before marking won is the PO being typed');
+    assert.equal(withEventFigures(saved, { type: 'STAGE_ENTERED', payload: { to: 'COSTING' } }, fields).offer_value_inr, 950000, 'other triggers: the latest offer sent');
+    assert.equal(testRule({ field: 'order_value_inr', op: 'gt', value: 1000000 }, won, {}), true);
+  });
+  test('the older keys for the same figures still validate, but are hidden', () => {
+    const v = (rules, ev) => validateConditions({ rules }, catalog, ev);
+    assert.deepEqual(v([{ field: 'event.offer_value_inr', op: 'gt', value: 1 }], 'BEFORE_OFFER_SENT'), []);
+    assert.deepEqual(v([{ field: 'event.order_value_inr', op: 'gt', value: 1 }], 'BEFORE_WON'), []);
+    assert.ok(catalog.fields.filter((f) => f.hidden).every((f) => f.key.startsWith('event.')));
+    const shown = catalog.fields.filter((f) => !f.hidden).map((f) => f.label.replace(/ —.*$/, ''));
+    assert.equal(new Set(shown).size, shown.length, 'no two fields offered under the same name');
+  });
   test('all vs any', () => {
     const rules = [{ field: 'value_inr', op: 'gt', value: 1 }, { field: 'is_refurbishment', op: 'is_true' }];
     assert.equal(testConditions({ match: 'all', rules }, facts, event), false);
@@ -132,7 +152,7 @@ describe('flow engine: If conditions', () => {
     const v = (rules, ev = 'ENQUIRY_LOST') => validateConditions({ rules }, catalog, ev);
     assert.deepEqual(v([]), ['add at least one rule']);
     assert.deepEqual(v([{ field: 'nope', op: 'eq', value: 1 }]), ['rule 1: choose a field']);
-    assert.deepEqual(v([{ field: 'value_inr', op: 'contains', value: 1 }]), ['rule 1: “contains” does not apply to Value (₹) — PO once won, else the latest offer sent, else expected']);
+    assert.deepEqual(v([{ field: 'value_inr', op: 'contains', value: 1 }]), ['rule 1: “contains” does not apply to Current value (₹) — PO, else latest offer sent, else expected']);
     assert.deepEqual(v([{ field: 'value_inr', op: 'gt', value: 'lots' }]), ['rule 1: the value must be a number']);
     assert.deepEqual(v([{ field: 'stage', op: 'in', value: ['MOON'] }]), ['rule 1: unknown stage']);
     assert.deepEqual(v([{ field: 'event.offer_value_inr', op: 'gt', value: 1 }]), ['rule 1: “Offer value (₹)” is not part of this flow’s event']);

@@ -19,7 +19,7 @@ const optionalMoney = z.preprocess(
 
 const requiredMoney = z.preprocess(
   (v) => (v === '' || v === null ? undefined : v),
-  z.coerce.number({ required_error: 'Order value is required' }).nonnegative('Must be zero or more')
+  z.coerce.number({ required_error: 'PO value is required' }).nonnegative('Must be zero or more')
 );
 
 const optionalDate = z.preprocess(

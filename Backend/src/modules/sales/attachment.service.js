@@ -9,6 +9,7 @@ const { notificationService } = require('../notification/notification.service');
 const { loadRates } = require('../master/fx');
 const { money } = require('./emailDetails');
 const { marginOf } = require('./margin');
+const { NEGOTIATED_AT } = require('./currentValue');
 const { salesEvent } = require('./flowEvents');
 const { checkGuard } = require('../flowengine/guard');
 const { approvalsService } = require('../flowengine/approvals.service');
@@ -207,7 +208,10 @@ function createAttachmentService(repository) {
       const cost = enquiry.final_cost === null || enquiry.final_cost === undefined ? null : Number(enquiry.final_cost);
       const m = marginOf(value, cost);
       const offer = {
-        attachment_id: id, offer_value: value, offer_value_inr: inr(value), version: before.version,
+        attachment_id: id, offer_value: value, offer_value_inr: inr(value),
+        // A revision uploaded at Negotiation is the negotiated price (a flow's "Negotiated value").
+        negotiated_value_inr: sent && NEGOTIATED_AT.has(before.stage) ? inr(value) : null,
+        version: before.version,
         cost_value: cost, cost_value_inr: sent ? inr(cost) : null,
         margin: m?.margin ?? null, margin_inr: m && sent ? inr(m.margin) : null,
         margin_pct: m?.margin_pct ?? null, markup_pct: m?.markup_pct ?? null,

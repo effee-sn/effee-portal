@@ -1,4 +1,5 @@
-const { testConditions, validateConditions, factOf } = require('./conditions');
+const { testConditions, validateConditions, factOf, withEventFigures } = require('./conditions');
+const { catalogFor } = require('./catalog');
 
 /**
  * The blocks a flow is built from. Each block type declares:
@@ -93,7 +94,7 @@ const condition = Object.freeze({
   },
   async run(ctx, node) {
     if (!ctx.facts) throw new Error('The record this flow is about no longer exists');
-    const facts = { ...ctx.facts, stage: currentStage(ctx) ?? ctx.facts.stage };
+    const facts = withEventFigures({ ...ctx.facts, stage: currentStage(ctx) ?? ctx.facts.stage }, ctx.event, catalogFor(ctx.module)?.fields);
     const yes = testConditions(node.data, facts, ctx.event);
     return { handle: yes ? 'yes' : 'no', output: { result: yes } };
   },

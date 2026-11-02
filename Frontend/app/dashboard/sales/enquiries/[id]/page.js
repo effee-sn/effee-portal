@@ -86,7 +86,7 @@ function WinModal({ enquiryId, currencyCode = 'INR', onClose, onDone }) {
         <div className="overflow-y-auto flex-1 px-6 space-y-4">
           {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm">{error}</div>}
           <div>
-            <label className={label}>Order Value ({currencyCode})<span className="text-red-500"> *</span></label>
+            <label className={label}>PO Value ({currencyCode})<span className="text-red-500"> *</span></label>
             <input name="order_value" type="number" min="0" step="0.01" value={form.order_value} onChange={change} required placeholder="240000" className="ams-input" />
             {currencyCode !== 'INR' && cur && (
               <p className="text-xs text-gray-500 mt-1">
@@ -101,7 +101,7 @@ function WinModal({ enquiryId, currencyCode = 'INR', onClose, onDone }) {
               <input name="order_no" value={form.order_no} onChange={change} placeholder="PO-9981" className="ams-input" />
             </div>
             <div>
-              <label className={label}>Order Date</label>
+              <label className={label}>PO Date</label>
               <input name="order_date" type="date" value={form.order_date} onChange={change} className="ams-input" />
             </div>
           </div>
@@ -620,12 +620,12 @@ export default function EnquiryDetailPage() {
       {enquiry.stage === 'WON' && (
         <div className="rounded-lg border border-green-200 bg-green-50 px-5 py-3 space-y-3">
           <div className="flex flex-wrap gap-x-8 gap-y-2">
-            <Field label="Order Value">
+            <Field label="PO Value">
               <MoneyText className="font-semibold text-green-800" value={enquiry.order_value} inr={enquiry.order_value_inr}
                 code={enquiry.currency_code} symbol={enquiry.currency?.symbol} shown={shownOrder} />
             </Field>
             <Field label="PO Number">{enquiry.order_no}</Field>
-            <Field label="Order Date">{fmtDate(enquiry.order_date)}</Field>
+            <Field label="PO Date">{fmtDate(enquiry.order_date)}</Field>
           </div>
           {(enquiry.won_declaration || enquiry.won_terms) && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 pt-1 border-t border-green-200">

@@ -126,7 +126,7 @@ function summaryOf(catalog, facts, type, payload, stage) {
     ...catalog.emailRows(facts),
     ['Value', money(facts.value_inr)],
     ...(type === 'BEFORE_OFFER_SENT' ? offerRows(payload, money) : []),
-    ...(type === 'BEFORE_WON' ? [['Order value', money(payload.order_value_inr)]] : []),
+    ...(type === 'BEFORE_WON' ? [['PO value', money(payload.order_value_inr)]] : []),
     ...(type === 'BEFORE_LOST' ? [['Reason', payload.lost_reason], ['Went to', payload.lost_to]] : []),
     ...(type === 'BEFORE_STAGE_MOVE' ? [['Move', `${stage(payload.from)} → ${stage(payload.to)}`]] : []),
   ];

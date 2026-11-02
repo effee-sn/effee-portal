@@ -41,7 +41,7 @@ const STARTER_FLOWS = Object.freeze([
     graph: {
       nodes: [
         node('start', 'trigger', { event: 'BEFORE_OFFER_SENT' }, 300, 0),
-        node('big', 'if', { match: 'all', rules: [{ field: 'event.offer_value_inr', op: 'gt', value: 5000000 }] }, 300, 160),
+        node('big', 'if', { match: 'all', rules: [{ field: 'offer_value_inr', op: 'gt', value: 5000000 }] }, 300, 160),
         node('approve', 'approval', { to: [{ who: 'PERSON' }], mode: 'ANY', remind_hours: 4, escalate_hours: 24 }, 120, 340),
         node('tell', 'notify', { to: [{ who: 'HANDLER' }], title: 'Offer for {{ref_no}} not approved', message: '{{approval.decided_by}}: {{approval.comment}}' }, 300, 540),
         node('end', 'end', {}, 560, 540),
@@ -68,7 +68,7 @@ const STARTER_FLOWS = Object.freeze([
     graph: {
       nodes: [
         node('start', 'trigger', { event: 'ENQUIRY_WON' }, 300, 0),
-        node('big', 'if', { match: 'all', rules: [{ field: 'event.order_value_inr', op: 'gt', value: 10000000 }] }, 300, 160),
+        node('big', 'if', { match: 'all', rules: [{ field: 'order_value_inr', op: 'gt', value: 10000000 }] }, 300, 160),
         node('tell', 'notify', { to: [{ who: 'PERSON' }, { who: 'PERSON' }], title: 'Order won: {{ref_no}} — {{event.order_value_inr}}', message: '{{customer}} · {{title}}. Owner {{owner}}.' }, 120, 340),
         node('end', 'end', {}, 420, 520),
       ],

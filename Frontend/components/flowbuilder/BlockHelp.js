@@ -13,13 +13,15 @@ import { BLOCK, OPERATORS, ASSIGN_TO, DEPARTMENT_PICK, ROLE_PICK, PEOPLE } from 
 
 /** What each If field means. Keyed by catalog field key. */
 const FIELD_HELP = {
-  stage: 'The stage the enquiry is in right now. With a “Before …” trigger it is still the stage before the move; with “Enquiry enters a stage” it is the new stage.',
+  stage: 'The stage the enquiry is in. For “Enquiry enters a stage” and “Before moving to a stage” it is the stage it is moving into.',
   enquiry_type: 'Generated (we found the customer) or Incoming (the customer came to us).',
   is_refurbishment: 'Yes when the enquiry is marked as a refurbishment.',
-  value_inr: 'The current value, the same figure the pipeline uses: the PO value once won, else the latest offer sent, else the expected value. Best for “big enquiry” rules at any stage.',
   expected_value_inr: 'The expected value typed on the enquiry — the early estimate. It does not change when offers are sent.',
-  order_value_inr: 'The PO value saved on the enquiry. Empty until it is won — so for a rule on the PO being entered now, use “Order value (₹)” under This action.',
-  final_cost_inr: 'The final costing value saved on the enquiry (Costing stage). Empty until it is entered.',
+  final_cost_inr: 'The final costing value (entered at Costing, checked at Costing Review). Empty until it is entered.',
+  offer_value_inr: 'The latest offer revision sent — picked on its own; drafts and deleted revisions never count. With an offer trigger it is the revision being sent right now (any round). Empty until an offer is sent.',
+  negotiated_value_inr: 'The latest revision sent during Negotiation — picked on its own. With an offer trigger at Negotiation it is the revision being sent right now. Empty until one is sent.',
+  order_value_inr: 'The PO value. With a won trigger (“Before marking won” too) it is the PO being entered; otherwise empty until won.',
+  value_inr: 'The figure the pipeline and reports count (Current value on the enquiry page): the PO value once won, else the latest offer sent (negotiated or not), else the expected value.',
   temperature: 'Hot, Warm or Cold, as set on the enquiry.',
   application_id: 'The application chosen on the enquiry.',
   customer_id: 'The customer of the enquiry.',
@@ -27,12 +29,12 @@ const FIELD_HELP = {
   currency_code: 'The enquiry’s currency as a 3-letter code: INR, EUR, USD…',
   'event.from': 'The stage it is leaving (where it was just before this action).',
   'event.to': 'The stage it is going into.',
-  'event.offer_value_inr': 'The price of the offer being marked sent, in ₹.',
-  'event.cost_value_inr': 'The costing value taken with this offer — the margin is worked out from it. Empty when no costing value is entered.',
-  'event.margin_inr': 'Offer value − costing value, in ₹.',
-  'event.margin_pct': 'Margin as a % of the offer price. Offer ₹100, cost ₹80 → 20%.',
-  'event.markup_pct': 'Margin as a % of the cost. Offer ₹100, cost ₹80 → 25%.',
-  'event.order_value_inr': 'The PO value typed in this “Mark won”, in ₹.',
+  'event.margin_inr': 'Offer value − costing value, in ₹ — for the offer being sent.',
+  'event.margin_pct': 'Margin as a % of the offer value. Offer ₹100, costing ₹80 → 20%.',
+  'event.markup_pct': 'Margin as a % of the costing value. Offer ₹100, costing ₹80 → 25%.',
+  'event.offer_value_inr': 'Older name for Offer value — same number. Choose “Offer value (₹)” instead.',
+  'event.cost_value_inr': 'Older name for Costing value — same number. Choose “Costing value (₹)” instead.',
+  'event.order_value_inr': 'Older name for PO value — same number. Choose “PO value (₹)” instead.',
   'event.lost_reason': 'The reason typed when marking it lost.',
   'event.kind': 'Which kind of document was uploaded (Offer, Costing, Concept…).',
   'event.type': 'Call, Meeting, Teams, Site visit or Email.',
@@ -96,8 +98,8 @@ const WORD_HELP = {
   ref_no: 'Enquiry number (ENQ-…)', title: 'Enquiry title', customer: 'Customer name', stage_label: 'Stage now',
   owner: 'Owner’s name', handler: 'Holder’s name', application: 'Application', value_inr: 'Current value in ₹',
   'event.from': 'Stage it left', 'event.to': 'Stage it went to', 'event.lost_reason': 'Lost reason', 'event.lost_to': 'Lost to (competitor)',
-  'event.offer_value_inr': 'Offer value ₹', 'event.order_value_inr': 'PO value ₹', 'event.days': 'Days in stage',
-  'event.cost_value_inr': 'Costing value ₹', 'event.margin_inr': 'Margin ₹', 'event.margin_pct': 'Margin % of offer', 'event.markup_pct': 'Margin % on cost',
+  'event.offer_value_inr': 'Offer value ₹ (the offer being sent)', 'event.order_value_inr': 'PO value ₹ (being entered)', 'event.days': 'Days in stage',
+  'event.cost_value_inr': 'Costing value ₹', 'event.margin_inr': 'Margin ₹', 'event.margin_pct': 'Margin % of offer value', 'event.markup_pct': 'Markup % on costing value',
   'approval.decided_by': 'Who approved / rejected', 'approval.comment': 'Their comment', 'approval.status': 'Approved / Rejected / Withdrawn',
 };
 
@@ -122,36 +124,43 @@ function Terms({ rows }) {
 }
 
 function IfHelp({ catalog, event }) {
-  const fields = catalog.fields.filter((f) => !f.events || f.events.includes(event));
+  const fields = catalog.fields.filter((f) => (!f.events || f.events.includes(event)) && !f.hidden);
   const enquiry = fields.filter((f) => !f.key.startsWith('event.'));
   const action = fields.filter((f) => f.key.startsWith('event.'));
-  const base = (l) => l.replace(/ —.*$/, '');
-  const twin = new Set(enquiry.map((f) => base(f.label)).filter((l) => action.some((a) => base(a.label) === l)));
-  const row = (f, where) => ({ key: f.key, term: base(f.label), text: FIELD_HELP[f.key] || '', badge: twin.has(base(f.label)) ? where : null });
+  const row = (f) => ({ key: f.key, term: f.label.replace(/ —.*$/, ''), text: FIELD_HELP[f.key] || '' });
   const eventLabel = catalog.events.find((e) => e.key === event)?.label;
   return (
     <>
       <H>What it does</H>
-      <P>Checks the enquiry and sends it down the <b>Yes</b> or the <b>No</b> way. Use it when only some enquiries should get an approval, an assignment or a message — e.g. “Margin % of offer is less than 15 → Approval”.</P>
+      <P>Checks the enquiry and sends it down the <b>Yes</b> or the <b>No</b> way. Use it when only some enquiries should get an approval, an assignment or a message — e.g. “Margin % of offer value is less than 15 → Approval”.</P>
       <P><b>Yes when all</b> = every rule must be true. <b>Yes when any</b> = one true rule is enough.</P>
 
-      <H>The enquiry (as it is right now)</H>
-      <P>Saved on the enquiry. Offered with every trigger.</P>
-      <Terms rows={enquiry.map((f) => row(f, 'on the enquiry'))} />
+      <H>The money figures, in the order they happen</H>
+      <ol className="flex flex-wrap items-center gap-1.5 text-xs mb-2">
+        {['Expected value', 'Costing value', 'Offer value', 'Negotiated value', 'PO value'].map((t, i) => (
+          <li key={t} className="flex items-center gap-1.5">
+            {i > 0 && <span className="text-gray-400" aria-hidden>→</span>}
+            <span className="px-2 py-1 rounded bg-[var(--ams-primary-mid)] text-[var(--ams-primary)] font-medium">{t}</span>
+          </li>
+        ))}
+      </ol>
+      <P>Each has one name, the same as on the enquiry page and the Enquiries list. <b>Current value</b> (what the pipeline counts) is not typed: it is the PO value once won, else the latest offer sent, else the expected value. <b>Margin</b> compares the offer value with the costing value.</P>
+
+      <H>The enquiry</H>
+      <P>Offered with every trigger. Offer revisions are picked on their own — you never choose one.</P>
+      <Terms rows={enquiry.map(row)} />
 
       <H>This action {eventLabel && <span className="font-normal text-gray-500">(only with “{eventLabel}”)</span>}</H>
       {action.length ? (
         <>
-          <P>Figures carried by the action that started the flow. They change with the When block’s choice.</P>
-          <Terms rows={action.map((f) => row(f, 'from this action'))} />
+          <P>Only what this action brings. They change with the When block’s choice.</P>
+          <Terms rows={action.map(row)} />
         </>
-      ) : <P>The chosen When brings no extra figures — only the enquiry’s own fields are offered.</P>}
+      ) : <P>The chosen When brings nothing extra — only the enquiry’s fields are offered.</P>}
 
-      {twin.size > 0 && (
-        <p className="mt-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          <b>Same name twice?</b> {[...twin].join(', ')} appear{twin.size === 1 ? 's' : ''} in both lists. The first in the dropdown is what is saved on the enquiry; the later one is the figure from this action. Before an action is done, the enquiry’s own figure is still the old (or empty) one — so for a rule on what is being entered now, pick the later one.
-        </p>
-      )}
+      <p className="mt-3 rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+        <b>Example:</b> Rev 1 sent at ₹10 L, Rev 2 at ₹9.5 L → Offer value ₹9.5 L. Rev 3 sent in Negotiation at ₹9 L → Negotiated value ₹9 L, Current value ₹9 L. About to send Rev 4 at ₹8 L → a “Before marking an offer sent” flow sees ₹8 L and its margin.
+      </p>
 
       <H>The tests</H>
       <Terms rows={Object.entries(OPERATORS).map(([k, v]) => ({ key: k, term: v, text: OPERATOR_HELP[k] }))} />

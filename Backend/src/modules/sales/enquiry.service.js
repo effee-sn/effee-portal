@@ -648,7 +648,7 @@ function createEnquiryService(repository) {
           eyebrow: 'Sales · Order won',
           intro: 'The customer has confirmed the order.',
           details: enquiryRows({ ...enquiry, expected_value: null }, [
-            ['Order value', money(enquiry.order_value, enquiry.currency_code, enquiry.currency?.symbol)],
+            ['PO value', money(enquiry.order_value, enquiry.currency_code, enquiry.currency?.symbol)],
             ['PO number', enquiry.order_no],
             ['PO date', enquiry.order_date ? new Date(enquiry.order_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : null],
           ]),

@@ -105,11 +105,11 @@ function TestPanel({ flowId, event, catalog, onResult, onClose }) {
           </div>
         </div>
       )}
-      {(event === 'STAGE_ENTERED' || event === 'BEFORE_STAGE_MOVE') && stageSelect('to', 'Entering stage')}
+      {(event === 'STAGE_ENTERED' || event === 'BEFORE_STAGE_MOVE') && stageSelect('to', 'To stage')}
       {event === 'STAGE_STALLED' && stageSelect('stage', 'Stalled at stage')}
-      {['ENQUIRY_LOST', 'BEFORE_LOST', 'ENQUIRY_WON', 'BEFORE_WON', 'ENQUIRY_REOPENED', 'BEFORE_REOPEN', 'BEFORE_STAGE_MOVE', 'STAGE_ENTERED'].includes(event) && stageSelect('from', 'Coming from stage')}
-      {['OFFER_SENT', 'BEFORE_OFFER_SENT'].includes(event) && amount('offer_value_inr', 'Offer value (₹)')}
-      {['ENQUIRY_WON', 'BEFORE_WON'].includes(event) && amount('order_value_inr', 'Order value (₹)')}
+      {['ENQUIRY_LOST', 'BEFORE_LOST', 'ENQUIRY_WON', 'BEFORE_WON', 'ENQUIRY_REOPENED', 'BEFORE_REOPEN', 'BEFORE_STAGE_MOVE', 'STAGE_ENTERED'].includes(event) && stageSelect('from', 'From stage')}
+      {['OFFER_SENT', 'BEFORE_OFFER_SENT'].includes(event) && amount('offer_value_inr', 'Offer value (₹) — the offer being sent')}
+      {['ENQUIRY_WON', 'BEFORE_WON'].includes(event) && amount('order_value_inr', 'PO value (₹)')}
       {['ENQUIRY_LOST', 'BEFORE_LOST'].includes(event) && (
         <label className="block text-xs text-gray-600">Lost reason<input value={payload.lost_reason || ''} onChange={(e) => set('lost_reason', e.target.value)} className="ams-input w-full text-sm mt-1" /></label>
       )}

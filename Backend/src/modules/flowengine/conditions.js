@@ -26,6 +26,22 @@ function factOf(key, facts, event) {
 const isEmpty = (v) => v === null || v === undefined || v === '';
 
 /**
+ * The record's facts with the event's own figures laid over them: a field
+ * declaring `fromEvent` takes the event's value when the event carries one
+ * (the offer being sent, the PO being entered), else keeps the saved value.
+ * @param {object} facts
+ * @param {object} event  { type, payload }
+ * @param {Array<{ key: string, fromEvent?: string }>} fields  the catalog's
+ */
+function withEventFigures(facts, event, fields) {
+  const out = { ...facts };
+  for (const f of fields || []) {
+    if (f.fromEvent && !isEmpty(event?.payload?.[f.fromEvent])) out[f.key] = event.payload[f.fromEvent];
+  }
+  return out;
+}
+
+/**
  * @param {{ field: string, op: string, value?: unknown }} rule
  * @param {object} facts  the record (see the module's loadEntity)
  * @param {object} event  { type, payload }
@@ -99,4 +115,4 @@ function validateConditions(data, catalog, triggerEvent) {
   return errors;
 }
 
-module.exports = { OPS, testRule, testConditions, validateConditions, factOf };
+module.exports = { OPS, testRule, testConditions, validateConditions, factOf, withEventFigures };

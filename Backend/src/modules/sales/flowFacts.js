@@ -1,6 +1,6 @@
 const prisma = require('../../lib/prisma');
 const { loadRates, toInr, paise } = require('../master/fx');
-const { latestSentOffers, currentValue, inInr } = require('./currentValue');
+const { latestSentOffers, sentOffersByRound, currentValue, inInr } = require('./currentValue');
 
 /**
  * An enquiry as Flow Builder flows see it: the fields a flow's conditions can
@@ -33,6 +33,9 @@ async function loadEnquiryFacts(id) {
   const rates = await loadRates();
   const expected = e.expected_value === null ? null : paise(toInr(e.expected_value, e.currency_code, rates));
   const order = e.order_value === null ? null : paise(toInr(e.order_value, e.currency_code, rates, e.order_fx_rate));
+  // The latest offer revision sent before Negotiation, and in it — each at the rate locked when sent.
+  const rounds = (await sentOffersByRound([e.id])).get(e.id) || {};
+  const sentInr = (r) => (r ? paise(toInr(r.offer_value, e.currency_code, rates, r.offer_fx_rate)) : null);
   return {
     id: e.id,
     ref_no: e.ref_no,
@@ -45,6 +48,8 @@ async function loadEnquiryFacts(id) {
     // The deal's current value: the PO once won, else the latest offer sent, else expected.
     value_inr: inInr(currentValue(e, (await latestSentOffers([e.id])).get(e.id)), rates),
     expected_value_inr: expected,
+    offer_value_inr: sentInr(rounds.offer),
+    negotiated_value_inr: sentInr(rounds.negotiated),
     order_value_inr: order,
     final_cost_inr: e.final_cost === null ? null : paise(toInr(e.final_cost, e.currency_code, rates)),
     application_id: e.application_id,

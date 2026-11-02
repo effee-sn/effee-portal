@@ -141,7 +141,8 @@ export default function Inspector({ node, event, lookups, errors, onChange, onDe
       </>
     );
   } else if (kind === 'if') {
-    const fields = catalog.fields.filter((f) => !f.events || f.events.includes(event));
+    // Older keys for the same figures are hidden, unless a saved rule still uses one.
+    const fieldsFor = (current) => catalog.fields.filter((f) => (!f.events || f.events.includes(event)) && (!f.hidden || f.key === current));
     const rules = d.rules || [];
     const setRule = (i, patch) => set({ rules: rules.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
     body = (
@@ -156,11 +157,17 @@ export default function Inspector({ node, event, lookups, errors, onChange, onDe
         </div>
         {rules.map((r, i) => {
           const f = catalog.fields.find((x) => x.key === r.field);
+          const fields = fieldsFor(r.field);
+          const group = (onEvent) => fields.filter((x) => x.key.startsWith('event.') === onEvent).map((x) => <option key={x.key} value={x.key}>{x.label}</option>);
           return (
             <div key={i} className="rounded border border-gray-200 p-2 space-y-1.5 bg-gray-50/60">
               <div className="flex gap-1.5">
-                <Select value={r.field} onChange={(field) => setRule(i, { field, op: OPS_FOR[catalog.fields.find((x) => x.key === field)?.type]?.[0], value: '' })}
-                  options={fields.map((x) => ({ key: x.key, label: x.label }))} ariaLabel={`Rule ${i + 1} field`} />
+                <select value={r.field ?? ''} className={input} aria-label={`Rule ${i + 1} field`}
+                  onChange={(e) => setRule(i, { field: e.target.value, op: OPS_FOR[catalog.fields.find((x) => x.key === e.target.value)?.type]?.[0], value: '' })}>
+                  <option value="">Choose…</option>
+                  <optgroup label="The enquiry">{group(false)}</optgroup>
+                  {fields.some((x) => x.key.startsWith('event.')) && <optgroup label="This action">{group(true)}</optgroup>}
+                </select>
                 <button type="button" onClick={() => set({ rules: rules.filter((_, j) => j !== i) })} disabled={rules.length === 1}
                   className="px-2 text-gray-400 hover:text-red-600 disabled:opacity-30 cursor-pointer" aria-label={`Remove rule ${i + 1}`}>×</button>
               </div>

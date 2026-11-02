@@ -251,7 +251,7 @@ function createSalesReports(repository, config = salesConfigService) {
     {
       key: 'won-orders',
       title: 'Won Orders Register',
-      description: 'Orders won in the period: PO details, order value with its locked ₹ rate, final offer and discount, days to close.',
+      description: 'Orders won in the period: PO details, PO value with its locked ₹ rate, final offer and discount, days to close.',
       filters: ['period', 'owner', 'type', 'application', 'customer'],
       columns: [
         { key: 'ref_no', label: 'Ref', type: 'text', link: 'enquiry' },
@@ -263,11 +263,11 @@ function createSalesReports(repository, config = salesConfigService) {
         { key: 'po_no', label: 'PO number', type: 'text' },
         { key: 'po_date', label: 'PO date', type: 'date' },
         { key: 'currency', label: 'Currency', type: 'text' },
-        { key: 'order_value', label: 'Order value', type: 'amount' },
+        { key: 'order_value', label: 'PO value', type: 'amount' },
         { key: 'rate', label: 'Rate (₹)', type: 'rate', hint: 'Locked when the order was won' },
-        { key: 'order_inr', label: 'Order value (₹)', type: 'inr' },
+        { key: 'order_inr', label: 'PO value (₹)', type: 'inr' },
         { key: 'final_offer', label: 'Final offer', type: 'amount' },
-        { key: 'discount', label: 'Discount %', type: 'pct', hint: 'Final offer → order' },
+        { key: 'discount', label: 'Discount %', type: 'pct', hint: 'Final offer → PO' },
         { key: 'days_to_close', label: 'Days to close', type: 'int' },
       ],
       async build(f) {
