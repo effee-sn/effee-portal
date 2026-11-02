@@ -12,6 +12,24 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|string[]|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.10.2',
+    date: '2026-11-02',
+    items: [
+      {
+        icon: 'swap',
+        title: '“Order value” is now “PO value”',
+        text: 'The Mark won form, the enquiry page, the Won Orders report and emails all call the PO amount “PO value” — the same figure, one name.',
+        perm: null,
+      },
+      {
+        icon: 'grid',
+        title: 'Flow Builder: one name per figure',
+        text: 'In an If block each money figure — Expected, Costing, Offer, Negotiated, PO, Current value — now appears once. Offer and Negotiated values use the latest revision sent, picked for you.',
+        perm: ['FLOW_VIEW', 'FLOW_EDIT'],
+      },
+    ],
+  },
+  {
     version: '1.10.1',
     date: '2026-10-31',
     items: [

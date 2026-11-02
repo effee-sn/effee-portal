@@ -13,6 +13,20 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.10.2] — 2026-11-02
+
+### Changed — one name per money figure
+
+- **Flow Builder → If:** the fields are grouped under **The enquiry** and **This action**, and each money figure has one name — **Expected value, Costing value, Offer value, Negotiated value, PO value, Current value**. The duplicate entries ("Costing value" and "Order value" twice, the action's Offer value) are no longer offered; rules already using them still run and show the new name. Also renamed: Stage, From stage / To stage, Enquiry owner, Margin % of offer value, Markup % on costing value.
+- **Offer value** (new): the latest offer revision sent, picked automatically — with an offer trigger, the revision being sent. **Negotiated value** (new): the latest revision sent in Negotiation, the same way.
+- **PO value** with a won trigger ("Before marking won" too) is the PO being entered; before, that entry read the saved PO, still empty at that moment.
+- **"Order value" is now "PO value" everywhere:** the Mark-won form and enquiry page (with "PO Date"), the Won Orders Register, the won and approval emails, and the "required" message. Wording only — the same figure.
+- The **i** help opens with the money figures in order (Expected → Costing → Offer → Negotiated → PO) and uses the new names throughout.
+
+**Upgrade:** no migrations — pull, `npm install` and build in Frontend, restart both.
+
+---
+
 ## [1.10.1] — 2026-10-31
 
 ### Added — Flow Builder: help on every block
