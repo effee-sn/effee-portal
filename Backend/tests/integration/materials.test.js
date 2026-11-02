@@ -163,3 +163,36 @@ describe('Units, usage and history', () => {
     assert.equal(rows[1][7], `${tag}kg`, 'unit column');
   });
 });
+
+describe('Keeping IMM codes from an import', () => {
+  let k;
+
+  it('kept codes are saved as they are; new rows and later saves continue after the highest', async () => {
+    k = await svc.createPrefix({ prefix: `${tag}K`, separator: '-', digits: 4 }, actor);
+    made.prefixes.push(k.id);
+    const created = await svc.createBulk({ rows: [
+      row(k.id, { imm_code: `${tag}K-0057` }),
+      row(k.id, { item_name: 'New one' }),
+      row(k.id, { imm_code: `${tag}K-0012`, item_name: 'Old twelve' }),
+    ] }, actor);
+    assert.deepEqual(created.map((c) => c.imm_code), [`${tag}K-0057`, `${tag}K-0058`, `${tag}K-0012`]);
+    const [later] = await svc.createBulk({ rows: [row(k.id, { item_name: 'Later' })] }, actor);
+    assert.equal(later.imm_code, `${tag}K-0059`, 'the gap 1–56 is not reused');
+  });
+
+  it('a used, repeated, wrongly formatted or other-prefix code is refused, with the row', async () => {
+    const no = (rows, msg) => assert.rejects(svc.createBulk({ rows }, actor), (e) => e.name === 'ValidationError' && e.details.some((d) => msg.test(d.message)));
+    await no([row(k.id, { imm_code: `${tag}K-0057` })], /Row 1: IMM code .* is already used by/);
+    await no([row(k.id, { imm_code: `${tag}K-0100` }), row(k.id, { imm_code: `${tag}K-0100` })], /Row 2: .* repeated — same as row 1/);
+    await no([row(k.id, { imm_code: `${tag}K-100` })], /doesn't match any prefix's format/);
+    await no([row(k.id, { imm_code: `${tag}A-00099` })], /belongs to prefix/);
+  });
+
+  it('only a Super Admin or a prefix editor may keep codes', async () => {
+    const clerk = { id: null, is_system: false, permissions: ['MATERIAL_CREATE'] };
+    await assert.rejects(svc.createBulk({ rows: [row(k.id, { imm_code: `${tag}K-0200` })] }, clerk), /Only a Super Admin/);
+    const editor = { ...clerk, permissions: ['MATERIAL_CREATE', 'MATERIAL_CONFIG_EDIT'] };
+    const [m] = await svc.createBulk({ rows: [row(k.id, { imm_code: `${tag}K-0200` })] }, editor);
+    assert.equal(m.imm_code, `${tag}K-0200`);
+  });
+});

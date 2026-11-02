@@ -73,6 +73,12 @@ function createMaterialRepository(db) {
      * compares without regard to case).
      * @param {string[]} nos @param {number[]} [exceptIds]  materials to leave out
      */
+    /** Materials (deleted ones too — a code is never reused) holding any of these IMM codes. */
+    findByCodes(codes) {
+      if (!codes.length) return [];
+      return db.material.findMany({ where: { imm_code: { in: codes } }, select: { id: true, imm_code: true, item_name: true, deleted_at: true } });
+    },
+
     findByDrawingNos(nos, exceptIds = []) {
       if (!nos.length) return [];
       return db.material.findMany({
@@ -183,9 +189,10 @@ function createMaterialRepository(db) {
      * @param {number|null} actorId
      * @returns {Promise<Array<object>>} the created materials, in input order
      */
-    createMany(rows, formatCode, actorId, originalLabel) {
+    /** @param {Map<number, number>} [keptMax]  prefix id → highest number among codes kept from an import */
+    createMany(rows, formatCode, actorId, originalLabel, keptMax) {
       return db.$transaction(async (tx) => {
-        const created = await this.createManyIn(tx, rows, formatCode, actorId);
+        const created = await this.createManyIn(tx, rows, formatCode, actorId, keptMax);
         // A Finished part starts with its first drawing revision, released.
         const parts = created.filter((m) => m.material_type === 'FINISHED');
         if (!parts.length) return created;
@@ -270,10 +277,14 @@ function createMaterialRepository(db) {
      * subassembly created together with its own item).
      * @param {import('@prisma/client').Prisma.TransactionClient} tx
      */
-    async createManyIn(tx, rows, formatCode, actorId) {
-      // Reserve a block of numbers per prefix.
+    async createManyIn(tx, rows, formatCode, actorId, keptMax = new Map()) {
+      // Codes kept from an import: each prefix's counter first moves past the highest kept number.
+      for (const [prefixId, max] of keptMax) {
+        await tx.immPrefix.updateMany({ where: { id: prefixId, next_number: { lte: max } }, data: { next_number: max + 1 } });
+      }
+      // Reserve a block of numbers per prefix, for the rows without a code.
       const counts = new Map();
-      for (const r of rows) counts.set(r.prefix_id, (counts.get(r.prefix_id) || 0) + 1);
+      for (const r of rows) if (!r.imm_code) counts.set(r.prefix_id, (counts.get(r.prefix_id) || 0) + 1);
       const nextFor = new Map();
       for (const [prefixId, n] of counts) {
         const p = await tx.immPrefix.update({
@@ -285,13 +296,14 @@ function createMaterialRepository(db) {
       }
 
       const codes = rows.map((r) => {
+        if (r.imm_code) return r.imm_code;
         const p = nextFor.get(r.prefix_id);
         const code = formatCode(p, p.cursor);
         p.cursor += 1;
         return code;
       });
 
-      // A prefix whose counter was set back could collide with existing codes.
+      // A prefix whose counter was set back could collide with existing codes (kept ones are checked again here).
       const taken = await tx.material.findMany({ where: { imm_code: { in: codes } }, select: { imm_code: true } });
       if (taken.length) {
         const err = new Error(`Code ${taken.map((t) => t.imm_code).join(', ')} already exists`);

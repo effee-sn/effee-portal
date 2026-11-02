@@ -1,6 +1,6 @@
 const { materialService } = require('./material.service');
 const { TYPES } = require('./material.validation');
-const { parseListQuery, ApiResponse } = require('../../core');
+const { parseListQuery, ApiResponse, BadRequestError } = require('../../core');
 const { requestContext } = require('../../core/http/requestContext');
 
 /** Material master HTTP controller (materials + IMM code prefixes). */
@@ -53,6 +53,21 @@ const listMaterials = async (req, res) => {
   const query = listQuery(req.query);
   const { items, total } = await materialService.list(query);
   ApiResponse.paginated(res, items, { page: query.page, limit: query.limit, total });
+};
+
+/** `GET /materials/import/template` — the Excel template for an import. */
+const getImportTemplate = async (req, res) => {
+  const buffer = await materialService.importTemplate();
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="materials-import-template.xlsx"');
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(buffer);
+};
+
+/** `POST /materials/import/read` (multipart `file`) — the file's rows; nothing is saved. */
+const readImport = async (req, res) => {
+  if (!req.file) throw new BadRequestError('Choose an Excel file');
+  ApiResponse.ok(res, await materialService.readImport(req.file.buffer));
 };
 
 /** `GET /materials/export` — the filtered list as an Excel file. */
@@ -143,6 +158,6 @@ module.exports = {
   listPrefixes, createPrefix, updatePrefix, deletePrefix,
   getDrawingCheck, listMaterials, getMaterial, createMaterials, updateMaterial, deleteMaterial,
   listRevisions, newRevision, saveRevisionDraft, releaseRevision, discardRevisionDraft,
-  exportMaterials, findDuplicates, getWhereUsed, getHistory,
+  exportMaterials, getImportTemplate, readImport, findDuplicates, getWhereUsed, getHistory,
   listUnits, createUnit, updateUnit, deleteUnit,
 };

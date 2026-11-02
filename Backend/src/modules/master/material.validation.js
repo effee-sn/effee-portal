@@ -51,6 +51,8 @@ const materialFields = {
 const bulkCreateBody = z.object({
   rows: z.array(z.object({
     prefix_id: z.coerce.number({ invalid_type_error: 'Choose an IMM code prefix' }).int().positive('Choose an IMM code prefix'),
+    // An existing code kept from an import (else the prefix's next number).
+    imm_code: optionalText(40).transform((v) => (v ? v.toUpperCase() : null)),
     ...materialFields,
   })).min(1, 'Add at least one material').max(200, 'At most 200 materials at a time'),
 });

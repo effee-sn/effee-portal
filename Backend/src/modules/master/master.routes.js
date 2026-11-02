@@ -1,8 +1,9 @@
 const { Router } = require('express');
+const multer = require('multer');
 
 const authenticate = require('../../middleware/authenticate');
 const authorize    = require('../../middleware/authorize');
-const { asyncHandler, validate } = require('../../core');
+const { asyncHandler, validate, BadRequestError } = require('../../core');
 
 const {
   listCustomersQuery, customerIdParam, createCustomerBody, updateCustomerBody,
@@ -153,6 +154,25 @@ router.delete(
 const materialValidation = require('./material.validation');
 const materialController = require('./material.controller');
 
+// A materials import is read in memory and never stored: one spreadsheet, at most 5 MB.
+const IMPORT_TYPES = new Set([
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel', 'text/csv',
+]);
+const IMPORT_MAX_MB = 5;
+const importUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: IMPORT_MAX_MB * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => (IMPORT_TYPES.has(file.mimetype) || /\.(xlsx|xls|csv)$/i.test(file.originalname)
+    ? cb(null, true)
+    : cb(new BadRequestError('Choose an Excel file (.xlsx, .xls or .csv)'))),
+});
+const handleUploadErrors = (handler) => (req, res, next) => handler(req, res, (err) => {
+  if (err instanceof multer.MulterError) {
+    return next(new BadRequestError(err.code === 'LIMIT_FILE_SIZE' ? `The file must be smaller than ${IMPORT_MAX_MB} MB` : `Upload failed: ${err.message}`));
+  }
+  return next(err);
+});
+
 // Prefixes: readable by material users (the IMM code dropdown) and their
 // administrators; changed only with the Material Codes permissions.
 router.get('/materials/prefixes', authorize('MATERIAL_VIEW', 'MATERIAL_CONFIG_VIEW'), asyncHandler(materialController.listPrefixes));
@@ -210,6 +230,13 @@ router.get(
   authorize('MATERIAL_VIEW'),
   validate({ query: materialValidation.listMaterialsQuery }),
   asyncHandler(materialController.exportMaterials)
+);
+router.get('/materials/import/template', authorize('MATERIAL_CREATE'), asyncHandler(materialController.getImportTemplate));
+router.post(
+  '/materials/import/read',
+  authorize('MATERIAL_CREATE'),
+  handleUploadErrors(importUpload.single('file')),
+  asyncHandler(materialController.readImport)
 );
 router.post(
   '/materials/duplicates',

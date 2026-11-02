@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet, downloadFile } from '@/lib/api';
+import MaterialImportModal from '@/components/MaterialImportModal';
 import { TableSkeleton } from '@/components/Skeleton';
 import usePageSize from '@/lib/usePageSize';
 import PageSizeSelect from '@/components/PageSizeSelect';
@@ -13,7 +14,8 @@ import { MATERIAL_TYPES, MATERIAL_TYPE_LABEL } from '@/lib/materialOptions';
 
 /**
  * Master Data → Materials. The list, with search and filters, and an Excel
- * export of what's filtered; new materials are added in bulk on /new; a row
+ * export of what's filtered; new materials are added in bulk on /new, or from
+ * an Excel file with Import (a popup: example file, row check, result); a row
  * opens the material's page (details, where it's used, history). The IMM code
  * is generated from the chosen prefix and never changes.
  */
@@ -39,6 +41,8 @@ export default function MaterialsPage() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
+  const [showImport, setShowImport] = useState(false);
+  const canKeepCodes = has('MATERIAL_CONFIG_EDIT');
   const [limit, setLimit, limitRef] = usePageSize('materials', 20);
 
   /** The current search and filters as a query string. */
@@ -131,9 +135,17 @@ export default function MaterialsPage() {
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search code, name, drawing, material…"
             className="flex-1 min-w-0 py-1.5 px-2.5 text-sm text-gray-700 outline-none bg-transparent" />
         </form>
+        {canCreate && (
+          <>
+            <button type="button" onClick={() => setShowImport(true)} className="btn-secondary px-3 py-1.5"
+              title="Add materials from an Excel file — the rows are checked before they are saved">
+              Import
+            </button>
+          </>
+        )}
         <button type="button" onClick={exportXlsx} disabled={exporting || total === 0} className="btn-secondary px-3 py-1.5"
           title="Download the filtered list as an Excel file">
-          {exporting ? 'Exporting…' : 'Excel'}
+          {exporting ? 'Exporting…' : 'Export'}
         </button>
         <div className="flex items-center gap-0.5 shrink-0 text-sm text-gray-500">
           <PageSizeSelect value={limit} onChange={onPageSize} />
@@ -146,6 +158,9 @@ export default function MaterialsPage() {
       </div>
 
       {exportError && <p className="mx-3 mt-3 px-3 py-2 rounded text-sm border bg-red-50 border-red-200 text-red-700">{exportError}</p>}
+      {showImport && (
+        <MaterialImportModal canKeepCodes={canKeepCodes} onClose={() => setShowImport(false)} onImported={() => { setPage(1); fetchRows(1); }} />
+      )}
 
       {loading ? <TableSkeleton cols={6} rows={6} /> : rows.length === 0 ? (
         <p className="py-14 text-center text-sm text-gray-400">

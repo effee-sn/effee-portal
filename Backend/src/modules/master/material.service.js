@@ -1,5 +1,6 @@
 const XLSX = require('xlsx');
 const { materialRepository } = require('./material.repository');
+const { readMaterialsFile, materialsTemplate } = require('./material.import');
 const { labelFor, revName, loadRevisionConfig } = require('./revisionLabels');
 const { auditService } = require('../audit/audit.service');
 const { NotFoundError, ConflictError, ValidationError, buildSearchClause } = require('../../core');
@@ -14,6 +15,8 @@ const { NotFoundError, ConflictError, ValidationError, buildSearchClause } = req
  *     keep matching); its next number can still be moved forward.
  *   - **Materials** (Master Data → Materials): created in bulk, each row
  *     picking a prefix; the IMM code is generated on save and never changes.
+ *     An Excel import may keep the materials' existing codes (Super Admin or
+ *     prefix editors only); the prefix's next number then moves past them.
  *   - **Units of measure** (Administrator → Configuration → Units of Measure):
  *     every material counts in one. A unit in use keeps its code.
  *   - **Used materials** — on any live subassembly — can't be deleted (only
@@ -36,6 +39,23 @@ function createMaterialService(repository) {
 
   /** prefix + separator + zero-padded number. */
   const formatCode = (p, n) => `${p.prefix}${p.separator || ''}${String(n).padStart(p.digits, '0')}`;
+
+  /**
+   * The prefix an existing IMM code is in, and its number: the code must read
+   * exactly as that prefix writes it (separator, zero-padding). The longest
+   * matching prefix wins.
+   * @returns {{ prefix: object, number: number } | null}
+   */
+  const prefixForCode = (code, prefixes) => {
+    const c = String(code || '').trim().toUpperCase();
+    for (const p of [...prefixes].sort((a, b) => b.prefix.length - a.prefix.length)) {
+      const head = `${p.prefix}${p.separator || ''}`;
+      const rest = c.startsWith(head) ? c.slice(head.length) : '';
+      const n = /^\d+$/.test(rest) ? Number(rest) : 0;
+      if (n > 0 && formatCode(p, n) === c) return { prefix: p, number: n };
+    }
+    return null;
+  };
 
   const shapePrefix = (p) => {
     const { _count, ...rest } = p;
@@ -67,6 +87,38 @@ function createMaterialService(repository) {
       if (!seen.has(k)) seen.set(k, i);
     });
     if (errors.length) throw new ValidationError('Validation failed', errors);
+  }
+
+  /**
+   * IMM codes kept from an import (rows with `imm_code`; the others get the
+   * next number). Only for Super Admin and whoever may edit the prefixes: each
+   * code must be in its row's prefix's format, unused (deleted materials'
+   * codes too — a code is never reused) and not repeated.
+   * @returns {Promise<Map<number, number>>} prefix id → highest kept number, so its counter moves past it
+   */
+  async function assertKeptCodes(rows, prefixes, actor) {
+    const keptMax = new Map();
+    if (!rows.some((r) => r.imm_code)) return keptMax;
+    if (!actor?.is_system && !actor?.permissions?.includes('MATERIAL_CONFIG_EDIT')) {
+      throw new ValidationError('Only a Super Admin, or someone who can edit the IMM code prefixes, can keep IMM codes from a file');
+    }
+    const taken = new Map((await repository.findByCodes(rows.map((r) => r.imm_code).filter(Boolean))).map((m) => [m.imm_code.toUpperCase(), m]));
+    const seen = new Map();
+    const errors = [];
+    rows.forEach((r, i) => {
+      if (!r.imm_code) return;
+      const field = `rows.${i}.imm_code`;
+      const hit = prefixForCode(r.imm_code, prefixes);
+      const m = taken.get(r.imm_code.toUpperCase());
+      if (!hit) errors.push({ field, message: `Row ${i + 1}: IMM code ${r.imm_code} doesn't match any prefix's format` });
+      else if (hit.prefix.id !== r.prefix_id) errors.push({ field, message: `Row ${i + 1}: IMM code ${r.imm_code} belongs to prefix "${hit.prefix.prefix}"` });
+      else if (m) errors.push({ field, message: `Row ${i + 1}: IMM code ${r.imm_code} is already used${m.deleted_at ? ' (by a deleted material)' : ` by ${m.item_name}`}` });
+      else if (seen.has(r.imm_code.toUpperCase())) errors.push({ field, message: `Row ${i + 1}: IMM code ${r.imm_code} is repeated — same as row ${seen.get(r.imm_code.toUpperCase()) + 1}` });
+      else keptMax.set(hit.prefix.id, Math.max(keptMax.get(hit.prefix.id) || 0, hit.number));
+      if (!seen.has(r.imm_code.toUpperCase())) seen.set(r.imm_code.toUpperCase(), i);
+    });
+    if (errors.length) throw new ValidationError('Validation failed', errors);
+    return keptMax;
   }
 
   const shapeUnit = (u) => {
@@ -113,6 +165,7 @@ function createMaterialService(repository) {
   return {
     SORTABLE_FIELDS,
     formatCode,
+    prefixForCode,
 
     /**
      * Which of these drawing numbers other materials already use (to flag them
@@ -208,7 +261,8 @@ function createMaterialService(repository) {
      * @param {{ rows: Array<object> }} dto
      */
     async createBulk(dto, actor) {
-      const prefixes = new Map((await repository.listPrefixes()).map((p) => [p.id, p]));
+      const all = await repository.listPrefixes();
+      const prefixes = new Map(all.map((p) => [p.id, p]));
       const errors = [];
       dto.rows.forEach((r, i) => {
         const p = prefixes.get(r.prefix_id);
@@ -216,12 +270,13 @@ function createMaterialService(repository) {
         else if (!p.is_active) errors.push({ field: `rows.${i}.prefix_id`, message: `Row ${i + 1}: prefix "${p.prefix}" is inactive` });
       });
       if (errors.length) throw new ValidationError('Validation failed', errors);
+      const keptMax = await assertKeptCodes(dto.rows, all, actor);
       await assertUnits(dto.rows, (i) => `rows.${i}.uom_id`);
       await assertDrawingNosFree(dto.rows, (i) => `rows.${i}.drawing_no`);
 
       let created;
       try {
-        created = await repository.createMany(dto.rows, formatCode, actor?.id ?? null, labelFor(await loadRevisionConfig(), 1));
+        created = await repository.createMany(dto.rows, formatCode, actor?.id ?? null, labelFor(await loadRevisionConfig(), 1), keptMax);
       } catch (err) {
         if (err.code === 'IMM_CODE_TAKEN') {
           throw new ConflictError(`${err.message} — raise that prefix's next number in Administrator → Configuration → Material Codes`);
@@ -380,6 +435,24 @@ function createMaterialService(repository) {
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Materials');
       return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    },
+
+    /** The import template, listing the active prefixes and units. */
+    async importTemplate() {
+      const [prefixes, units] = await Promise.all([repository.listPrefixes(), repository.listUnits()]);
+      return materialsTemplate({ prefixes: prefixes.filter((p) => p.is_active), units: units.filter((u) => u.is_active) });
+    },
+
+    /**
+     * The rows of an uploaded Excel file, for the bulk entry to check and save,
+     * with the file's IMM codes that are already used.
+     * @param {Buffer} buffer
+     */
+    async readImport(buffer) {
+      const out = readMaterialsFile(buffer);
+      const codes = [...new Set(out.rows.map((r) => (r.imm_code || '').toUpperCase()).filter(Boolean))];
+      const taken = await repository.findByCodes(codes);
+      return { ...out, taken_codes: taken.map((m) => ({ imm_code: m.imm_code, item_name: m.item_name, deleted: Boolean(m.deleted_at) })) };
     },
 
     // ── Units of measure ─────────────────────────────────────────────────────

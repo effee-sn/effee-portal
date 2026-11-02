@@ -1,13 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
-import { apiGet, apiPost } from '@/lib/api';
+import { apiGet, apiPost, apiPostForm, downloadFile } from '@/lib/api';
 import SearchableSelect from '@/components/SearchableSelect';
 import { TableSkeleton } from '@/components/Skeleton';
-import { MATERIAL_TYPES, formatImmCode, unitFromText } from '@/lib/materialOptions';
+import {
+  MATERIAL_TYPES, formatImmCode, unitFromText, typeFromText, prefixForCode, fromImportRow, IMPORT_HANDOFF,
+} from '@/lib/materialOptions';
 
 /**
  * Master Data → Materials → New: add many materials at once.
@@ -17,7 +19,12 @@ import { MATERIAL_TYPES, formatImmCode, unitFromText } from '@/lib/materialOptio
  * be. The drawing no. is optional free text, one material each: a number
  * another material uses, or an earlier row repeats, is marked before saving.
  * Every row needs a unit of measure. Rows left
- * completely empty are ignored. Rows can also be pasted from Excel. Before
+ * completely empty are ignored. Rows can also be pasted from Excel, or
+ * imported from an Excel file (columns found by their headings; the rows
+ * land in the grid to check before saving, like pasted ones). An imported row
+ * can keep its existing IMM code (Super Admin / prefix editors only): its
+ * prefix is read from the code, and the prefix carries on after the highest
+ * code kept. Before
  * saving, rows that look like materials already in the master (or like each
  * other) are pointed out, and can still be saved. Everything is saved
  * together, or nothing is.
@@ -28,19 +35,9 @@ const REQUIRED = ['prefix_id', 'item_name', 'description', 'technical_spec', 'ma
 const FIELDS = ['drawing_no', 'item_name', 'description', 'technical_spec', 'material_type', 'material', 'remarks'];
 let seq = 0;
 const blank = (prefix_id = '', uom_id = '') => ({
-  key: (seq += 1), prefix_id, uom_id, drawing_no: '', item_name: '', description: '', technical_spec: '', material_type: '', material: '', remarks: '',
+  key: (seq += 1), prefix_id, uom_id, imm_code: '', drawing_no: '', item_name: '', description: '', technical_spec: '', material_type: '', material: '', remarks: '',
 });
 const isEmpty = (r) => FIELDS.every((f) => !String(r[f] || '').trim());
-
-/** "Bought-out", "bought out", "BO" … → BOUGHT_OUT. */
-function typeFromText(t) {
-  const s = String(t || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
-  if (!s) return '';
-  if (s.startsWith('fin')) return 'FINISHED';
-  if (s.startsWith('bo') || s.startsWith('bought')) return 'BOUGHT_OUT';
-  if (s.startsWith('con')) return 'CONSUMABLE';
-  return '';
-}
 
 const cell = 'w-full text-sm border rounded px-2 py-1.5 bg-[var(--ams-surface)] text-[var(--ams-input-text)] outline-none focus:border-[var(--ams-primary)]';
 
@@ -48,18 +45,27 @@ export default function NewMaterialsPage() {
   useAuth();
   const { me, can, loading } = usePermissions();
   const canCreate = me?.is_system || can('MATERIAL_CREATE');
+  // Keeping existing IMM codes from a file: a data migration, for those who run the prefixes.
+  const canKeepCodes = me?.is_system || can('MATERIAL_CONFIG_EDIT');
 
   const [prefixes, setPrefixes] = useState(null);
   const [units, setUnits] = useState([]);
+  const [unitsLoaded, setUnitsLoaded] = useState(false);
   const [defaultUnit, setDefaultUnit] = useState('');
   // Rows that look like existing materials (or each other), found on save; null = not checked.
   const [dupes, setDupes] = useState(null);
   // Drawing numbers other materials already use (lower-cased → that material), checked with the server.
   const [takenDrawings, setTakenDrawings] = useState(() => new Map());
+  // IMM codes from an imported file that materials already have (upper-cased → { item_name, deleted }).
+  const [takenCodes, setTakenCodes] = useState(() => new Map());
   const [rows, setRows] = useState(() => Array.from({ length: 5 }, () => blank()));
   const [defaultPrefix, setDefaultPrefix] = useState('');
   const [showPaste, setShowPaste] = useState(false);
   const [paste, setPaste] = useState('');
+  const [importing, setImporting] = useState(false);
+  // The last Excel import: { name, count, skipped, notes } — shown until dismissed.
+  const [imported, setImported] = useState(null);
+  const fileInput = useRef(null);
   const [tried, setTried] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -70,7 +76,8 @@ export default function NewMaterialsPage() {
     let cancelled = false;
     apiGet('/materials/prefixes').then((r) => { if (!cancelled) setPrefixes(r.data || []); })
       .catch((e) => { if (!cancelled) { setPrefixes([]); setError(e.message); } });
-    apiGet('/materials/units').then((r) => { if (!cancelled) setUnits(r.data || []); }).catch(() => {});
+    apiGet('/materials/units').then((r) => { if (!cancelled) setUnits(r.data || []); }).catch(() => {})
+      .finally(() => { if (!cancelled) setUnitsLoaded(true); });
     return () => { cancelled = true; };
   }, [loading, canCreate]);
 
@@ -97,12 +104,17 @@ export default function NewMaterialsPage() {
     } catch { /* the server checks on save anyway */ }
   };
 
-  // The code each filled row will get, in order, per prefix (shown only).
+  // The code each filled row will get, in order, per prefix (shown only) —
+  // after the highest code kept from a file, as the server numbers them.
   const previews = useMemo(() => {
     const cursor = new Map(activePrefixes.map((p) => [String(p.id), p.next_number]));
+    rows.forEach((r) => {
+      const hit = r.imm_code && !isEmpty(r) ? prefixForCode(r.imm_code, activePrefixes) : null;
+      if (hit) cursor.set(String(hit.prefix.id), Math.max(cursor.get(String(hit.prefix.id)), hit.number + 1));
+    });
     const byId = new Map(activePrefixes.map((p) => [String(p.id), p]));
     return rows.map((r) => {
-      if (!r.prefix_id || isEmpty(r) || !byId.has(r.prefix_id)) return '';
+      if (r.imm_code || !r.prefix_id || isEmpty(r) || !byId.has(r.prefix_id)) return '';
       const n = cursor.get(r.prefix_id); cursor.set(r.prefix_id, n + 1);
       return formatImmCode(byId.get(r.prefix_id), n);
     });
@@ -113,7 +125,7 @@ export default function NewMaterialsPage() {
   const removeRow = (key) => { setDupes(null); setRows((prev) => (prev.length > 1 ? prev.filter((r) => r.key !== key) : [blank(defaultPrefix, defaultUnit)])); };
   const duplicate = (key) => setRows((prev) => {
     const i = prev.findIndex((r) => r.key === key);
-    const copy = { ...prev[i], key: (seq += 1) };
+    const copy = { ...prev[i], key: (seq += 1), imm_code: '' }; // a code belongs to one material
     return [...prev.slice(0, i + 1), copy, ...prev.slice(i + 1)];
   });
   const applyPrefixToEmpty = (v) => {
@@ -140,6 +152,51 @@ export default function NewMaterialsPage() {
     checkDrawings(pasted.map((p) => p.drawing_no));
   };
 
+  /** An Excel file's rows (read by the server, nothing saved) join the grid like pasted ones. */
+  const importFile = async (file) => {
+    if (!file) return;
+    setImporting(true); setError(''); setImported(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const { data } = await apiPostForm('/materials/import/read', fd);
+      applyImport(file.name, data);
+    } catch (e) { setError(e.message); }
+    finally { setImporting(false); }
+  };
+
+  // A file chosen with Import on the materials list arrives here, read already.
+  useEffect(() => {
+    if (prefixes === null || !unitsLoaded) return;
+    let handed = null;
+    try { handed = JSON.parse(sessionStorage.getItem(IMPORT_HANDOFF) || 'null'); sessionStorage.removeItem(IMPORT_HANDOFF); } catch { /* none */ }
+    if (handed?.data?.rows) applyImport(handed.name, handed.data);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefixes, unitsLoaded]);
+
+  /** @param {string} name the file's name @param {{ rows: Array<object>, skipped_columns: string[] }} data */
+  function applyImport(name, data) {
+    const notes = [];
+    const codesInFile = data.rows.filter((x) => x.imm_code).length;
+    if (codesInFile && !canKeepCodes) {
+      notes.push(`${codesInFile} IMM code${codesInFile === 1 ? ' was' : 's were'} in the file but not kept — new codes will be given (only a Super Admin or whoever edits the prefixes can keep codes)`);
+    }
+    const added = data.rows.map((x) => {
+      const { row, notes: n } = fromImportRow(x, { prefixes: activePrefixes, units, canKeepCodes });
+      n.forEach((t) => notes.push(`Excel row ${x.row}: ${t}`));
+      return { ...blank(), ...row, prefix_id: row.prefix_id || (row.imm_code ? '' : defaultPrefix), uom_id: row.uom_id || defaultUnit };
+    });
+    setTakenCodes((m) => {
+      const n = new Map(m);
+      (data.taken_codes || []).forEach((t) => n.set(t.imm_code.toUpperCase(), t));
+      return n;
+    });
+    setDupes(null); setTried(false);
+    setRows((prev) => [...prev.filter((r) => !isEmpty(r)), ...added]);
+    setImported({ name, count: added.length, skipped: data.skipped_columns || [], notes });
+    checkDrawings(added.map((a) => a.drawing_no));
+  }
+
   const filled = rows.filter((r) => !isEmpty(r));
   const missing = (r, f) => tried && !isEmpty(r) && !String(r[f] || '').trim();
   /** Why a row's drawing no. can't be used: another material has it, or an earlier row repeats it. */
@@ -151,7 +208,16 @@ export default function NewMaterialsPage() {
     const first = filled.find((x) => drawingKey(x.drawing_no) === k);
     return first && first !== r ? `Same as row ${rows.indexOf(first) + 1}` : null;
   };
-  const invalidCount = filled.filter((r) => REQUIRED.some((f) => !String(r[f] || '').trim()) || drawingIssue(r)).length;
+  /** Why a kept IMM code can't be used: no prefix writes it so, a material has it, or an earlier row repeats it. */
+  const codeIssue = (r) => {
+    if (!r.imm_code) return null;
+    if (!prefixForCode(r.imm_code, activePrefixes)) return 'Matches no active prefix’s format';
+    const t = takenCodes.get(r.imm_code);
+    if (t) return t.deleted ? 'Used by a deleted material' : `Already used by ${t.item_name}`;
+    const first = filled.find((x) => x.imm_code === r.imm_code);
+    return first && first !== r ? `Same as row ${rows.indexOf(first) + 1}` : null;
+  };
+  const invalidCount = filled.filter((r) => REQUIRED.some((f) => !String(r[f] || '').trim()) || drawingIssue(r) || codeIssue(r)).length;
 
   // Row number on screen of the n-th filled row.
   const rowNo = (n) => rows.indexOf(filled[n]) + 1;
@@ -161,7 +227,7 @@ export default function NewMaterialsPage() {
   const save = async (anyway = false) => {
     setTried(true); setError('');
     if (!filled.length) { setError('Fill in at least one material.'); return; }
-    if (invalidCount) { setError(`${invalidCount} row(s) need attention: a missing required field, or a drawing no. already used or repeated (marked in red).`); return; }
+    if (invalidCount) { setError(`${invalidCount} row(s) need attention: a missing required field, or a drawing no. or IMM code already used or repeated (marked in red).`); return; }
     setSaving(true);
     try {
       if (!anyway) {
@@ -172,6 +238,7 @@ export default function NewMaterialsPage() {
       }
       const body = { rows: filled.map((r) => ({
         ...Object.fromEntries(FIELDS.map((f) => [f, r[f]])), prefix_id: Number(r.prefix_id), uom_id: Number(r.uom_id),
+        ...(r.imm_code ? { imm_code: r.imm_code } : {}),
       })) };
       const res = await apiPost('/materials/bulk', body);
       setDupes(null);
@@ -208,7 +275,7 @@ export default function NewMaterialsPage() {
           ))}
         </ul>
         <div className="px-5 py-4 border-t border-gray-200 flex gap-3">
-          <button type="button" onClick={() => { setCreated(null); setRows(Array.from({ length: 5 }, () => blank(defaultPrefix, defaultUnit))); setTried(false); }}
+          <button type="button" onClick={() => { setCreated(null); setImported(null); setRows(Array.from({ length: 5 }, () => blank(defaultPrefix, defaultUnit))); setTried(false); }}
             className="btn-secondary px-4 py-2">Add more</button>
           <Link href="/dashboard/master-data/materials" className="btn-primary px-4 py-2">Back to materials</Link>
         </div>
@@ -232,7 +299,33 @@ export default function NewMaterialsPage() {
           {activeUnits.map((u) => <option key={u.id} value={u.id}>{u.code} — {u.name}</option>)}
         </select>
         <button type="button" onClick={() => setShowPaste((v) => !v)} className="btn-secondary px-3 py-1.5">Paste from Excel</button>
+        <input ref={fileInput} type="file" accept=".xlsx,.xls,.csv" className="hidden"
+          onChange={(e) => { importFile(e.target.files?.[0]); e.target.value = ''; }} />
+        <button type="button" onClick={() => fileInput.current?.click()} disabled={importing} className="btn-secondary px-3 py-1.5">
+          {importing ? 'Reading…' : 'Import from Excel'}
+        </button>
+        <button type="button" onClick={() => downloadFile('/materials/import/template', 'materials-import-template.xlsx').catch((e) => setError(e.message))}
+          className="text-sm text-[var(--ams-primary)] hover:underline cursor-pointer">Template</button>
       </div>
+
+      {imported && (
+        <div className="mx-3 mt-3 px-3 py-2.5 rounded text-sm border bg-blue-50 border-blue-200 text-blue-900 space-y-1">
+          <div className="flex gap-3 items-start">
+            <p className="flex-1">
+              <b>{imported.count}</b> material{imported.count === 1 ? '' : 's'} read from <b>{imported.name}</b> and added below — nothing is saved yet.
+              Check the rows, then Save.
+              {imported.skipped.length > 0 && <> Columns not used: {imported.skipped.join(', ')}.</>}
+            </p>
+            <button type="button" onClick={() => setImported(null)} aria-label="Dismiss" className="text-blue-400 hover:text-blue-700 cursor-pointer">✕</button>
+          </div>
+          {imported.notes.length > 0 && (
+            <ul className="list-disc pl-5 text-amber-800">
+              {imported.notes.slice(0, 8).map((n) => <li key={n}>{n} — choose it in the row</li>)}
+              {imported.notes.length > 8 && <li>…and {imported.notes.length - 8} more</li>}
+            </ul>
+          )}
+        </div>
+      )}
 
       {activePrefixes.length === 0 && (
         <p className="mx-3 mt-3 px-3 py-2 rounded text-sm border bg-amber-50 border-amber-200 text-amber-800">
@@ -300,10 +393,23 @@ export default function NewMaterialsPage() {
             return (
               <tr key={r.key} className="border-b border-gray-100 align-top">
                 <td className="px-2 py-2 text-xs text-gray-400 tabular-nums pt-3">{i + 1}</td>
-                <td className={`px-2 py-2 ${missing(r, 'prefix_id') ? 'rounded ring-1 ring-red-400' : ''}`}>
-                  <SearchableSelect options={prefixOptions} value={r.prefix_id} onChange={(v) => set(r.key, 'prefix_id', v)} placeholder="Choose prefix…" />
-                  {previews[i] && <p className="text-[11px] text-gray-500 mt-1 font-mono">→ {previews[i]}</p>}
-                </td>
+                {r.imm_code ? (
+                  <td className="px-2 py-2">
+                    <div className={`flex items-center gap-1 border rounded px-2 py-1.5 ${codeIssue(r) ? 'border-red-400 bg-red-50' : 'border-gray-300 bg-gray-50'}`}>
+                      <span className="font-mono text-sm font-semibold text-gray-800 flex-1 truncate" title="IMM code kept from the file">{r.imm_code}</span>
+                      <button type="button" onClick={() => setRows((prev) => prev.map((x) => (x.key === r.key
+                        ? { ...x, imm_code: '', prefix_id: x.prefix_id || defaultPrefix } : x)))}
+                        title="Don't keep this code — give the next number" aria-label={`Row ${i + 1}: give a new code instead`}
+                        className="text-gray-400 hover:text-gray-700 cursor-pointer text-xs">✕</button>
+                    </div>
+                    <p className={`text-[11px] mt-1 ${codeIssue(r) ? 'text-red-600' : 'text-gray-500'}`}>{codeIssue(r) || 'Kept from the file'}</p>
+                  </td>
+                ) : (
+                  <td className={`px-2 py-2 ${missing(r, 'prefix_id') ? 'rounded ring-1 ring-red-400' : ''}`}>
+                    <SearchableSelect options={prefixOptions} value={r.prefix_id} onChange={(v) => set(r.key, 'prefix_id', v)} placeholder="Choose prefix…" />
+                    {previews[i] && <p className="text-[11px] text-gray-500 mt-1 font-mono">→ {previews[i]}</p>}
+                  </td>
+                )}
                 <td className="px-2 py-2">
                   <input aria-label={`Row ${i + 1} drawing no.`} value={r.drawing_no} onChange={(e) => set(r.key, 'drawing_no', e.target.value)}
                     onBlur={(e) => checkDrawings([e.target.value])} maxLength={100} placeholder="None"
