@@ -13,6 +13,17 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.12.1] — 2026-11-03
+
+### Improved — the document viewer
+
+- The viewer fills the screen (a thin margin all round), so wide sheets show more columns.
+- **Excel sheets look like Excel:** the file's own column widths and row heights, merged cells (titles across columns), and the **pictures** in the sheet — drawings, photos, logos — placed on their cells at their size. A tab says how many pictures a sheet has; click a picture to see it large. Charts, shapes and cell colours/borders are not shown, nor pictures in old .xls files.
+
+**Upgrade:** no migrations — pull, then in Frontend `npm ci` (one new direct package, `jszip`, already installed with docx-preview) and `npm run build`; restart effee-web.
+
+---
+
 ## [1.12.0] — 2026-11-03
 
 ### Added — view documents in the portal

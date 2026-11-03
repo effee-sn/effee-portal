@@ -12,6 +12,18 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|string[]|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.12.1',
+    date: '2026-11-03',
+    items: [
+      {
+        icon: 'grid',
+        title: 'Excel files look like Excel in the viewer',
+        text: 'Column widths, merged cells and the pictures in the sheet (drawings, photos) now show in place, and the viewer fills the screen. Click a picture to see it large.',
+        perm: 'SALES_VIEW',
+      },
+    ],
+  },
+  {
     version: '1.12.0',
     date: '2026-11-03',
     items: [
