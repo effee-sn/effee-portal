@@ -1,12 +1,12 @@
 const { Router } = require('express');
 const multer = require('multer');
-const path = require('path');
 const fs = require('fs');
 
 const authenticate = require('../../middleware/authenticate');
 const requireSystemRole = require('../../middleware/requireSystemRole');
 const { asyncHandler } = require('../../core');
 const ctrl = require('./backup.controller');
+const { TMP_DIR } = require('./backup.service');
 
 const router = Router();
 
@@ -17,9 +17,9 @@ const router = Router();
  * Restore is destructive — the client requires an explicit type-to-confirm.
  */
 
-// Uploaded restore files (.tar.gz full / .sql database-only) land here briefly,
-// then are deleted after restore.
-const tmpDir = path.join(__dirname, '../../../backups/tmp');
+// Uploaded restore files (.tar.gz full or files-only / .sql database-only) land
+// here briefly, then are deleted after restore.
+const tmpDir = TMP_DIR;
 if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
 
 const upload = multer({
@@ -34,6 +34,7 @@ const upload = multer({
 router.use(authenticate, requireSystemRole);
 
 router.get('/', asyncHandler(ctrl.list));
+router.get('/info', asyncHandler(ctrl.info));
 router.post('/', asyncHandler(ctrl.create));
 router.post('/restore', asyncHandler(ctrl.restore));
 router.post('/restore-upload', upload.single('backup'), asyncHandler(ctrl.restoreUpload));

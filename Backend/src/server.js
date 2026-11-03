@@ -17,6 +17,18 @@ const server = app.listen(config.PORT, () => {
 });
 
 /**
+ * Keeps idle connections open longer than the proxy in front does.
+ *
+ * Node closes an idle keep-alive connection after 5 s; a load balancer that
+ * holds its side open longer (Azure App Service's front end: ~4 min) may reuse
+ * one Node has just closed, and the user gets a random 502. Outliving the
+ * proxy leaves closing to it. headersTimeout must stay above keepAliveTimeout.
+ * Harmless behind nginx (the VPS), which closes its upstream connections itself.
+ */
+server.keepAliveTimeout = 620_000;
+server.headersTimeout   = 630_000;
+
+/**
  * Handles failures to bind the port.
  *
  * Without this, `listen` emits an unhandled 'error' event and the process dies
@@ -69,6 +81,8 @@ async function shutdown(signal, exitCode = 0) {
   }, 10_000);
   forceExit.unref();
 
+  // Long keep-alive (above): idle connections would otherwise hold close() open.
+  server.closeIdleConnections?.();
   server.close(async () => {
     try {
       await prisma.$disconnect();

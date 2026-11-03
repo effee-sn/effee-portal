@@ -107,6 +107,13 @@ const config = Object.freeze({
    */
   MYSQL_BIN_DIR: process.env.MYSQL_BIN_DIR || '',
 
+  /**
+   * Optional folder for backup files. Empty means `backups/` in the backend
+   * folder (the VPS). On Azure App Service, a folder outside the deployed app,
+   * e.g. `/home/data/backups` — a deploy replaces the app folder.
+   */
+  BACKUP_DIR: process.env.BACKUP_DIR || '',
+
   JWT: {
     SECRET:     JWT_SECRET,
     EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',

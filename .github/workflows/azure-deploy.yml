@@ -1,0 +1,129 @@
+# Deploys the portal to Azure App Service. Run by hand only:
+# GitHub → Actions → "Deploy to Azure" → Run workflow (pick the branch).
+# The VPS is not touched — it keeps its own git pull / build / pm2 restart.
+#
+# One-time setup in GitHub → Settings → Secrets and variables → Actions:
+#   Secrets   (from the service principal / OIDC federated credential IT creates)
+#     AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+#   Variables
+#     AZURE_API_APP   name of the API web app       e.g. effee-api
+#     AZURE_WEB_APP   name of the frontend web app  e.g. effee-web
+#     API_BASE_URL    the API's public address, no trailing slash
+#                     e.g. https://portal-api.effee-induction.com
+# Both web apps: see docs/azure-app-settings.md for their settings and
+# startup commands.
+
+name: Deploy to Azure
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: What to deploy
+        type: choice
+        options: [both, api, web]
+        default: both
+
+permissions:
+  id-token: write   # OIDC sign-in to Azure, no stored password
+  contents: read
+
+concurrency:
+  group: azure-deploy
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  api:
+    if: inputs.target != 'web'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: Backend/package-lock.json
+
+      - name: Install (production packages)
+        run: npm ci --omit=dev
+
+      - name: Prisma client (built for Linux, matching App Service)
+        run: npx prisma generate
+
+      - name: Package
+        # Migrations are applied when the app starts (scripts/azure-start.js):
+        # the database is reachable only from inside Azure's network.
+        run: zip -qry ../api.zip . -x 'tests/*' '.env' '.env.*' 'backups/*' 'storage/*' 'uploads/*'
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy API
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_API_APP }}
+          package: api.zip
+
+      - name: Wait until the API answers (and reaches the database)
+        working-directory: .
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS "${{ vars.API_BASE_URL }}/health/ready"; then echo; echo "API is up"; exit 0; fi
+            echo "waiting ($i)…"; sleep 10
+          done
+          echo "::error::API did not become ready — check the web app's Log stream in the Azure portal"
+          exit 1
+
+  web:
+    needs: api
+    # Runs after the API (so a new page never calls an old API) — or alone.
+    if: ${{ always() && inputs.target != 'api' && (needs.api.result == 'success' || needs.api.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Build (standalone)
+        env:
+          # Baked into the pages at build time.
+          NEXT_PUBLIC_API_URL: ${{ vars.API_BASE_URL }}/api
+          NEXT_PUBLIC_UPLOADS_URL: ${{ vars.API_BASE_URL }}
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build:azure
+
+      - name: Package
+        working-directory: Frontend/.next/standalone
+        run: zip -qry ../../../web.zip .
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy frontend
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEB_APP }}
+          package: web.zip

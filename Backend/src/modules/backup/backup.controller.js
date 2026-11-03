@@ -10,8 +10,13 @@ const { requestContext } = require('../../core/http/requestContext');
  * (see routes). Backup/restore are recorded to the audit trail (best-effort).
  */
 
+const restoredWhat = (type) => ({ full: 'Database and files', files: 'Files' }[type] || 'Database');
+
 /** `GET /backups` — list stored backups, newest first. */
 const list = async (req, res) => ApiResponse.ok(res, backupService.list());
+
+/** `GET /backups/info` — whether backups made here include the database. */
+const info = async (req, res) => ApiResponse.ok(res, backupService.info());
 
 /** `POST /backups` — create a new backup. */
 const create = async (req, res) => {
@@ -38,7 +43,7 @@ const restore = async (req, res) => {
     action: 'DB_RESTORE', entity: 'Database', actor: requestContext(req),
     changes: { file: req.body.filename, ...result },
   });
-  ApiResponse.message(res, result.type === 'full' ? 'Database and files restored from backup' : 'Database restored from backup');
+  ApiResponse.message(res, `${restoredWhat(result.type)} restored from backup`);
 };
 
 /** `POST /backups/restore-upload` — restore from an uploaded .tar.gz or .sql (destructive). */
@@ -50,7 +55,7 @@ const restoreUpload = async (req, res) => {
       action: 'DB_RESTORE', entity: 'Database', actor: requestContext(req),
       changes: { file: req.file.originalname, uploaded: true, ...result },
     });
-    ApiResponse.message(res, result.type === 'full' ? 'Database and files restored from uploaded backup' : 'Database restored from uploaded backup');
+    ApiResponse.message(res, `${restoredWhat(result.type)} restored from uploaded backup`);
   } finally {
     fs.rmSync(req.file.path, { force: true });
   }
@@ -62,4 +67,4 @@ const remove = async (req, res) => {
   ApiResponse.message(res, 'Backup deleted');
 };
 
-module.exports = { list, create, download, restore, restoreUpload, remove };
+module.exports = { list, info, create, download, restore, restoreUpload, remove };

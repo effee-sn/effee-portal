@@ -13,6 +13,29 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.11.0] — 2026-11-03
+
+### Added — file storage on Azure Blob (Settings → Storage)
+
+- A Super Admin can switch where uploaded documents and the company logo are kept: **this server's disk** (as before) or **Azure Blob Storage**. Turning Blob on offers to copy the existing files across, with a progress bar; turning it off can copy them back. A copy never deletes, skips files already there, and can be run again.
+- Files are read from wherever they are, so nothing goes missing during or after a switch. The Azure account is set in `.env` (`AZURE_STORAGE_*`, see `.env.example`); until it is, the switch stays off.
+- A full backup gathers the files from both places; restoring one with Blob on puts them back on Blob.
+
+### Added — ready for Azure App Service
+
+- **Backups without the MySQL tools** (Azure): a backup holds the files only (`backup-…-files.tar.gz`) and the page explains that Azure backs the database up (point-in-time restore). The VPS keeps full backups as before. `BACKUP_DIR` can move the backup folder.
+- **Dropped database connections**: a query that hits a connection the database or network has closed is retried, so users don't see the error. A write is retried only when it never reached the database.
+- **`/health/ready`**: answers only when the database does, for checking a deploy.
+- **Longer keep-alive** on the API, which avoids random 502 errors behind Azure's front end.
+- **`npm run build:azure`** (Frontend): a small self-contained build for App Service. `npm run build` / `next start` are unchanged.
+- **`Backend/scripts/azure-start.js`**: the API's start on Azure — applies migrations, then starts.
+- **GitHub Actions "Deploy to Azure"** — run by hand only; does not touch the VPS.
+- **`docs/azure-app-settings.md`**: every setting for both web apps and GitHub.
+
+**Upgrade (VPS):** one migration and one new package — pull, then in Backend `npm install` and `npx prisma migrate deploy`; in Frontend `npm install` and `npm run build`; restart both. Nothing to add to `.env`: files stay on the disk until Blob is set up and switched on.
+
+---
+
 ## [1.10.3] — 2026-11-02
 
 ### Fixed — Flow Builder: a figure still showing twice

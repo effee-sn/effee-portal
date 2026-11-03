@@ -81,6 +81,20 @@ app.get('/health', (req, res) => {
 });
 
 /**
+ * Readiness probe: the process is up AND the database answers. For checking a
+ * deploy (the pipeline waits on it), not for the platform's restart check —
+ * a database outage is not cured by restarting the app.
+ */
+app.get('/health/ready', async (req, res) => {
+  try {
+    await require('./lib/prisma').$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', database: 'ok', uptime: process.uptime() });
+  } catch {
+    res.status(503).json({ status: 'unavailable', database: 'unreachable' });
+  }
+});
+
+/**
  * ── API versioning ───────────────────────────────────────────────────────────
  * `/api/v1` is the canonical prefix for all new work. `/api` is kept as an
  * unversioned alias because the current frontend is built against it

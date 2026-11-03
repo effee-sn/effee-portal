@@ -1,4 +1,4 @@
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -19,6 +19,11 @@ const { BadRequestError, NotFoundError } = require('../../core');
  *   - `backup-info.json` — when it was made and what it contains.
  * `.env` is never included: it holds the passwords and secrets.
  *
+ * Where the `mysqldump` / `mysql` clients aren't installed — Azure App Service,
+ * whose managed MySQL backs the database up itself (point-in-time restore) —
+ * backups carry the files only: `backup-YYYYMMDD-HHMMSS-files.tar.gz`, without
+ * `database.sql`. Restoring one puts back the files and leaves the database.
+ *
  * A restore replays the dump into the **same** database via the `mysql`
  * client, then puts the files back (the current folders are replaced). Older
  * database-only `.sql` backups can still be restored — files are left as they
@@ -36,16 +41,16 @@ const { BadRequestError, NotFoundError } = require('../../core');
  *     block path traversal.
  */
 
-/** Directory where backup files live. */
-const BACKUP_DIR = path.join(__dirname, '../../../backups');
+/** Directory where backup files live (BACKUP_DIR in .env, else backups/ here). */
+const BACKUP_DIR = config.BACKUP_DIR ? path.resolve(config.BACKUP_DIR) : path.join(__dirname, '../../../backups');
 /** Scratch space for packing / unpacking. */
 const TMP_DIR = path.join(BACKUP_DIR, 'tmp');
 /** The backend folder — the file folders below live in it. */
 const APP_DIR = path.join(__dirname, '../../..');
 /** Folders of uploaded files that a full backup carries. */
 const FILE_DIRS = Object.freeze(['storage', 'uploads']);
-/** Only files matching this are treated as backups: full (.tar.gz) or database-only (.sql). */
-const FILE_RE = /^backup-[0-9]{8}-[0-9]{6}\.(sql|tar\.gz)$/;
+/** Only files matching this are treated as backups: full (.tar.gz), files-only (-files.tar.gz) or database-only (.sql). */
+const FILE_RE = /^backup-[0-9]{8}-[0-9]{6}(\.sql|\.tar\.gz|-files\.tar\.gz)$/;
 
 /**
  * The tar binary. On Windows, the built-in bsdtar (System32): a GNU tar from
@@ -55,8 +60,11 @@ const TAR = process.platform === 'win32'
   ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe')
   : 'tar';
 
-/** 'full' for a .tar.gz, 'database' for a plain .sql. */
-const typeOf = (filename) => (filename.endsWith('.tar.gz') ? 'full' : 'database');
+/** 'files' for a -files.tar.gz, 'full' for another .tar.gz, 'database' for a plain .sql. */
+const typeOf = (filename) => {
+  if (filename.endsWith('-files.tar.gz')) return 'files';
+  return filename.endsWith('.tar.gz') ? 'full' : 'database';
+};
 
 /**
  * Runs a command (no shell), resolving on exit code 0.
@@ -94,6 +102,21 @@ function bin(name) {
   return config.MYSQL_BIN_DIR ? path.join(config.MYSQL_BIN_DIR, exe) : name;
 }
 
+/** Whether the mysqldump and mysql clients run here. Checked once per process. */
+let dbTools;
+function hasDatabaseTools() {
+  if (dbTools === undefined) {
+    dbTools = ['mysqldump', 'mysql'].every((name) => {
+      const r = spawnSync(bin(name), ['--version'], { timeout: 10_000, windowsHide: true });
+      return !r.error && r.status === 0;
+    });
+  }
+  return dbTools;
+}
+
+const NO_DB_TOOLS = 'The database can\'t be backed up or restored from here (the mysqldump / mysql clients aren\'t installed). '
+  + 'On Azure the database is backed up by Azure: restore it in the Azure portal (point-in-time restore).';
+
 /** Timestamp like 20260807-143005 for the filename. */
 function stamp() {
   const p = (n) => String(n).padStart(2, '0');
@@ -116,7 +139,14 @@ function resolvePath(filename) {
 
 module.exports = {
   BACKUP_DIR,
+  TMP_DIR,
   resolvePath,
+
+  /** What a backup made here holds: the database too, or the files only. */
+  info() {
+    const database = hasDatabaseTools();
+    return { database, mode: database ? 'full' : 'files' };
+  },
 
   /** @returns {Array<{ filename: string, size: number, created_at: string }>} newest first */
   list() {
@@ -132,26 +162,30 @@ module.exports = {
 
   /**
    * A full backup: the database dump plus the uploaded-file folders, packed
-   * into one .tar.gz.
+   * into one .tar.gz. Without the database clients (Azure), the files only.
    * @returns {Promise<{ filename: string, size: number, created_at: string, type: string }>}
    */
   async create() {
     ensureDir();
+    const withDb = hasDatabaseTools();
     const id = stamp();
     const stage = path.join(TMP_DIR, `stage-${id}`);
     fs.mkdirSync(stage, { recursive: true });
-    const filename = `backup-${id}.tar.gz`;
+    const filename = withDb ? `backup-${id}.tar.gz` : `backup-${id}-files.tar.gz`;
     const full = path.join(BACKUP_DIR, filename);
     try {
-      await this.dumpDatabase(path.join(stage, 'database.sql'));
+      if (withDb) await this.dumpDatabase(path.join(stage, 'database.sql'));
       // The files from wherever they are kept — this server's disk and Azure
       // Blob — gathered into the staging folder, so the archive holds them all.
       const folders = await fileStore.exportAll(stage);
+      if (!withDb && !folders.length) throw new BadRequestError('There are no files to back up yet');
+      const db = withDb ? ['database.sql'] : [];
       fs.writeFileSync(path.join(stage, 'backup-info.json'), JSON.stringify({
         created_at: new Date().toISOString(),
-        contains: ['database.sql', ...folders.map((d) => `${d}/`)],
+        contains: [...db, ...folders.map((d) => `${d}/`)],
+        ...(withDb ? {} : { database: 'not included — backed up by the database service (Azure)' }),
       }, null, 2));
-      await run(TAR, ['-czf', full, '-C', stage, 'database.sql', 'backup-info.json', ...folders]);
+      await run(TAR, ['-czf', full, '-C', stage, ...db, 'backup-info.json', ...folders]);
     } catch (err) {
       fs.rmSync(full, { force: true });
       throw err instanceof BadRequestError ? err : new BadRequestError(`Backup failed: ${err.message}`);
@@ -159,7 +193,7 @@ module.exports = {
       fs.rmSync(stage, { recursive: true, force: true });
     }
     const s = fs.statSync(full);
-    return { filename, size: s.size, created_at: s.mtime.toISOString(), type: 'full' };
+    return { filename, size: s.size, created_at: s.mtime.toISOString(), type: typeOf(filename) };
   },
 
   /**
@@ -200,12 +234,13 @@ module.exports = {
 
   /**
    * Restores a backup (destructive): a full .tar.gz puts back the database and
-   * the uploaded files; a plain .sql only the database. Accepts an absolute
-   * path already validated by the caller.
+   * the uploaded files; a files-only one the files; a plain .sql only the
+   * database. Accepts an absolute path already validated by the caller.
    * @param {string} absPath @returns {Promise<{ type: string, folders: string[] }>}
    */
   async restore(absPath) {
     if (!/\.tar\.gz$/i.test(absPath)) {
+      if (!hasDatabaseTools()) throw new BadRequestError(NO_DB_TOOLS);
       await this.restoreDatabase(absPath);
       return { type: 'database', folders: [] };
     }
@@ -217,8 +252,13 @@ module.exports = {
       catch (err) { throw new BadRequestError(`Not a valid backup file: ${err.message}`); }
 
       const sql = path.join(work, 'database.sql');
-      if (!fs.existsSync(sql)) throw new BadRequestError('This backup has no database.sql — not a portal backup');
-      await this.restoreDatabase(sql);
+      const withDb = fs.existsSync(sql);
+      if (!withDb && !fs.existsSync(path.join(work, 'backup-info.json'))) {
+        throw new BadRequestError('This file has neither database.sql nor backup-info.json — not a portal backup');
+      }
+      // Checked before anything is replaced: half a restore is worse than none.
+      if (withDb && !hasDatabaseTools()) throw new BadRequestError(NO_DB_TOOLS);
+      if (withDb) await this.restoreDatabase(sql);
 
       // Files: replace each folder the backup carries. A symlink in place of a
       // folder is refused — it could point anywhere on the server.
@@ -237,7 +277,7 @@ module.exports = {
         const p = await fileStore.transfer('TO_BLOB');
         if (p.failed) throw new BadRequestError(`Restored, but ${p.failed} file(s) could not be copied to Azure Blob — run the transfer again in Settings → Storage`);
       }
-      return { type: 'full', folders: restored };
+      return { type: withDb ? 'full' : 'files', folders: restored };
     } finally {
       fs.rmSync(work, { recursive: true, force: true });
     }
@@ -266,6 +306,8 @@ module.exports = {
       input.pipe(child.stdin);
     });
   },
+
+  _test: { typeOf, FILE_RE },
 
   /** Deletes a backup file. @param {string} filename */
   remove(filename) {

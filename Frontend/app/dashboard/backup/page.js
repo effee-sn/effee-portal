@@ -19,8 +19,22 @@ const formatDateTime = (iso) => {
     : d.toLocaleString(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
+/** 'files' (files only), 'full' (database + files) or 'database' — from the file name. */
+const kindOf = (name) => {
+  if (/-files\.tar\.gz$/i.test(name)) return 'files';
+  return /\.tar\.gz$/i.test(name) ? 'full' : 'database';
+};
+const RESTORED = { full: 'Database and files restored', files: 'Files restored', database: 'Database restored' };
+const CONTAINS = {
+  full:     { label: 'Database + files', cls: 'bg-green-50 text-green-700' },
+  files:    { label: 'Files only',       cls: 'bg-blue-50 text-blue-700' },
+  database: { label: 'Database only',    cls: 'bg-gray-100 text-gray-600' },
+};
+
 // ── Destructive restore confirm (type-to-confirm) ─────────────────────────────
-function RestoreModal({ label, full, onClose, onConfirm }) {
+function RestoreModal({ label, kind, onClose, onConfirm }) {
+  const full = kind === 'full';
+  const files = kind === 'files';
   const [text, setText]   = useState('');
   const [busy, setBusy]   = useState(false);
   const [error, setError] = useState('');
@@ -35,14 +49,24 @@ function RestoreModal({ label, full, onClose, onConfirm }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
       <div className="w-full max-w-md bg-white rounded-lg shadow-xl p-6">
-        <h2 className="text-base font-semibold text-red-700 mb-2">{full ? 'Restore database and files' : 'Restore database'}</h2>
-        <p className="text-sm text-gray-600 mb-3">
-          This will <span className="font-semibold text-red-600">overwrite the entire live database</span>
-          {full && <> <span className="font-semibold text-red-600">and replace all uploaded documents and files</span></>} with
-          <span className="font-medium text-gray-800"> {label}</span>. All current data is replaced and this
-          cannot be undone. Do this during a maintenance window.
-        </p>
-        {!full && (
+        <h2 className="text-base font-semibold text-red-700 mb-2">
+          {full ? 'Restore database and files' : files ? 'Restore files' : 'Restore database'}
+        </h2>
+        {files ? (
+          <p className="text-sm text-gray-600 mb-3">
+            This will <span className="font-semibold text-red-600">put back the uploaded documents and files</span> from
+            <span className="font-medium text-gray-800"> {label}</span>, replacing the current copies. The database is
+            left as it is. This cannot be undone.
+          </p>
+        ) : (
+          <p className="text-sm text-gray-600 mb-3">
+            This will <span className="font-semibold text-red-600">overwrite the entire live database</span>
+            {full && <> <span className="font-semibold text-red-600">and replace all uploaded documents and files</span></>} with
+            <span className="font-medium text-gray-800"> {label}</span>. All current data is replaced and this
+            cannot be undone. Do this during a maintenance window.
+          </p>
+        )}
+        {kind === 'database' && (
           <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-2 mb-3">
             This is a database-only backup: documents and uploaded files are left as they are.
           </p>
@@ -71,13 +95,19 @@ export default function BackupPage() {
   const [error, setError]      = useState('');
   const [msg, setMsg]          = useState('');
   const [modal, setModal]      = useState(null);  // { type:'restore', filename } | { type:'restore-upload', file }
+  const [info, setInfo]        = useState(null);  // { database, mode: 'full'|'files' }
   const fileRef = useRef(null);
 
   const canView = !!me?.is_system;
+  const filesOnly = info?.mode === 'files';
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { const r = await apiGet('/backups'); setBackups(r.data || []); }
+    try {
+      const [r, i] = await Promise.all([apiGet('/backups'), apiGet('/backups/info').catch(() => null)]);
+      setBackups(r.data || []);
+      if (i?.data) setInfo(i.data);
+    }
     catch { setBackups([]); }
     finally { setLoading(false); }
   }, []);
@@ -120,18 +150,16 @@ export default function BackupPage() {
     catch (e) { setError(e.message); }
   };
 
-  const isFull = (name) => /\.tar\.gz$/i.test(name);
-
   const restore = async (filename) => {
     await apiPost('/backups/restore', { filename });
-    flash(isFull(filename) ? 'Database and files restored.' : 'Database restored.');
+    flash(`${RESTORED[kindOf(filename)]}.`);
   };
 
   const restoreUpload = async (file) => {
     const fd = new FormData();
     fd.append('backup', file);
     await apiPostForm('/backups/restore-upload', fd);
-    flash(isFull(file.name) ? 'Database and files restored from uploaded file.' : 'Database restored from uploaded file.');
+    flash(`${RESTORED[kindOf(file.name)]} from uploaded file.`);
   };
 
   const onPickFile = (e) => {
@@ -168,8 +196,15 @@ export default function BackupPage() {
         </div>
 
         <div className="px-4 py-3">
+          {filesOnly && (
+            <div className="px-3 py-2.5 rounded bg-blue-50 border border-blue-200 text-blue-800 text-sm mb-3">
+              <span className="font-medium">Database is backed up by Azure.</span> Backups made here hold the uploaded
+              documents and files only. To restore the database, use point-in-time restore on the Azure Database for
+              MySQL server in the Azure portal.
+            </div>
+          )}
           {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm mb-3">{error}</div>}
-          {msg && <div className="px-3 py-2.5 rounded bg-green-50 border border-green-200 text-green-700 text-sm mb-3">{msg}</div>}
+          {msg &&<div className="px-3 py-2.5 rounded bg-green-50 border border-green-200 text-green-700 text-sm mb-3">{msg}</div>}
 
           {backups.length === 0 ? (
             <p className="py-10 text-center text-sm text-gray-400">No backups yet. Create one to get started.</p>
@@ -189,11 +224,10 @@ export default function BackupPage() {
                   <tr key={b.filename} className="border-b border-gray-100">
                     <td className="px-2 py-2 font-medium text-gray-800 font-mono text-xs">{b.filename}</td>
                     <td className="px-2 py-2">
-                      {b.type === 'full' ? (
-                        <span className="inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium bg-green-50 text-green-700">Database + files</span>
-                      ) : (
-                        <span className="inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-600">Database only</span>
-                      )}
+                      {(() => {
+                        const c = CONTAINS[b.type] || CONTAINS.database;
+                        return <span className={`inline-flex px-1.5 py-0.5 rounded text-[11px] font-medium ${c.cls}`}>{c.label}</span>;
+                      })()}
                     </td>
                     <td className="px-2 py-2 text-gray-600">{formatBytes(b.size)}</td>
                     <td className="px-2 py-2 text-gray-500 whitespace-nowrap">{formatDateTime(b.created_at)}</td>
@@ -211,18 +245,24 @@ export default function BackupPage() {
       </div>
 
       <p className="text-[11px] text-gray-400 px-1">
-        A backup is a full snapshot: the database (schema + data) plus every uploaded document and file, in one
-        .tar.gz. Passwords and secrets (.env) are never included. Restoring overwrites the live database and files —
-        restore a backup that matches the currently deployed version, and prefer a maintenance window. Download
-        backups and keep a copy off the server.
+        {filesOnly ? (
+          <>A backup holds every uploaded document and file, in one .tar.gz; the database is backed up by Azure.
+          Passwords and secrets are never included. Restoring replaces the current files. Download backups and keep
+          a copy elsewhere.</>
+        ) : (
+          <>A backup is a full snapshot: the database (schema + data) plus every uploaded document and file, in one
+          .tar.gz. Passwords and secrets (.env) are never included. Restoring overwrites the live database and files —
+          restore a backup that matches the currently deployed version, and prefer a maintenance window. Download
+          backups and keep a copy off the server.</>
+        )}
       </p>
 
       {modal?.type === 'restore' && (
-        <RestoreModal label={modal.filename} full={isFull(modal.filename)} onClose={() => setModal(null)}
+        <RestoreModal label={modal.filename} kind={kindOf(modal.filename)} onClose={() => setModal(null)}
           onConfirm={() => restore(modal.filename)} />
       )}
       {modal?.type === 'restore-upload' && (
-        <RestoreModal label={`uploaded file "${modal.file.name}"`} full={isFull(modal.file.name)} onClose={() => setModal(null)}
+        <RestoreModal label={`uploaded file "${modal.file.name}"`} kind={kindOf(modal.file.name)} onClose={() => setModal(null)}
           onConfirm={() => restoreUpload(modal.file)} />
       )}
     </div>

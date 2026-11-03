@@ -1,11 +1,12 @@
 {
   "name": "frontend",
-  "version": "1.10.3",
+  "version": "1.11.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "build:azure": "node scripts/build-azure.mjs",
     "lint": "eslint"
   },
   "dependencies": {
