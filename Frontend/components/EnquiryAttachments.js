@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { apiGet, apiPost, apiPut, apiDelete, apiPostForm, downloadFile } from '@/lib/api';
+import { apiGet, apiPost, apiPut, apiDelete, apiPostForm } from '@/lib/api';
 import { STAGE_STYLE } from '@/lib/salesOptions';
 import { ListSkeleton } from '@/components/Skeleton';
+import DocumentViewer from '@/components/DocumentViewer';
 import { formatMoney } from '@/lib/money';
 
 /** Small chip naming the stage a document was uploaded in. */
@@ -80,7 +81,8 @@ const ALL_KINDS = ['FORMAT_PDF', 'FORMAT_EXCEL', 'CONCEPT', 'COSTING', 'OFFER'];
  * fires after any successful upload/delete/sent change.
  *
  * Every document is versioned: re-uploading creates the next version and the
- * previous one moves to that slot's history (still downloadable). Deleting the
+ * previous one moves to that slot's history (still viewable). Clicking a file
+ * opens it in the viewer popup (DocumentViewer), with Download there. Deleting the
  * current version restores the one before it.
  */
 export default function EnquiryAttachments({
@@ -102,6 +104,8 @@ export default function EnquiryAttachments({
   const [priceEdit, setPriceEdit] = useState(null); // { id, value } — pricing an existing offer
   const [costEdit, setCostEdit] = useState(null); // string while entering the costing value
   const [openHistory, setOpenHistory] = useState({}); // kind -> bool
+  const [viewing, setViewing] = useState(null); // the document open in the viewer
+  const closeViewer = useCallback(() => setViewing(null), []);
   const fileRef = useRef(null);
   const pendingKind = useRef(null);
 
@@ -144,11 +148,6 @@ export default function EnquiryAttachments({
       await reload();
     } catch (err) { setError(err.message); }
     finally { setBusy(false); }
-  };
-
-  const download = async (a) => {
-    try { await downloadFile(`/sales/attachments/${a.id}/download`, a.file_name); }
-    catch (err) { setError(err.message); }
   };
 
   const remove = async (a) => {
@@ -228,7 +227,7 @@ export default function EnquiryAttachments({
     <div className="flex items-center gap-2 min-w-0">
       <DocIcon />
       <VersionTag a={a} current={current} />
-      <button onClick={() => download(a)} title="Download"
+      <button onClick={() => setViewing(a)} title="View"
         className={`text-sm hover:underline truncate cursor-pointer ${current ? 'text-blue-600' : 'text-gray-600'}`}>
         {a.file_name}
       </button>
@@ -249,6 +248,9 @@ export default function EnquiryAttachments({
           <span className="text-gray-500"> · becomes v{(items.filter((a) => a.kind === kind)[0]?.version || 0) + 1}, the current v{currentOf(kind).version} moves to history</span>
         )}
       </p>
+      {/\.doc$/i.test(pending.file.name) && (
+        <p className="text-[11px] text-amber-700">Tip: save Word files as .docx — old .doc files can&apos;t be previewed in the portal, only downloaded.</p>
+      )}
       {kind === 'OFFER' && (
         <label className="flex items-center gap-2 text-xs text-gray-700">
           <span className="font-medium whitespace-nowrap">Offer price ({currencyCode})<span className="text-red-500"> *</span></span>
@@ -304,6 +306,13 @@ export default function EnquiryAttachments({
           <span aria-hidden="true">⏳</span><span className="flex-1">{notice}</span>
           <button type="button" onClick={() => setNotice('')} aria-label="Dismiss" className="text-amber-700 hover:text-amber-900 cursor-pointer">×</button>
         </div>
+      )}
+
+      {viewing && (
+        <DocumentViewer endpoint={`/sales/attachments/${viewing.id}/download`} fileName={viewing.file_name}
+          mimeType={viewing.mime_type} size={viewing.size_bytes}
+          label={[KIND_LABEL[viewing.kind], viewing.kind === 'OFFER' ? `Rev ${viewing.version}` : `v${viewing.version}`].filter(Boolean).join(' · ')}
+          onClose={closeViewer} />
       )}
 
       {/* Hidden shared file input */}

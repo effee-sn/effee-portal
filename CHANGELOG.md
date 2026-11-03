@@ -13,6 +13,18 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.12.0] — 2026-11-03
+
+### Added — view documents in the portal
+
+- Clicking a document on an enquiry opens it in a large **view-only popup** instead of downloading it: **PDF** (the browser's viewer), **PNG / JPG** (fitted, click for full size), **Excel / CSV** (read-only table with sheet tabs) and **Word .docx** (rendered pages). **Download** is in the popup's header; Esc or a click outside closes it.
+- The file is shown inside the portal with the user's login — no outside viewer, no public link.
+- Old Word **.doc** files can't be read by a browser: the popup offers Download, and picking a .doc to upload shows a tip to save it as .docx.
+
+**Upgrade:** no migrations — pull, then in Frontend `npm install` (two new packages: `docx-preview`, `xlsx`) and `npm run build`; restart effee-web.
+
+---
+
 ## [1.11.0] — 2026-11-03
 
 ### Added — file storage on Azure Blob (Settings → Storage)

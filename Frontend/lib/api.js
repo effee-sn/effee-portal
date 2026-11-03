@@ -122,13 +122,13 @@ export function apiPostForm(endpoint, formData, method = 'POST') {
 }
 
 /**
- * Downloads a protected file: fetches it with the bearer token (a plain <a>
- * can't send the auth header), then saves the blob client-side.
+ * Fetches a protected file into memory with the bearer token (a plain <a> or
+ * <iframe> can't send the auth header) — to save it or show it in the page.
  *
  * @param {string} endpoint
- * @param {string} [filename]
+ * @returns {Promise<Blob>}
  */
-export async function downloadFile(endpoint, filename) {
+export async function fetchFile(endpoint) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
   topLoader.start();
   try {
@@ -136,22 +136,34 @@ export async function downloadFile(endpoint, filename) {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!res.ok) {
-      let msg = 'Download failed';
       const body = await readBody(res);
       endSessionOn401(res, token ? { Authorization: true } : null, body);
-      msg = errorMessage(body);
-      throw new Error(msg);
+      throw new Error(errorMessage(body));
     }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename || 'download';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    return await res.blob();
   } finally {
     topLoader.done();
   }
+}
+
+/** Saves a file already in memory to the user's Downloads. @param {Blob} blob @param {string} [filename] */
+export function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename || 'download';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Downloads a protected file: fetches it (see fetchFile), then saves it.
+ *
+ * @param {string} endpoint
+ * @param {string} [filename]
+ */
+export async function downloadFile(endpoint, filename) {
+  saveBlob(await fetchFile(endpoint), filename);
 }

@@ -12,6 +12,18 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|string[]|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.12.0',
+    date: '2026-11-03',
+    items: [
+      {
+        icon: 'spark',
+        title: 'Open documents without downloading',
+        text: 'Click a document on an enquiry to view it in a large popup — PDFs, images, Excel sheets and Word (.docx) files. Download is still there when you need the file.',
+        perm: 'SALES_VIEW',
+      },
+    ],
+  },
+  {
     version: '1.10.3',
     date: '2026-11-02',
     items: [
