@@ -16,10 +16,7 @@ const listSubassemblies = async (req, res) => {
 /** `GET /subassemblies/material-search?q=&skip=&exclude=` — lines to add: materials and released subassemblies. */
 const searchMaterials = async (req, res) => ApiResponse.ok(res, await subassemblyService.searchMaterials(req.query.q, req.query.skip, req.query.exclude));
 
-/** `GET /subassemblies/item-options?q=&skip=` — Finished materials that could be a subassembly's item. */
-const getItemOptions = async (req, res) => ApiResponse.ok(res, await subassemblyService.itemOptions(req.query.q, req.query.skip));
-
-/** `GET /subassemblies/item-setup` — prefixes and units for a new item. */
+/** `GET /subassemblies/item-setup` — what a new subassembly starts with (its first revision's label). */
 const getItemSetup = async (req, res) => ApiResponse.ok(res, await subassemblyService.itemSetup());
 
 /** `GET /subassemblies/revision-scheme` */
@@ -80,7 +77,7 @@ const discardDraft = async (req, res) => {
 };
 
 module.exports = {
-  listSubassemblies, searchMaterials, getItemOptions, getItemSetup, getRevisionScheme, setRevisionScheme,
+  listSubassemblies, searchMaterials, getItemSetup, getRevisionScheme, setRevisionScheme,
   getSubassembly, getTree, compareRevisions, createSubassembly, updateSubassembly, deleteSubassembly,
   getRevision, newRevision, saveDraft, releaseRevision, discardDraft,
 };

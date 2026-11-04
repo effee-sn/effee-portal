@@ -550,8 +550,9 @@ export default function MaterialPage() {
         {/* Right: the summary, on every tab */}
         <aside className="space-y-4">
           <SideCard title="Identification">
-            <SideRow name="IMM code" mono>{material.imm_code}</SideRow>
-            <SideRow name="Prefix" mono>{material.prefix?.prefix}</SideRow>
+            {/* A subassembly's item: its code is the drawing no., with no prefix. */}
+            <SideRow name={material.prefix ? 'IMM code' : 'Code'} mono>{material.imm_code}</SideRow>
+            {material.prefix && <SideRow name="Prefix" mono>{material.prefix.prefix}</SideRow>}
             <SideRow name="Drawing no." mono>{material.drawing_no}</SideRow>
             <SideRow name="Type">{MATERIAL_TYPE_LABEL[material.material_type]}</SideRow>
             <SideRow name="Unit">{material.uom?.code}</SideRow>

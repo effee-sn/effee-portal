@@ -84,7 +84,7 @@ function LinePicker({ excludeIds, onPick }) {
       <input id="bom-line-search" value={q} autoComplete="off"
         onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
         onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false); }}
-        placeholder="Add a subassembly or material — search by IMM code, drawing no. or name…" className="ams-input" />
+        placeholder="Add a subassembly or material — search by code, drawing no. or name…" className="ams-input" />
       {open && (
         <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-80 overflow-y-auto">
           {busy && results.length === 0 ? <p className="px-4 py-3 text-sm text-gray-400">Searching…</p>
@@ -243,7 +243,7 @@ function Totals({ projectId, bomId, version }) {
           <table className="w-full text-sm" style={{ minWidth: 560 + data.machines.length * 90 }}>
             <thead>
               <tr className="border-b border-gray-200 text-left text-gray-500">
-                <th className="py-2 pr-3 font-normal">IMM code</th>
+                <th className="py-2 pr-3 font-normal" title="IMM code, or a subassembly's drawing no.">Code</th>
                 <th className="py-2 pr-3 font-normal">Item name</th>
                 <th className="py-2 pr-3 font-normal">Type</th>
                 {data.machines.map((m) => <th key={m.id} className="py-2 pr-3 font-normal text-right font-mono text-xs">{m.machine_no}</th>)}
@@ -494,7 +494,7 @@ export default function ProjectBom({ projectId, canEdit, canApprove }) {
                     <table className="w-full text-sm" style={{ minWidth: 900 }}>
                       <thead>
                         <tr className="border-b border-gray-200 text-left text-gray-500">
-                          <th className="px-4 py-2.5 font-normal">IMM code</th>
+                          <th className="px-4 py-2.5 font-normal" title="IMM code, or a subassembly's drawing no.">Code</th>
                           <th className="px-3 py-2.5 font-normal">Item name</th>
                           <th className="px-3 py-2.5 font-normal">Type</th>
                           <th className="px-3 py-2.5 font-normal w-40">Quantity</th>
@@ -544,7 +544,10 @@ export default function ProjectBom({ projectId, canEdit, canApprove }) {
                                   <select value={l.department_id} onChange={(e) => setLine(m.id, { department_id: e.target.value })} aria-label={`Department of ${m.imm_code}`}
                                     className={`w-full text-sm border rounded px-2 py-1 bg-white ${l.department_id || l.child ? 'border-gray-300' : 'border-amber-400'}`}>
                                     <option value="">{l.child ? 'Its subassembly’s department' : 'Choose…'}</option>
-                                    {departments.map((d) => <option key={d.id} value={d.id}>{d.name}{d.dept_no != null ? ` (${d.dept_no})` : ' (no number)'}</option>)}
+                                    {/* Only departments with a code (it goes into the tags) — and the one the line already has. */}
+                                    {departments.filter((d) => d.dept_code || String(d.id) === String(l.department_id)).map((d) => (
+                                      <option key={d.id} value={d.id}>{d.name}{d.dept_code ? ` (${d.dept_code})` : ' (no code)'}</option>
+                                    ))}
                                   </select>
                                 ) : <span className="text-gray-700">{departments.find((d) => String(d.id) === l.department_id)?.name ?? '—'}</span>}
                               </td>

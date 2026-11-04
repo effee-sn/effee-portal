@@ -29,7 +29,7 @@ const getDrawingCheck = async (req, res) => ApiResponse.ok(res, await materialSe
 
 /**
  * The list's search, filters and sort (shared by the list and its export).
- * `kind=subassembly` keeps subassemblies' own items, `kind=part` the rest.
+ * Subassemblies' own items aren't listed: they're under Subassemblies, by drawing no.
  */
 const listQuery = (reqQuery) => {
   const query = parseListQuery(reqQuery, {
@@ -43,8 +43,7 @@ const listQuery = (reqQuery) => {
       is_active: (v) => (v === 'true' ? true : v === 'false' ? false : undefined),
     },
   });
-  if (reqQuery.kind === 'subassembly') query.filters = { ...query.filters, subassembly: { isNot: null } };
-  else if (reqQuery.kind === 'part') query.filters = { ...query.filters, subassembly: null };
+  query.filters = { ...query.filters, subassembly: null };
   return query;
 };
 

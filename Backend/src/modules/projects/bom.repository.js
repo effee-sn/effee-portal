@@ -25,7 +25,7 @@ function createBomRepository(db) {
     id: true, machine_id: true, quantity: true, sort_order: true, child_revision_id: true, part_revision_id: true,
     child_revision: { select: { id: true, rev: true, status: true, subassembly_id: true } },
     part_revision: { select: { id: true, rev: true, status: true } },
-    department: { select: { id: true, name: true, dept_no: true, deleted_at: true } },
+    department: { select: { id: true, name: true, dept_code: true, deleted_at: true } },
     material: { select: materialBrief },
   });
 
@@ -39,7 +39,7 @@ function createBomRepository(db) {
     id: true, machine_id: true, tag: true, parent_tag: true, level: true, sort_order: true,
     material_id: true, is_subassembly: true, revision_id: true, part_revision_id: true, rev: true, imm_code: true, item_name: true,
     drawing_no: true, material_type: true, material_text: true, technical_spec: true, uom: true,
-    dept_no: true, department: true, qty_per_parent: true, quantity: true,
+    dept_code: true, department: true, qty_per_parent: true, quantity: true,
   });
 
   return {
@@ -82,7 +82,7 @@ function createBomRepository(db) {
     /** These live departments. @param {number[]} ids */
     findDepartments(ids) {
       if (!ids.length) return [];
-      return db.department.findMany({ where: { id: { in: ids }, deleted_at: null }, select: { id: true, name: true, dept_no: true } });
+      return db.department.findMany({ where: { id: { in: ids }, deleted_at: null }, select: { id: true, name: true, dept_code: true } });
     },
 
     /**

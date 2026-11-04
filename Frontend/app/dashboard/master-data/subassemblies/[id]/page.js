@@ -9,13 +9,12 @@ import useNav from '@/lib/useNav';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
 import { SideCard, SideRow, KeyFacts, TabBar } from '@/components/DetailSide';
-import AsyncSearchSelect from '@/components/AsyncSearchSelect';
-import { MATERIAL_TYPE_LABEL, formatImmCode, revName } from '@/lib/materialOptions';
+import { MATERIAL_TYPE_LABEL, revName } from '@/lib/materialOptions';
 
 /**
  * Master Data → Subassemblies → one subassembly (new, copied or existing).
  *
- * Its details — name, drawing no., its own IMM code — and its revisions. The
+ * Its details — name, drawing no. (its identity: no IMM code) — and its revisions. The
  * lines live on a revision: only a draft changes; releasing it (Subassemblies
  * → Approve, with a change note) makes it the current revision. A child
  * subassembly on a line is held at a revision until a new draft moves it on.
@@ -91,7 +90,7 @@ function LinePicker({ excludeIds, onPick }) {
       <input id="line-search" value={q} autoComplete="off"
         onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
         onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false); }}
-        placeholder="Add a material or subassembly — search by IMM code, drawing no. or name…" className="ams-input" />
+        placeholder="Add a material or subassembly — search by code, drawing no. or name…" className="ams-input" />
       {open && (
         <div className="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-80 overflow-y-auto">
           {busy && results.length === 0 ? (
@@ -124,57 +123,6 @@ function LinePicker({ excludeIds, onPick }) {
               {busy ? 'Loading…' : 'Show more'}
             </button>
           )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** How a subassembly without an item gets its IMM code: a new one, or an existing Finished material. */
-function ItemChooser({ item, setItem, setup }) {
-  const prefix = setup?.prefixes.find((p) => String(p.id) === item.prefix_id);
-  const fetchOptions = (q, skip) => apiGet(`/subassemblies/item-options?q=${encodeURIComponent(q)}&skip=${skip}`, { silent: true }).then((r) => r.data);
-  return (
-    <div className="sm:col-span-2 rounded-md border border-gray-200 px-3 py-3 space-y-3">
-      <div className="flex items-center gap-4 flex-wrap">
-        <span className={`${label} mb-0`}>IMM code<span className="text-red-500"> *</span></span>
-        <label className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
-          <input type="radio" name="item-mode" checked={item.mode === 'new'} onChange={() => setItem({ ...item, mode: 'new' })} /> Give it a new code
-        </label>
-        <label className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
-          <input type="radio" name="item-mode" checked={item.mode === 'existing'} onChange={() => setItem({ ...item, mode: 'existing' })} /> Use an existing Finished material
-        </label>
-      </div>
-      {item.mode === 'new' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label className={label} htmlFor="it-prefix">Prefix</label>
-            <select id="it-prefix" value={item.prefix_id} onChange={(e) => setItem({ ...item, prefix_id: e.target.value })} required className="ams-input">
-              <option value="">Choose…</option>
-              {(setup?.prefixes || []).map((p) => <option key={p.id} value={p.id}>{p.prefix}{p.description ? ` — ${p.description}` : ''}</option>)}
-            </select>
-            {prefix && <p className="text-[11px] text-gray-500 mt-1 font-mono">→ {formatImmCode(prefix, prefix.next_number)} (given on save)</p>}
-          </div>
-          <div>
-            <label className={label} htmlFor="it-uom">Unit</label>
-            <select id="it-uom" value={item.uom_id} onChange={(e) => setItem({ ...item, uom_id: e.target.value })} required className="ams-input">
-              <option value="">Choose…</option>
-              {(setup?.units || []).map((u) => <option key={u.id} value={u.id}>{u.code} — {u.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={label} htmlFor="it-desc">Description <span className="normal-case font-normal text-gray-400">(optional)</span></label>
-            <input id="it-desc" value={item.description} onChange={(e) => setItem({ ...item, description: e.target.value })} maxLength={500}
-              placeholder="Defaults to the name" className="ams-input" />
-          </div>
-        </div>
-      ) : (
-        <div className="max-w-md">
-          <AsyncSearchSelect value={item.material_id} display={item.material_label} fetchPage={fetchOptions}
-            onChange={(v, m) => setItem({ ...item, material_id: v, material_label: m ? `${m.imm_code} — ${m.item_name}` : '' })}
-            getValue={(m) => String(m.id)} describe={(m) => ({ label: m.imm_code, sub: m.item_name })}
-            placeholder="Choose a Finished material…" searchPlaceholder="Search IMM code or name…" />
-          <p className="text-[11px] text-gray-500 mt-1">Its name and drawing no. will follow this subassembly.</p>
         </div>
       )}
     </div>
@@ -236,7 +184,7 @@ function LinesTable({ lines, editable, exclude, onAdd, onQty, onRemove, onUseCur
             <thead>
               <tr className="border-b border-gray-200 text-left text-gray-500">
                 <th className="px-3 py-2.5 font-normal w-8">#</th>
-                <th className="px-3 py-2.5 font-normal">IMM code</th>
+                <th className="px-3 py-2.5 font-normal" title="IMM code, or a subassembly's drawing no.">Code</th>
                 <th className="px-3 py-2.5 font-normal">Item name</th>
                 <th className="px-3 py-2.5 font-normal">Drawing no.</th>
                 <th className="px-3 py-2.5 font-normal">Type · Material</th>
@@ -350,7 +298,7 @@ function Structure({ id, revId }) {
           <table className="w-full text-sm" style={{ minWidth: 640 }}>
             <thead>
               <tr className="border-b border-gray-200 text-left text-gray-500">
-                <th className="py-2 pr-3 font-normal">IMM code</th>
+                <th className="py-2 pr-3 font-normal" title="IMM code, or a subassembly's drawing no.">Code</th>
                 <th className="py-2 pr-3 font-normal">Item name</th>
                 <th className="py-2 pr-3 font-normal">Drawing no.</th>
                 <th className="py-2 font-normal text-right">Qty per parent</th>
@@ -370,7 +318,7 @@ function Structure({ id, revId }) {
           <table className="w-full text-sm" style={{ minWidth: 560 }}>
             <thead>
               <tr className="border-b border-gray-200 text-left text-gray-500">
-                <th className="py-2 pr-3 font-normal">IMM code</th>
+                <th className="py-2 pr-3 font-normal" title="IMM code, or a subassembly's drawing no.">Code</th>
                 <th className="py-2 pr-3 font-normal">Item name</th>
                 <th className="py-2 pr-3 font-normal">Type</th>
                 <th className="py-2 font-normal text-right">Total qty</th>
@@ -494,7 +442,7 @@ function ReleaseModal({ sub, draft, onClose, onRelease }) {
             <textarea id="rel-note" value={note} onChange={(e) => { setNote(e.target.value); setError(''); }} rows={4} maxLength={5000} autoFocus
               placeholder={first ? 'Optional for the first release' : 'What changed and why — e.g. bracket thickness 8 → 10 mm after site feedback'} className="ams-input resize-y" />
           </div>
-          <p className="text-xs text-gray-500">If the part is no longer interchangeable with the earlier one, it should be a new subassembly (a new drawing and IMM code) instead.</p>
+          <p className="text-xs text-gray-500">If the part is no longer interchangeable with the earlier one, it should be a new subassembly (a new drawing no.) instead.</p>
         </div>
         <div className="flex gap-3 px-6 pb-5">
           <button type="button" onClick={onClose} className="btn-secondary flex-1 justify-center py-2">Cancel</button>
@@ -538,7 +486,6 @@ function SubassemblyEditor() {
   const [sub, setSub] = useState(null);
   const [form, setForm] = useState({ name: '', drawing_no: '', department_id: '' });
   const [departments, setDepartments] = useState([]);
-  const [item, setItem] = useState({ mode: 'new', prefix_id: '', uom_id: '', description: '', material_id: '', material_label: '' });
   const [setup, setSetup] = useState(null);
   const [revId, setRevId] = useState(null); // the revision on screen
   const [revision, setRevision] = useState(null);
@@ -596,19 +543,13 @@ function SubassemblyEditor() {
     return () => { cancelled = true; };
   }, [id, isNew, revId]);
 
-  // Prefixes and units, while it needs an item (new, or one made before items existed).
-  const needsItem = loaded && !notFound && (isNew ? canCreate : canEdit && sub && !sub.material);
+  // A new one: its first revision's label.
   useEffect(() => {
-    if (!needsItem || setup) return undefined;
+    if (!isNew || !canCreate || setup) return undefined;
     let cancelled = false;
-    apiGet('/subassemblies/item-setup', { silent: true }).then((r) => {
-      if (cancelled) return;
-      setSetup(r.data);
-      const nos = r.data.units.find((u) => u.code === 'Nos');
-      setItem((it) => ({ ...it, uom_id: it.uom_id || (nos ? String(nos.id) : '') }));
-    }).catch(() => {});
+    apiGet('/subassemblies/item-setup', { silent: true }).then((r) => { if (!cancelled) setSetup(r.data); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [needsItem, setup]);
+  }, [isNew, canCreate, setup]);
 
   const isDraft = revision?.status === 'DRAFT';
   const editable = isNew ? canCreate : isDraft && canEdit;
@@ -629,9 +570,6 @@ function SubassemblyEditor() {
     if (lines.some((l) => !(Number(l.quantity) > 0))) { setError('Every quantity must be more than 0.'); return false; }
     return true;
   };
-  const itemBody = () => (item.mode === 'existing'
-    ? { mode: 'existing', material_id: Number(item.material_id) }
-    : { mode: 'new', prefix_id: Number(item.prefix_id), uom_id: Number(item.uom_id), description: item.description || null });
   const run = async (fn, okMsg) => {
     setBusy(true); setError(''); setNotice('');
     try { await fn(); if (okMsg) setNotice(okMsg); }
@@ -643,17 +581,15 @@ function SubassemblyEditor() {
   const create = (e) => {
     e.preventDefault();
     if (!linesOk()) return;
-    if (item.mode === 'existing' && !item.material_id) { setError('Choose the Finished material to use as its IMM code.'); return; }
     run(async () => {
-      const r = await apiPost('/subassemblies', { ...form, department_id: form.department_id ? Number(form.department_id) : null, items: lineBody(lines), item: itemBody() });
+      const r = await apiPost('/subassemblies', { ...form, department_id: form.department_id ? Number(form.department_id) : null, items: lineBody(lines) });
       nav(`${SUBS}/${r.data.id}`);
     });
   };
   const saveDetails = (e) => {
     e.preventDefault();
-    if (!sub.material && item.mode === 'existing' && !item.material_id) { setError('Choose the Finished material to use as its IMM code.'); return; }
     run(async () => {
-      const r = await apiPut(`/subassemblies/${id}`, { ...form, department_id: form.department_id ? Number(form.department_id) : null, ...(!sub.material ? { item: itemBody() } : {}) });
+      const r = await apiPut(`/subassemblies/${id}`, { ...form, department_id: form.department_id ? Number(form.department_id) : null });
       showSub(r.data, revId);
     }, 'Details saved.');
   };
@@ -684,7 +620,7 @@ function SubassemblyEditor() {
     setNotice(`${revName(rv.rev)} released.`);
   };
   const remove = () => {
-    if (!window.confirm(`Delete subassembly ${form.name} (${form.drawing_no})${sub.material ? ` and its item ${sub.material.imm_code}` : ''}?`)) return;
+    if (!window.confirm(`Delete subassembly ${form.name} (${form.drawing_no})?`)) return;
     run(async () => { await apiDelete(`/subassemblies/${id}`); nav(SUBS); });
   };
 
@@ -723,9 +659,15 @@ function SubassemblyEditor() {
         <select id="sa-dept" value={form.department_id} disabled={disabled} onChange={(e) => { setForm((f) => ({ ...f, department_id: e.target.value })); setNotice(''); }}
           className="ams-input disabled:bg-gray-50">
           <option value="">— None —</option>
-          {departments.map((d) => <option key={d.id} value={d.id}>{d.name}{d.dept_no != null ? ` (no. ${d.dept_no})` : ' (no number yet)'}</option>)}
+          {/* Only departments with a code (it goes into project tags) — and the one it already has. */}
+          {departments.filter((d) => d.dept_code || d.id === sub?.department?.id).map((d) => (
+            <option key={d.id} value={d.id}>{d.name}{d.dept_code ? ` (${d.dept_code})` : ' (no code yet)'}</option>
+          ))}
         </select>
-        <p className="text-[11px] text-gray-500 mt-1">Its department no. goes into project tag numbers. Set numbers in Administrator → Departments.</p>
+        <p className="text-[11px] text-gray-500 mt-1">
+          {departments.some((d) => d.dept_code) ? 'Only departments with a code are listed — ' : 'No department has a code yet — '}
+          set codes in Administrator → Configuration → Department Codes. The code goes into project tag numbers.
+        </p>
       </div>
     </>
   );
@@ -744,7 +686,7 @@ function SubassemblyEditor() {
         {banner}
         <fieldset disabled={!canCreate} className="bg-white rounded border border-gray-200 px-4 py-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
           {detailFields(false)}
-          {canCreate && <ItemChooser item={item} setItem={(v) => { setItem(v); setError(''); }} setup={setup} />}
+          <p className="sm:col-span-2 text-xs text-gray-500">Identified by its drawing no. — no IMM code. Counted in Nos.</p>
         </fieldset>
         <div className="bg-white rounded border border-gray-200">
           <div className="px-4 py-3 border-b border-gray-200"><h2 className="text-sm font-semibold text-gray-800">Lines <span className="text-gray-400 font-normal tabular-nums">{lines.length}</span></h2></div>
@@ -785,8 +727,7 @@ function SubassemblyEditor() {
             </div>
             <h1 className="text-2xl font-semibold text-gray-900 mt-1 break-words">{sub.name}</h1>
             <KeyFacts items={[
-              ['IMM code', sub.material ? <Link key="imm" href={`/dashboard/master-data/materials/${sub.material.id}`} className="hover:underline">{sub.material.imm_code}</Link> : null, true],
-              ['Department', sub.department ? `${sub.department.name}${sub.department.dept_no != null ? ` · no. ${sub.department.dept_no}` : ''}` : null],
+              ['Department', sub.department ? `${sub.department.name}${sub.department.dept_code != null ? ` · ${sub.department.dept_code}` : ''}` : null],
               ['Lines', `${currentLines} in ${sub.current ? revName(sub.current.rev) : 'the draft'}`],
               ['Used in', `${sub.used_in.length} subassembl${sub.used_in.length === 1 ? 'y' : 'ies'}`],
             ]} />
@@ -830,8 +771,7 @@ function SubassemblyEditor() {
             </>
           )}
           {isDraft && canApprove && (
-            <button type="button" onClick={openRelease} disabled={busy || !sub.material} className="btn-primary px-4 py-1.5 disabled:opacity-40"
-              title={!sub.material ? 'Give it its IMM code first' : undefined}>Release {revName(revision.rev)}…</button>
+            <button type="button" onClick={openRelease} disabled={busy} className="btn-primary px-4 py-1.5 disabled:opacity-40">Release {revName(revision.rev)}…</button>
           )}
           {isDraft && !canApprove && <span className="text-xs text-gray-500">Releasing needs Subassemblies → Approve</span>}
         </div>
@@ -931,23 +871,10 @@ function SubassemblyEditor() {
           </div>
           <div className="px-4 py-3 space-y-3">
             {detailFields(!canEdit)}
-            {sub.material ? (
-              <div className="text-sm">
-                <span className={label}>IMM code</span>
-                <Link href={`/dashboard/master-data/materials/${sub.material.id}`} className="font-mono font-semibold text-gray-800 hover:underline">{sub.material.imm_code}</Link>
-                <p className="text-xs text-gray-500 mt-0.5">Finished · counted in {sub.material.uom?.code} · the same across revisions</p>
-              </div>
-            ) : canEdit ? (
-              <>
-                <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2.5 py-2">
-                  This subassembly was made before subassemblies had their own IMM code — give it one, then save the details.
-                </p>
-                <ItemChooser item={item} setItem={(v) => { setItem(v); setError(''); }} setup={setup} />
-              </>
-            ) : null}
+            <p className="text-xs text-gray-500">Identified by its drawing no. — no IMM code · counted in {sub.material?.uom?.code ?? 'Nos'} · the same across revisions</p>
             {canEdit && (
               <div className="flex justify-end">
-                <button type="submit" disabled={busy || Boolean(form.name === sub.name && form.drawing_no === sub.drawing_no && form.department_id === (sub.department ? String(sub.department.id) : '') && sub.material)}
+                <button type="submit" disabled={busy || (form.name === sub.name && form.drawing_no === sub.drawing_no && form.department_id === (sub.department ? String(sub.department.id) : ''))}
                   className="btn-secondary px-4 py-1.5 disabled:opacity-40">Save details</button>
               </div>
             )}

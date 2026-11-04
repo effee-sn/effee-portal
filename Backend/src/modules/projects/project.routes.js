@@ -6,11 +6,11 @@ const { asyncHandler, validate } = require('../../core');
 
 const {
   listProjectsQuery, projectIdParam, createProjectBody, updateProjectBody,
-  machineParam, addMachinesBody, updateMachineBody, machineNumberingBody,
+  machineParam, addMachinesBody, updateMachineBody, machineNumberingBody, departmentCodeParam, departmentCodeBody,
 } = require('./project.validation');
 const {
   getProjects, getEnquiryOptions, getProjectById, createProject, updateProject, deleteProject,
-  addMachines, updateMachine, removeMachine, getMachineNumbering, setMachineNumbering,
+  addMachines, updateMachine, removeMachine, getMachineNumbering, setMachineNumbering, getDepartmentCodes, setDepartmentCode,
 } = require('./project.controller');
 const bomValidation = require('./bom.validation');
 const bomController = require('./bom.controller');
@@ -53,6 +53,20 @@ router.put(
   authorize('PROJECT_CONFIG_EDIT'),
   validate({ body: machineNumberingBody }),
   asyncHandler(setMachineNumbering)
+);
+
+// Department codes for project tag numbers: Project Config → View / Edit.
+router.get(
+  '/department-codes',
+  authorize('PROJECT_CONFIG_VIEW'),
+  asyncHandler(getDepartmentCodes)
+);
+
+router.put(
+  '/department-codes/:departmentId',
+  authorize('PROJECT_CONFIG_EDIT'),
+  validate({ params: departmentCodeParam, body: departmentCodeBody }),
+  asyncHandler(setDepartmentCode)
 );
 
 // Picking a BOM line: materials and released subassemblies (BOM access is enough).

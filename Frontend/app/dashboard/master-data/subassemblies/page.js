@@ -15,7 +15,8 @@ import { revName } from '@/lib/materialOptions';
  * Master Data → Subassemblies.
  *
  * The reusable library of drawing-wise subassemblies: each has a name, a
- * drawing no., its own IMM code (it is an item of the material master too) and
+ * drawing no. (its identity — no IMM code; its item in the material master
+ * carries the drawing no. as its code) and
  * its lines — materials, and other subassemblies for further levels. Project
  * BOMs will be built from these. Opening a row opens the subassembly.
  */
@@ -73,7 +74,7 @@ export default function SubassembliesPage() {
       <div className="bg-white rounded border border-gray-200 px-4 py-3">
         <h1 className="text-base font-semibold text-gray-900">Subassemblies (drawing-wise)</h1>
         <p className="text-sm text-gray-500 mt-0.5">
-          A subassembly is a part with its own drawing and IMM code, built from materials of the material master — and from
+          A subassembly is a part identified by its drawing no., built from materials of the material master — and from
           other subassemblies, any levels deep. Build each one here once; project BOMs will be made from them.
         </p>
       </div>
@@ -109,7 +110,6 @@ export default function SubassembliesPage() {
                 <tr className="border-b border-gray-200 text-left text-gray-500">
                   <th className="px-3 py-3 font-normal">Drawing no.</th>
                   <th className="px-3 py-3 font-normal">Subassembly</th>
-                  <th className="px-3 py-3 font-normal">IMM code</th>
                   <th className="px-3 py-3 font-normal">Department</th>
                   <th className="px-3 py-3 font-normal">Revision</th>
                   <th className="px-3 py-3 font-normal text-right">Lines</th>
@@ -121,13 +121,8 @@ export default function SubassembliesPage() {
                   <tr key={s.id} onClick={() => nav(`/dashboard/master-data/subassemblies/${s.id}`)} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer">
                     <td className="px-3 py-2.5 font-mono text-xs font-semibold text-gray-800 whitespace-nowrap">{s.drawing_no}</td>
                     <td className="px-3 py-2.5 font-medium text-gray-800">{s.name}</td>
-                    <td className="px-3 py-2.5 font-mono text-xs whitespace-nowrap">
-                      {s.material
-                        ? <span className="text-gray-700">{s.material.imm_code}</span>
-                        : <span className="font-sans text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">No IMM code yet</span>}
-                    </td>
                     <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">
-                      {s.department ? <>{s.department.name}{s.department.dept_no != null && <span className="text-xs text-gray-400"> · {s.department.dept_no}</span>}</> : '—'}
+                      {s.department ? <>{s.department.name}{s.department.dept_code != null && <span className="text-xs text-gray-400"> · {s.department.dept_code}</span>}</> : '—'}
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
                       {s.current ? <span className="text-gray-800"><b>{revName(s.current.rev)}</b></span> : <span className="text-xs text-amber-700">Not released</span>}

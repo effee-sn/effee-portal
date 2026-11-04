@@ -71,7 +71,6 @@ const listMaterialsQuery = z.object({
   prefix_id: z.string().optional(),
   uom_id: z.string().optional(),
   is_active: z.string().optional(),
-  kind: z.enum(['subassembly', 'part']).optional(),
 });
 
 // Bulk entry's duplicate check: only the fields compared are needed.

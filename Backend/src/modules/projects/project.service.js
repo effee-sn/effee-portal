@@ -233,6 +233,35 @@ function createProjectService(repository) {
       await auditService.record({ action: auditService.Action.UPDATE, entity: 'CompanySettings', entityId: before.id, actor, changes: auditService.diff(before, data) });
       return this.getMachineNumbering();
     },
+
+    // ── Department codes (Administrator → Configuration → Department Codes) ──
+    // A department's code goes into project tag numbers (Machine ID - code -
+    // …). Set here, not on the department. Unique among live departments.
+    // Locked BOMs keep the tags they were locked with.
+
+    /** Every live department with its code (null = none yet). */
+    async listDepartmentCodes() {
+      return repository.listDepartmentCodes();
+    },
+
+    /** Gives a department its code, changes it, or clears it (`code: null`). */
+    async setDepartmentCode(departmentId, dto, actor) {
+      const dept = await repository.findDepartment(departmentId);
+      if (!dept) throw new NotFoundError('Department');
+      const code = dto.code ?? null;
+      if (code !== null) {
+        const clash = await repository.findDepartmentByCode(code, departmentId);
+        if (clash) throw new ConflictError(`Code ${code} is already used by ${clash.name}`);
+      }
+      if (code !== dept.dept_code) {
+        await repository.setDepartmentCode(departmentId, code, actor?.id ?? null);
+        await auditService.record({
+          action: auditService.Action.UPDATE, entity: 'Department', entityId: departmentId, actor,
+          changes: { dept_code: { from: dept.dept_code, to: code } },
+        });
+      }
+      return repository.listDepartmentCodes();
+    },
   };
 }
 

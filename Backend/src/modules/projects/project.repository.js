@@ -202,6 +202,27 @@ function createProjectRepository(db) {
       const row = await db.user.findFirst({ where: { id, deleted_at: null }, select: { id: true } });
       return row !== null;
     },
+
+    // ── Department codes (Configuration → Department Codes) ──────────────────
+    /** Live departments with their code (null = none yet), by name. */
+    listDepartmentCodes() {
+      return db.department.findMany({ where: { deleted_at: null }, select: { id: true, name: true, dept_code: true }, orderBy: { name: 'asc' } });
+    },
+
+    /** @param {number} id */
+    findDepartment(id) {
+      return db.department.findFirst({ where: { id, deleted_at: null }, select: { id: true, name: true, dept_code: true } });
+    },
+
+    /** Another live department with this code (codes compare without regard to case). @param {string} code @param {number} exceptId */
+    findDepartmentByCode(code, exceptId) {
+      return db.department.findFirst({ where: { dept_code: code, deleted_at: null, NOT: { id: exceptId } }, select: { id: true, name: true } });
+    },
+
+    /** @param {number} id @param {string|null} code @param {number|null} actorId */
+    setDepartmentCode(id, code, actorId) {
+      return db.department.update({ where: { id }, data: { dept_code: code, updated_by: actorId }, select: { id: true } });
+    },
   };
 }
 

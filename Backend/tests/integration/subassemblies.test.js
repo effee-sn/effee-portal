@@ -23,9 +23,9 @@ const made = { prefix: null, uom: null, subs: [] };
 let m1; let m2; let m3;
 
 const line = (m, quantity, extra = {}) => ({ material_id: m.id, quantity, ...extra });
-/** A new subassembly (its own new IMM code), released as its first revision unless asked not to. */
+/** A new subassembly (its item's code = its drawing no.), released as its first revision unless asked not to. */
 const newSub = async (name, drawing_no, items = [], { release = true } = {}) => {
-  const s = await subs.create({ name, drawing_no, items, item: { mode: 'new', prefix_id: made.prefix, uom_id: made.uom } }, actor);
+  const s = await subs.create({ name, drawing_no, items }, actor);
   made.subs.push(s.id);
   return release && items.length ? subs.release(s.id, s.draft.id, {}, actor) : s;
 };
@@ -56,10 +56,11 @@ after(async () => {
   if (!prisma || env.unavailable) return;
   try {
     if (made.cfg) await subs.setRevisionScheme({ scheme: made.cfg.scheme, first_release: made.cfg.first_release, original_label: made.cfg.original_label }, actor);
+    const items = (await prisma.subassembly.findMany({ where: { id: { in: made.subs } }, select: { material_id: true } })).map((s) => s.material_id).filter(Boolean);
     await prisma.subassemblyItem.deleteMany({ where: { subassembly_id: { in: made.subs } } });
     await prisma.subassemblyRevision.deleteMany({ where: { subassembly_id: { in: made.subs } } });
     await prisma.subassembly.deleteMany({ where: { id: { in: made.subs } } });
-    await prisma.material.deleteMany({ where: { prefix_id: made.prefix } });
+    await prisma.material.deleteMany({ where: { OR: [{ prefix_id: made.prefix }, { id: { in: items } }] } });
     await prisma.immPrefix.deleteMany({ where: { id: made.prefix } });
   } finally { await prisma.$disconnect(); }
 });
@@ -267,30 +268,36 @@ describe('Drawing revisions of Finished parts', () => {
 describe('A subassembly is an item', () => {
   let a;
 
-  it('gets its own Finished IMM code, which follows its name and drawing no.', async () => {
+  it('is identified by its drawing no.: no IMM code or prefix, counted in Nos; it follows renames', async () => {
+    const before = (await prisma.immPrefix.findMany({ select: { id: true, next_number: true } }));
     a = await newSub('Frame', `${tag}-FR`, [], { release: false });
-    assert.match(a.material.imm_code, new RegExp(`^${tag}-\\d{4}$`));
-    assert.equal(a.material.material_type, 'FINISHED');
-    assert.equal(a.material.item_name, 'Frame');
-    await subs.updateDetails(a.id, { name: 'Main frame', drawing_no: `${tag}-FR2` }, actor);
+    assert.equal(a.material.imm_code, `${tag}-FR`, 'code = drawing no.');
     const item = await materials.getById(a.material.id);
-    assert.equal(item.item_name, 'Main frame');
-    assert.equal(item.drawing_no, `${tag}-FR2`);
-    assert.equal(item.subassembly.id, a.id);
-    await assert.rejects(materials.update(item.id, { item_name: 'Other' }, actor), { name: 'ConflictError' }, 'named on the subassembly');
-    await assert.rejects(materials.remove(item.id, actor), { name: 'ConflictError' }, 'deleted with the subassembly');
+    assert.equal(item.prefix, null, 'no prefix');
+    assert.equal(item.uom.code, 'Nos');
+    assert.equal(item.material_type, 'FINISHED');
+    assert.deepEqual(await prisma.immPrefix.findMany({ select: { id: true, next_number: true } }), before, 'no IMM number used');
+    await subs.updateDetails(a.id, { name: 'Main frame', drawing_no: `${tag}-FR2` }, actor);
+    const renamed = await materials.getById(a.material.id);
+    assert.equal(renamed.item_name, 'Main frame');
+    assert.equal(renamed.drawing_no, `${tag}-FR2`);
+    assert.equal(renamed.imm_code, `${tag}-FR2`, 'the code follows the drawing no.');
+    assert.equal(renamed.subassembly.id, a.id);
+    await assert.rejects(materials.update(renamed.id, { item_name: 'Other' }, actor), { name: 'ConflictError' }, 'named on the subassembly');
+    await assert.rejects(materials.remove(renamed.id, actor), { name: 'ConflictError' }, 'deleted with the subassembly');
   });
 
-  it('can instead use an existing Finished material, once', async () => {
-    const [fin, bo] = await materials.createBulk({ rows: [part('Panel', null, 'FINISHED'), part('Screw')] }, actor);
-    const options = await subs.itemOptions(fin.imm_code);
-    assert.ok(options.items.some((o) => o.id === fin.id), 'offered');
-    const s = await subs.create({ name: 'Panel', drawing_no: `${tag}-PN`, item: { mode: 'existing', material_id: fin.id } }, actor);
-    made.subs.push(s.id);
-    assert.equal(s.material.id, fin.id);
-    assert.equal((await materials.getById(fin.id)).drawing_no, `${tag}-PN`);
-    await assert.rejects(subs.create({ name: 'P2', drawing_no: `${tag}-PN2`, item: { mode: 'existing', material_id: fin.id } }, actor), { name: 'ValidationError' }, 'already an item');
-    await assert.rejects(subs.create({ name: 'P3', drawing_no: `${tag}-PN3`, item: { mode: 'existing', material_id: bo.id } }, actor), { name: 'ValidationError' }, 'not Finished');
+  it('isn\'t listed under Materials', async () => {
+    const list = await materials.list({ filters: { subassembly: null }, orderBy: { id: 'desc' }, skip: 0, take: 500, search: `${tag}-FR2` });
+    assert.ok(!list.items.some((m) => m.id === a.material.id));
+  });
+
+  it('a drawing no. that is another material\'s IMM code is refused; a deleted one can be used again', async () => {
+    await assert.rejects(newSub('Clash', m2.imm_code, [], { release: false }), { name: 'ConflictError' }, 'm2\'s code');
+    const gone = await newSub('Temporary', `${tag}-TMP`, [], { release: false });
+    await subs.remove(gone.id, actor);
+    const again = await newSub('Again', `${tag}-TMP`, [], { release: false });
+    assert.equal(again.material.imm_code, `${tag}-TMP`);
   });
 });
 

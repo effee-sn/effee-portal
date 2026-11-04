@@ -320,7 +320,6 @@ const sc = subassemblyController;
 router.get('/subassemblies', authorize('SUBASSEMBLY_VIEW'), validate({ query: sv.listSubassembliesQuery }), asyncHandler(sc.listSubassemblies));
 // Building one needs only subassembly access, not the material master's (these come before /subassemblies/:id).
 router.get('/subassemblies/material-search', authorize('SUBASSEMBLY_CREATE', 'SUBASSEMBLY_EDIT'), validate({ query: sv.searchQuery }), asyncHandler(sc.searchMaterials));
-router.get('/subassemblies/item-options', authorize('SUBASSEMBLY_CREATE', 'SUBASSEMBLY_EDIT'), validate({ query: sv.searchQuery }), asyncHandler(sc.getItemOptions));
 router.get('/subassemblies/item-setup', authorize('SUBASSEMBLY_CREATE', 'SUBASSEMBLY_EDIT'), asyncHandler(sc.getItemSetup));
 // How revisions are labelled: a material-master setting (Administrator → Configuration → Revisions).
 router.get('/subassemblies/revision-scheme', authorize('SUBASSEMBLY_VIEW', 'MATERIAL_CONFIG_VIEW'), asyncHandler(sc.getRevisionScheme));

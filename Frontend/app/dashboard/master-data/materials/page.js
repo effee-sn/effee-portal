@@ -17,7 +17,8 @@ import { MATERIAL_TYPES, MATERIAL_TYPE_LABEL } from '@/lib/materialOptions';
  * export of what's filtered; new materials are added in bulk on /new, or from
  * an Excel file with Import (a popup: example file, row check, result); a row
  * opens the material's page (details, where it's used, history). The IMM code
- * is generated from the chosen prefix and never changes.
+ * is generated from the chosen prefix and never changes. Subassemblies aren't
+ * listed here — they're under Subassemblies, identified by drawing no.
  */
 
 export default function MaterialsPage() {
@@ -35,7 +36,6 @@ export default function MaterialsPage() {
   const [type, setType] = useState('');
   const [prefixId, setPrefixId] = useState('');
   const [unitId, setUnitId] = useState('');
-  const [kind, setKind] = useState(''); // '' | 'part' | 'subassembly'
   const [prefixes, setPrefixes] = useState([]);
   const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -46,19 +46,18 @@ export default function MaterialsPage() {
   const [limit, setLimit, limitRef] = usePageSize('materials', 20);
 
   /** The current search and filters as a query string. */
-  const filterQuery = (s = search, t = type, px = prefixId, u = unitId, k = kind) => {
+  const filterQuery = (s = search, t = type, px = prefixId, u = unitId) => {
     const q = new URLSearchParams({ search: s });
-    if (k) q.set('kind', k);
     if (t) q.set('material_type', t);
     if (px) q.set('prefix_id', px);
     if (u) q.set('uom_id', u);
     return q;
   };
 
-  const fetchRows = async (p = page, s = search, t = type, px = prefixId, u = unitId, k = kind) => {
+  const fetchRows = async (p = page, s = search, t = type, px = prefixId, u = unitId) => {
     setLoading(true);
     try {
-      const q = filterQuery(s, t, px, u, k);
+      const q = filterQuery(s, t, px, u);
       q.set('page', String(p)); q.set('limit', String(limitRef.current));
       const res = await apiGet(`/materials?${q.toString()}`);
       setRows(res.data); setTotal(res.meta.pagination.total);
@@ -79,7 +78,6 @@ export default function MaterialsPage() {
   const onType = (v) => { setType(v); setPage(1); fetchRows(1, search, v); };
   const onPrefix = (v) => { setPrefixId(v); setPage(1); fetchRows(1, search, type, v); };
   const onUnit = (v) => { setUnitId(v); setPage(1); fetchRows(1, search, type, prefixId, v); };
-  const onKind = (v) => { setKind(v); setPage(1); fetchRows(1, search, type, prefixId, unitId, v); };
   const goPage = (d) => { const p = page + d; setPage(p); fetchRows(p); };
   const onPageSize = (n) => { setLimit(n); setPage(1); fetchRows(1); };
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
@@ -114,11 +112,6 @@ export default function MaterialsPage() {
         )}
         <span className="text-sm font-medium text-gray-700 shrink-0 px-1">Materials</span>
         <div className="flex-1" />
-        <select value={kind} onChange={(e) => onKind(e.target.value)} aria-label="Parts or subassemblies" className={selectCls}>
-          <option value="">Parts &amp; subassemblies</option>
-          <option value="part">Parts only</option>
-          <option value="subassembly">Subassemblies only</option>
-        </select>
         <select value={type} onChange={(e) => onType(e.target.value)} aria-label="Material type" className={selectCls}>
           <option value="">All types</option>
           {MATERIAL_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -164,7 +157,7 @@ export default function MaterialsPage() {
 
       {loading ? <TableSkeleton cols={6} rows={6} /> : rows.length === 0 ? (
         <p className="py-14 text-center text-sm text-gray-400">
-          No materials {search || type || prefixId || unitId || kind ? 'match your filters' : 'yet'}.
+          No materials {search || type || prefixId || unitId ? 'match your filters' : 'yet'}.
         </p>
       ) : (
         <div className="overflow-x-auto">

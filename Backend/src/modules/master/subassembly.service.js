@@ -10,10 +10,12 @@ const { NotFoundError, ConflictError, ValidationError, buildSearchClause } = req
  * Subassembly business logic (Master Data → Subassemblies).
  *
  *   - A subassembly is a drawn part: a name, a drawing no. (unique among live
- *     subassemblies) and its own item in the material master (a Finished
- *     material — its IMM code), created with it from a prefix and unit or
- *     linked from an existing Finished material. The item follows its name
- *     and drawing no., stays the same across revisions, and goes with it.
+ *     subassemblies) and its own item in the material master — a Finished
+ *     material whose code IS the drawing no. (no IMM prefix or number),
+ *     counted in Nos, made with it. It is how lines and project BOMs point at
+ *     the subassembly (as Odoo's BOM points at a product). The item follows
+ *     its name and drawing no., stays the same across revisions, and goes
+ *     with it; it isn't listed under Materials.
  *   - **Revisions** hold the lines (Original, then Rev A, B … or 01, 02 …;
  *     see revisionLabels). Only a **draft** changes; **releasing** it (Subassemblies
  *     → Approve, with a change note) makes it the current revision and
@@ -51,9 +53,15 @@ function createSubassemblyService(repository) {
   const partCurrentOf = (m) => (isPart(m) ? m.revisions?.find((r) => r.status === 'RELEASED') ?? null : null);
 
   /** The department it comes from must be a live one. @param {number|null|undefined} id */
-  async function assertDepartment(id) {
+  async function assertDepartment(id, currentId) {
     if (id === null || id === undefined) return;
-    if (!(await repository.findDepartment(id))) throw fail('department_id', 'That department was not found');
+    const dept = await repository.findDepartment(id);
+    if (!dept) throw fail('department_id', 'That department was not found');
+    // Only departments with a code (they go into project tags) can be chosen;
+    // one already set before codes were required may stay.
+    if (!dept.dept_code && id !== currentId) {
+      throw fail('department_id', `${dept.name} has no department code yet — give it one in Administrator → Configuration → Department Codes`);
+    }
   }
 
   /**
@@ -67,6 +75,9 @@ function createSubassemblyService(repository) {
     if (clash) throw new ConflictError(`Drawing no. ${drawingNo} is already used by "${clash.name}"`);
     const m = await materialService.drawingOwner(drawingNo, ownItemIds);
     if (m) throw new ConflictError(`Drawing no. ${drawingNo} is already used by material ${m.imm_code} (${m.item_name})`);
+    // It becomes the item's code, so it can't be another material's IMM code either.
+    const [byCode] = (await materialRepository.findByCodes([drawingNo])).filter((x) => !ownItemIds.includes(x.id));
+    if (byCode) throw new ConflictError(`Drawing no. ${drawingNo} is already the code of material ${byCode.item_name}`);
   }
 
   /**
@@ -145,40 +156,29 @@ function createSubassemblyService(repository) {
   }
 
   /**
-   * Validates how a subassembly gets its item and returns a function that
-   * makes it inside the save's transaction.
-   * @param {{ mode: 'new'|'existing', prefix_id?: number, uom_id?: number, material_id?: number, description?: string|null }} spec
+   * A subassembly's own item in the material master, made inside the save's
+   * transaction: identified by the drawing no. (its code — no IMM prefix or
+   * number), counted in Nos. Returns a function that creates it.
    * @param {{ name: string, drawing_no: string }} sub
    */
-  async function planItem(spec, sub, actor) {
-    if (spec.mode === 'existing') {
-      const [m] = await repository.findMaterials([spec.material_id]);
-      if (!m || m.deleted_at) throw fail('item.material_id', 'That material was not found');
-      if (!m.is_active) throw fail('item.material_id', `${m.imm_code} is inactive`);
-      if (m.material_type !== 'FINISHED') throw fail('item.material_id', `${m.imm_code} is not a Finished material`);
-      if (m.subassembly) throw fail('item.material_id', `${m.imm_code} is already another subassembly's item`);
-      return {
-        materialId: m.id,
-        make: async (tx) => {
-          await tx.material.update({ where: { id: m.id }, data: { item_name: sub.name, drawing_no: sub.drawing_no, updated_by: actor?.id ?? null } });
-          return m.id;
-        },
-      };
-    }
-    const { prefixes, units } = await repository.itemSetup();
-    if (!prefixes.some((p) => p.id === spec.prefix_id)) throw fail('item.prefix_id', 'Choose an active IMM code prefix');
-    if (!units.some((u) => u.id === spec.uom_id)) throw fail('item.uom_id', 'Choose an active unit of measure');
+  async function planItem(sub, actor) {
+    const { units } = await repository.itemSetup();
+    const unit = units.find((u) => u.code.toLowerCase() === 'nos') || units[0];
+    if (!unit) throw new ConflictError('Add a unit of measure first (Administrator → Configuration → Units of Measure)');
     const created = {};
     return {
-      materialId: null,
       created,
       make: async (tx) => {
-        const [m] = await materialRepository.createManyIn(tx, [{
-          prefix_id: spec.prefix_id, uom_id: spec.uom_id, item_name: sub.name, drawing_no: sub.drawing_no,
-          description: spec.description || sub.name, technical_spec: `As per drawing ${sub.drawing_no}`,
-          material_type: 'FINISHED', material: 'Assembly', remarks: null,
-        }], materialService.formatCode, actor?.id ?? null);
-        Object.assign(created, m);
+        const m = await tx.material.create({
+          data: {
+            imm_code: sub.drawing_no, prefix_id: null, uom_id: unit.id, item_name: sub.name, drawing_no: sub.drawing_no,
+            description: sub.name, technical_spec: `As per drawing ${sub.drawing_no}`,
+            material_type: 'FINISHED', material: 'Assembly', remarks: null,
+            created_by: actor?.id ?? null, updated_by: actor?.id ?? null,
+          },
+          select: { id: true, imm_code: true, item_name: true },
+        });
+        Object.assign(created, m, { unit: unit.code });
         return m.id;
       },
     };
@@ -187,15 +187,14 @@ function createSubassemblyService(repository) {
   /** Runs a save, turning code/link clashes into readable conflicts. */
   async function saving(fn) {
     try { return await fn(); } catch (err) {
-      if (err.code === 'IMM_CODE_TAKEN') throw new ConflictError(`${err.message} — raise that prefix's next number in Administrator → Configuration → Material Codes`);
-      if (err.code === 'P2002') throw new ConflictError('Someone else changed this at the same time — reload and try again');
+      if (err.code === 'P2002') throw new ConflictError('Someone else changed this at the same time, or that drawing no. is already a material code — reload and try again');
       throw err;
     }
   }
 
   const recordItemCreated = (m, actor) => m.id && auditService.record({
     action: auditService.Action.CREATE, entity: 'Material', entityId: m.id, actor,
-    changes: { imm_code: m.imm_code, item_name: m.item_name, unit: m.uom?.code, as: 'subassembly item' },
+    changes: { code: m.imm_code, item_name: m.item_name, unit: m.unit, as: 'subassembly item' },
   });
 
   async function loadSub(id) {
@@ -299,20 +298,9 @@ function createSubassemblyService(repository) {
       return { items: rows.slice(0, PAGE), has_more: rows.length > PAGE };
     },
 
-    /** Finished materials that could be linked as a subassembly's item, 10 at a time. */
-    async itemOptions(q, skip = 0) {
-      const rows = await repository.searchItemOptions(String(q || ''), PAGE + 1, Number(skip) || 0);
-      return { items: rows.slice(0, PAGE), has_more: rows.length > PAGE };
-    },
-
-    /** Active prefixes (with their next code) and units, for a new subassembly's item; and the first revision's label. */
+    /** For a new subassembly: its first revision's label. */
     async itemSetup() {
-      const { prefixes, units } = await repository.itemSetup();
-      return {
-        prefixes: prefixes.map((p) => ({ ...p, preview: materialService.formatCode(p, p.next_number) })),
-        units,
-        first_rev: labelFor(await loadRevisionConfig(), 1),
-      };
+      return { first_rev: labelFor(await loadRevisionConfig(), 1) };
     },
 
     // ── Revision labels (Administrator → Configuration → Revisions) ──────────
@@ -342,11 +330,11 @@ function createSubassemblyService(repository) {
     // ── Subassemblies ────────────────────────────────────────────────────────
     /** A new subassembly with its item and its first revision (a draft) holding the lines. */
     async create(dto, actor) {
-      await assertDrawingFree(dto.drawing_no, undefined, [dto.item?.mode === 'existing' ? dto.item.material_id : null]);
+      await assertDrawingFree(dto.drawing_no);
       await assertDepartment(dto.department_id);
       const rows = await toRows(dto.items || []);
-      const item = await planItem(dto.item, dto, actor);
-      await assertStructure(null, item.materialId, rows);
+      const item = await planItem(dto, actor);
+      await assertStructure(null, null, rows);
       const rev = labelFor(await loadRevisionConfig(), 1);
       const id = await saving(() => repository.create({
         name: dto.name, drawing_no: dto.drawing_no, department_id: dto.department_id ?? null,
@@ -356,26 +344,25 @@ function createSubassemblyService(repository) {
       const s = await this.getById(id);
       await auditService.record({
         action: auditService.Action.CREATE, entity: 'Subassembly', entityId: id, actor,
-        changes: { name: s.name, drawing_no: s.drawing_no, imm_code: s.material?.imm_code, draft: rev, lines: rows.length },
+        changes: { name: s.name, drawing_no: s.drawing_no, draft: rev, lines: rows.length },
       });
       return s;
     },
 
-    /** Name, drawing no. — and an item for one made before items existed. Lines change through revisions. */
+    /** Name, drawing no., department. Lines change through revisions. One made before items existed gets its item here. */
     async updateDetails(id, dto, actor) {
       const before = await loadSub(id);
-      if (dto.item && before.material) throw new ConflictError('This subassembly already has its item');
-      // Checked when it changes, or when an item (which will carry it) is given.
-      if ((dto.drawing_no !== undefined && dto.drawing_no !== before.drawing_no) || dto.item) {
-        await assertDrawingFree(dto.drawing_no ?? before.drawing_no, id, [before.material?.id, dto.item?.mode === 'existing' ? dto.item.material_id : null]);
+      const drawingChanges = dto.drawing_no !== undefined && dto.drawing_no !== before.drawing_no;
+      if (drawingChanges || !before.material) {
+        await assertDrawingFree(dto.drawing_no ?? before.drawing_no, id, [before.material?.id]);
       }
-      await assertDepartment(dto.department_id);
+      await assertDepartment(dto.department_id, before.department?.id ?? null);
       const data = { updated_by: actor?.id ?? null };
       if (dto.name !== undefined) data.name = dto.name;
       if (dto.drawing_no !== undefined) data.drawing_no = dto.drawing_no;
       if (dto.department_id !== undefined) data.department_id = dto.department_id;
       const sub = { name: data.name ?? before.name, drawing_no: data.drawing_no ?? before.drawing_no };
-      const item = dto.item ? await planItem(dto.item, sub, actor) : null;
+      const item = before.material ? null : await planItem(sub, actor);
       await saving(() => repository.updateDetails(id, data, item?.make));
       if (item?.created) await recordItemCreated(item.created, actor);
       const s = await this.getById(id);
@@ -385,7 +372,6 @@ function createSubassemblyService(repository) {
           ...(dto.name !== undefined && dto.name !== before.name ? { name: { from: before.name, to: dto.name } } : {}),
           ...(dto.drawing_no !== undefined && dto.drawing_no !== before.drawing_no ? { drawing_no: { from: before.drawing_no, to: dto.drawing_no } } : {}),
           ...(dto.department_id !== undefined && dto.department_id !== (before.department?.id ?? null) ? { department: { from: before.department?.name ?? null, to: s.department?.name ?? null } } : {}),
-          ...(item ? { imm_code: { from: null, to: s.material?.imm_code } } : {}),
         },
       });
       return s;
@@ -403,7 +389,7 @@ function createSubassemblyService(repository) {
       await repository.softDelete(id, before.material?.id ?? null, actor?.id ?? null);
       await auditService.record({
         action: auditService.Action.DELETE, entity: 'Subassembly', entityId: id, actor,
-        changes: { name: before.name, drawing_no: before.drawing_no, imm_code: before.material?.imm_code },
+        changes: { name: before.name, drawing_no: before.drawing_no },
       });
     },
 
@@ -441,7 +427,13 @@ function createSubassemblyService(repository) {
     async release(id, revId, dto, actor) {
       const s = await loadSub(id);
       const draft = await loadDraft(id, revId);
-      if (!s.material) throw new ConflictError('Give this subassembly its IMM code before releasing it');
+      if (!s.material) {
+        // Made before items existed: it gets its item now (lines and BOMs point at it).
+        await assertDrawingFree(s.drawing_no, id);
+        const item = await planItem(s, actor);
+        await saving(() => repository.updateDetails(id, { updated_by: actor?.id ?? null }, item.make));
+        await recordItemCreated(item.created, actor);
+      }
       if (!draft.items.length) throw fail('items', 'Add at least one line before releasing');
       const note = (dto.change_note || '').trim();
       const hasEarlier = s.revisions.some((r) => r.status !== 'DRAFT');

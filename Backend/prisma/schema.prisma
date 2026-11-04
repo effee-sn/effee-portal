@@ -111,8 +111,9 @@ model Department {
   id          Int     @id @default(autoincrement())
   name        String  @unique
   description String? @db.Text
-  // Its number in project tag numbers (Machine ID - dept no. - …); unique among live departments.
-  dept_no     Int?
+  // Its code in project tag numbers (Machine ID - code - …), e.g. ELE or 12; set in
+  // Administrator → Configuration → Department Codes. Unique among live departments.
+  dept_code   String? @db.VarChar(10)
 
   // The functional lead of the department. Used by workflows that route to
   // "the head of a department" (e.g. the originating department's lead).
@@ -133,7 +134,7 @@ model Department {
 
   @@index([deleted_at])
   @@index([created_at])
-  @@index([dept_no])
+  @@index([dept_code])
 }
 
 /// A workflow definition — an ordered set of stages a record moves through.
@@ -1351,9 +1352,10 @@ enum MaterialType {
 /// the chosen prefix on creation and never changes.
 model Material {
   id             Int          @id @default(autoincrement())
-  imm_code       String       @unique @db.VarChar(40)
-  prefix         ImmPrefix    @relation(fields: [prefix_id], references: [id])
-  prefix_id      Int
+  // A subassembly's own item has its drawing no. as its code, and no prefix.
+  imm_code       String       @unique @db.VarChar(100)
+  prefix         ImmPrefix?   @relation(fields: [prefix_id], references: [id], onDelete: Restrict)
+  prefix_id      Int?
   drawing_no     String?      @db.VarChar(100)
   item_name      String       @db.VarChar(191)
   description    String       @db.Text
@@ -1614,8 +1616,8 @@ model ProjectBomItem {
   bom_id         Int
   machine        ProjectMachine @relation(fields: [machine_id], references: [id])
   machine_id     Int
-  tag            String         @db.VarChar(255)
-  parent_tag     String?        @db.VarChar(255)
+  tag            String         @db.VarChar(500)
+  parent_tag     String?        @db.VarChar(500)
   level          Int
   sort_order     Int            @default(0)
   material       Material       @relation(fields: [material_id], references: [id])
@@ -1627,14 +1629,14 @@ model ProjectBomItem {
   part_revision_id Int?
   // Either one's label.
   rev            String?        @db.VarChar(10)
-  imm_code       String         @db.VarChar(40)
+  imm_code       String         @db.VarChar(100)
   item_name      String         @db.VarChar(191)
   drawing_no     String?        @db.VarChar(100)
   material_type  MaterialType
   material_text  String         @db.VarChar(191)
   technical_spec String?        @db.Text
   uom            String         @db.VarChar(20)
-  dept_no        Int
+  dept_code      String         @db.VarChar(10)
   department     String?        @db.VarChar(120)
   qty_per_parent Decimal        @db.Decimal(12, 3)
   quantity       Decimal        @db.Decimal(16, 3)

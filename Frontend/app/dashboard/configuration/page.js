@@ -10,6 +10,7 @@ import MaterialCodesConfig from '@/components/config/MaterialCodesConfig';
 import UnitsConfig from '@/components/config/UnitsConfig';
 import RevisionsConfig from '@/components/config/RevisionsConfig';
 import MachineIdsConfig from '@/components/config/MachineIdsConfig';
+import DepartmentCodesConfig from '@/components/config/DepartmentCodesConfig';
 
 /**
  * Administrator → Configuration: every module's settings in one place.
@@ -44,6 +45,11 @@ const SECTIONS = [
     key: 'machine-ids', label: 'Machine IDs', perm: 'PROJECT_CONFIG_VIEW',
     hint: 'How project machines are numbered',
     render: (has) => <MachineIdsConfig has={has} />,
+  },
+  {
+    key: 'department-codes', label: 'Department Codes', perm: 'PROJECT_CONFIG_VIEW',
+    hint: 'Each department’s code in project tags',
+    render: (has) => <DepartmentCodesConfig has={has} />,
   },
 ];
 

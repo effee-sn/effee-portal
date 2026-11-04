@@ -32,7 +32,7 @@ function createSubassemblyRepository(db) {
     created_at: true, created_by: true, updated_at: true, _count: { select: { items: true } },
   });
 
-  const departmentBrief = Object.freeze({ select: { id: true, name: true, dept_no: true } });
+  const departmentBrief = Object.freeze({ select: { id: true, name: true, dept_code: true } });
 
   const listSelect = Object.freeze({
     id: true, name: true, drawing_no: true, created_at: true, updated_at: true,
@@ -164,31 +164,10 @@ function createSubassemblyRepository(db) {
       });
     },
 
-    /**
-     * Finished materials that could become a subassembly's item: active and
-     * not already one. @param {string} q @param {number} take @param {number} skip
-     */
-    searchItemOptions(q, take, skip) {
-      const term = q.trim();
-      return db.material.findMany({
-        where: {
-          deleted_at: null, is_active: true, material_type: 'FINISHED', subassembly: null,
-          ...(term ? { OR: [{ imm_code: { contains: term } }, { item_name: { contains: term } }, { drawing_no: { contains: term } }] } : {}),
-        },
-        select: { id: true, imm_code: true, item_name: true, drawing_no: true },
-        orderBy: { imm_code: 'asc' },
-        skip,
-        take,
-      });
-    },
-
-    /** Active prefixes and units, for creating a subassembly's item. */
+    /** Active units, for creating a subassembly's item (counted in Nos). */
     async itemSetup() {
-      const [prefixes, units] = await Promise.all([
-        db.immPrefix.findMany({ where: { is_active: true }, select: { id: true, prefix: true, separator: true, digits: true, next_number: true, description: true }, orderBy: { prefix: 'asc' } }),
-        db.unitOfMeasure.findMany({ where: { is_active: true }, select: { id: true, code: true, name: true }, orderBy: [{ sort_order: 'asc' }, { code: 'asc' }] }),
-      ]);
-      return { prefixes, units };
+      const units = await db.unitOfMeasure.findMany({ where: { is_active: true }, select: { id: true, code: true, name: true }, orderBy: [{ sort_order: 'asc' }, { code: 'asc' }] });
+      return { units };
     },
 
     /** Highest revision number so far. @param {number} subId */
@@ -218,15 +197,23 @@ function createSubassemblyRepository(db) {
     },
 
     /**
-     * Changes a subassembly's name / drawing no. (its item follows), and
-     * gives one made before items existed its item via `makeItem(tx)`.
+     * Changes a subassembly's name / drawing no. — its item follows, the code
+     * too (it is the drawing no.) — and gives one made before items existed
+     * its item via `makeItem(tx)`.
      */
     updateDetails(id, data, makeItem) {
       return db.$transaction(async (tx) => {
         if (makeItem) data.material_id = await makeItem(tx);
-        const s = await tx.subassembly.update({ where: { id }, data, select: { material_id: true, name: true, drawing_no: true } });
+        const s = await tx.subassembly.update({ where: { id }, data, select: { material_id: true, name: true, drawing_no: true, material: { select: { prefix_id: true } } } });
         if (s.material_id) {
-          await tx.material.update({ where: { id: s.material_id }, data: { item_name: s.name, drawing_no: s.drawing_no, updated_by: data.updated_by ?? null } });
+          await tx.material.update({
+            where: { id: s.material_id },
+            data: {
+              item_name: s.name, drawing_no: s.drawing_no, updated_by: data.updated_by ?? null,
+              // An older item that still has an IMM code keeps it.
+              ...(s.material?.prefix_id ? {} : { imm_code: s.drawing_no }),
+            },
+          });
         }
       });
     },
@@ -284,7 +271,7 @@ function createSubassemblyRepository(db) {
 
     /** A live department. @param {number} id */
     findDepartment(id) {
-      return db.department.findFirst({ where: active({ id }), select: { id: true, name: true, dept_no: true } });
+      return db.department.findFirst({ where: active({ id }), select: { id: true, name: true, dept_code: true } });
     },
 
     /** id → name, for "released by" / "made by". @param {number[]} ids */
@@ -295,12 +282,19 @@ function createSubassemblyRepository(db) {
       return new Map(rows.map((u) => [u.id, u.name]));
     },
 
-    /** Deletes a subassembly together with its own item. */
+    /**
+     * Deletes a subassembly together with its own item. The item's code (its
+     * drawing no.) gets a "DEL<id>~" mark so the drawing no. can be used again.
+     */
     softDelete(id, materialId, actorId) {
       const now = new Date();
       return db.$transaction(async (tx) => {
         await tx.subassembly.update({ where: { id }, data: { deleted_at: now, updated_by: actorId } });
-        if (materialId) await tx.material.update({ where: { id: materialId }, data: { deleted_at: now, updated_by: actorId } });
+        if (materialId) {
+          const m = await tx.material.findUnique({ where: { id: materialId }, select: { imm_code: true, prefix_id: true } });
+          const code = m && !m.prefix_id ? `DEL${materialId}~${m.imm_code}`.slice(0, 100) : undefined;
+          await tx.material.update({ where: { id: materialId }, data: { deleted_at: now, updated_by: actorId, ...(code ? { imm_code: code } : {}) } });
+        }
       });
     },
   };

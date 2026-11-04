@@ -16,7 +16,8 @@ const { NotFoundError, ConflictError, ValidationError } = require('../../core');
  *     BOM locked before. Changing a locked BOM means a new draft revision.
  *   - A **Finished part** is held at a drawing revision the same way, and its
  *     tags record that revision.
- *   - **Tags**: Machine ID - dept no. - subassembly IMM code(s) - part IMM code.
+ *   - **Tags**: Machine ID - department code - subassembly drawing no.(s) - part IMM code
+ *     (a subassembly's code is its drawing no.).
  *     A subassembly or Finished part needed n times (a whole number) gets one
  *     tag per piece: …/1, …/2 (a single one: no suffix); each piece's own parts
  *     are tagged under it. Bought-out and consumable parts get one tag carrying
@@ -29,6 +30,7 @@ const { NotFoundError, ConflictError, ValidationError } = require('../../core');
  */
 function createBomService(repository) {
   const MAX_TAGS = 20000;
+  const MAX_TAG_LENGTH = 500; // the tag column's size
   const MAX_LEVELS = 12;
   const round = (n) => Math.round(n * 1e6) / 1e6;
   const fail = (field, message) => new ValidationError('Validation failed', [{ field, message }]);
@@ -135,7 +137,7 @@ function createBomService(repository) {
 
   /**
    * Explodes lines into tags. `lines` carry machine_id, quantity, material
-   * (brief), child_revision / part_revision ({ id, rev }) and department ({ name, dept_no }).
+   * (brief), child_revision / part_revision ({ id, rev }) and department ({ name, dept_code }).
    * @returns {Promise<Array<object>>} tags in order, as ProjectBomItem rows (without bom_id)
    */
   async function explode(project, lines) {
@@ -158,9 +160,10 @@ function createBomService(repository) {
       if (sub && path.has(sub.id)) throw new ConflictError(`${m.imm_code} contains itself further down — fix that subassembly first`);
       const n = round(times * Number(qtyPerParent));
       const split = m.material_type === 'FINISHED' && Number.isInteger(n) && n >= 1;
-      const base = parentTag ? `${parentTag}-${m.imm_code}` : `${machine.machine_no}-${dept.dept_no}-${m.imm_code}`;
+      const base = parentTag ? `${parentTag}-${m.imm_code}` : `${machine.machine_no}-${dept.dept_code}-${m.imm_code}`;
       const copies = split ? Array.from({ length: n }, (_, k) => ({ tag: n > 1 ? `${base}/${k + 1}` : base, quantity: 1 })) : [{ tag: base, quantity: n }];
       if (items.length + copies.length > MAX_TAGS) throw new ConflictError(`This BOM would have more than ${MAX_TAGS} tags — check the quantities`);
+      if (copies.at(-1).tag.length > MAX_TAG_LENGTH) throw new ConflictError(`A tag under ${parentTag || machine.machine_no} would be longer than ${MAX_TAG_LENGTH} characters — the structure is too deep or its drawing numbers too long`);
       const children = rev ? await linesOf(rev.id) : [];
       const nextPath = sub ? new Set(path).add(sub.id) : path;
       for (const c of copies) {
@@ -169,7 +172,7 @@ function createBomService(repository) {
           material_id: m.id, is_subassembly: Boolean(sub), revision_id: rev?.id ?? null,
           part_revision_id: sub ? null : part?.id ?? null, rev: rev?.rev ?? (sub ? null : part?.rev ?? null),
           imm_code: m.imm_code, item_name: m.item_name, drawing_no: m.drawing_no ?? null, material_type: m.material_type,
-          material_text: m.material, technical_spec: null, uom: m.uom?.code ?? '', dept_no: dept.dept_no, department: dept.name ?? null,
+          material_text: m.material, technical_spec: null, uom: m.uom?.code ?? '', dept_code: dept.dept_code, department: dept.name ?? null,
           qty_per_parent: Number(qtyPerParent), quantity: c.quantity, has_children: children.length > 0,
         });
         for (const ch of children) {
@@ -221,7 +224,7 @@ function createBomService(repository) {
   async function itemsOf(project, bom, machineId) {
     if (bom.status !== 'DRAFT') return storedItems(bom.id, machineId);
     const lines = bom.lines.filter((l) => !machineId || l.machine_id === machineId);
-    const ready = lines.filter((l) => l.department?.dept_no != null);
+    const ready = lines.filter((l) => l.department?.dept_code != null);
     return explode(project, ready);
   }
 
@@ -235,7 +238,7 @@ function createBomService(repository) {
       if (!machines.has(l.machine_id)) out.push(`${at}: its machine was removed from the project.`);
       if (l.material.deleted_at) out.push(`${at}: the material was deleted.`);
       if (!l.department || l.department.deleted_at) out.push(`${at}: choose the department it comes from.`);
-      else if (l.department.dept_no == null) out.push(`${at}: ${l.department.name} has no department no. yet (Administrator → Departments).`);
+      else if (l.department.dept_code == null) out.push(`${at}: ${l.department.name} has no department code yet (Administrator → Configuration → Department Codes).`);
       if (l.material.subassembly && !l.material.subassembly.deleted_at && !l.child_revision) out.push(`${at}: no revision held.`);
     });
     return out;
@@ -368,9 +371,9 @@ function createBomService(repository) {
       };
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, sheet(
-        ['Tag', 'Machine ID', 'Level', 'IMM code', 'Item name', 'Rev', 'Drawing no.', 'Type', 'Material', 'Technical specification', 'Dept no.', 'Department', 'Qty per parent', 'Quantity', 'Unit'],
+        ['Tag', 'Machine ID', 'Level', 'IMM code', 'Item name', 'Rev', 'Drawing no.', 'Type', 'Material', 'Technical specification', 'Dept code', 'Department', 'Qty per parent', 'Quantity', 'Unit'],
         items.map((i) => [i.tag, machineNo.get(i.machine_id) ?? '', i.level, i.imm_code, i.item_name, i.rev ?? '', i.drawing_no ?? '', TYPE[i.material_type] ?? i.material_type,
-          i.material_text, i.technical_spec ?? '', i.dept_no, i.department ?? '', Number(i.qty_per_parent), Number(i.quantity), i.uom]),
+          i.material_text, i.technical_spec ?? '', i.dept_code, i.department ?? '', Number(i.qty_per_parent), Number(i.quantity), i.uom]),
       ), 'Tags');
       const t = totalsOf(project, items);
       const mHead = t.machines.map((m) => m.machine_no);

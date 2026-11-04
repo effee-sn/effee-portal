@@ -34,23 +34,24 @@ before(async () => {
 
   made.prefix = (await materials.createPrefix({ prefix: tag, separator: '-', digits: 3 }, actor)).id;
   const uom = (await prisma.unitOfMeasure.findUnique({ where: { code: 'Nos' } })).id;
-  const deptNo = 700 + Math.floor(Math.random() * 99);
-  fx.dept = await departments.create({ name: `${tag} Mechanical`, dept_no: deptNo }, actor);
+  fx.dept = await departments.create({ name: `${tag} Mechanical` }, actor);
+  // Its code, set as in Configuration → Department Codes.
+  await projects.setDepartmentCode(fx.dept.id, { code: `M${tag.slice(-6)}` }, actor);
+  fx.dept.dept_code = `M${tag.slice(-6)}`;
   fx.noNumber = await departments.create({ name: `${tag} Unnumbered` }, actor);
   made.depts.push(fx.dept.id, fx.noNumber.id);
 
   const part = (name, type) => ({ prefix_id: made.prefix, uom_id: uom, item_name: `${tag} ${name}`, description: 'd', technical_spec: `${name} spec v1`, material_type: type, material: 'MS' });
   [fx.tube, fx.bracket, fx.bolt] = await materials.createBulk({ rows: [part('Tube', 'BOUGHT_OUT'), part('Bracket', 'FINISHED'), part('Bolt', 'CONSUMABLE')] }, actor);
-  const item = { mode: 'new', prefix_id: made.prefix, uom_id: uom };
   const released = async (name, dwg, items) => {
-    const s = await subs.create({ name, drawing_no: `${tag}-${dwg}`, department_id: fx.dept.id, items, item }, actor);
+    const s = await subs.create({ name, drawing_no: `${tag}-${dwg}`, department_id: fx.dept.id, items }, actor);
     made.subs.push(s.id);
     return subs.release(s.id, s.draft.id, {}, actor);
   };
   // Coil = 10 tube + 2 bracket; Pack = 2 coil + 8 bolt.
   fx.coil = await released('Coil', 'CO', [{ material_id: fx.tube.id, quantity: 10 }, { material_id: fx.bracket.id, quantity: 2 }]);
   fx.pack = await released('Pack', 'PK', [{ material_id: fx.coil.material.id, quantity: 2 }, { material_id: fx.bolt.id, quantity: 8 }]);
-  const unreleased = await subs.create({ name: 'Draft only', drawing_no: `${tag}-DO`, items: [{ material_id: fx.tube.id, quantity: 1 }], item }, actor);
+  const unreleased = await subs.create({ name: 'Draft only', drawing_no: `${tag}-DO`, items: [{ material_id: fx.tube.id, quantity: 1 }] }, actor);
   made.subs.push(unreleased.id);
   fx.unreleased = unreleased;
 
@@ -70,10 +71,11 @@ after(async () => {
       await prisma.projectMachine.deleteMany({ where: { project_id: made.project } });
       await prisma.project.delete({ where: { id: made.project } });
     }
+    const subItems = (await prisma.subassembly.findMany({ where: { id: { in: made.subs } }, select: { material_id: true } })).map((x) => x.material_id).filter(Boolean);
     await prisma.subassemblyItem.deleteMany({ where: { subassembly_id: { in: made.subs } } });
     await prisma.subassemblyRevision.deleteMany({ where: { subassembly_id: { in: made.subs } } });
     await prisma.subassembly.deleteMany({ where: { id: { in: made.subs } } });
-    await prisma.material.deleteMany({ where: { prefix_id: made.prefix } });
+    await prisma.material.deleteMany({ where: { OR: [{ prefix_id: made.prefix }, { id: { in: subItems } }] } });
     await prisma.immPrefix.deleteMany({ where: { id: made.prefix } });
     await prisma.department.deleteMany({ where: { id: { in: made.depts } } });
   } finally { await prisma.$disconnect(); }
@@ -106,7 +108,7 @@ describe('Project BOM', () => {
     assert.ok(d.problems.some((p) => /choose the department/.test(p)), 'the loose bolt has no department yet');
     await assert.rejects(boms.lock(made.project, rev1.id, {}, actor), { name: 'ValidationError' });
     const unnumbered = await boms.saveDraft(made.project, rev1.id, { lines: [line(fx.m2, fx.bolt, 4, { department_id: fx.noNumber.id })] }, actor);
-    assert.ok(unnumbered.problems.some((p) => /no department no/.test(p)));
+    assert.ok(unnumbered.problems.some((p) => /no department code/.test(p)));
     const ok = await boms.saveDraft(made.project, rev1.id, { lines: [
       line(fx.m1, fx.pack.material, 1),
       line(fx.m2, fx.coil.material, 3),
@@ -125,7 +127,7 @@ describe('Project BOM', () => {
     const o = await boms.lock(made.project, rev1.id, {}, actor);
     assert.equal(o.current.rev, 1);
     assert.equal(o.current.change_note, 'First lock');
-    const dn = fx.dept.dept_no;
+    const dn = fx.dept.dept_code;
     const P = fx.pack.material.imm_code; const C = fx.coil.material.imm_code;
     const m1 = (await boms.tags(made.project, rev1.id, fx.m1.id)).items;
     const byTag = new Map(m1.map((i) => [i.tag, i]));

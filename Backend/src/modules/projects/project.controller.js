@@ -70,6 +70,14 @@ const setMachineNumbering = async (req, res) => {
   ApiResponse.ok(res, await projectService.setMachineNumbering(req.body, requestContext(req)));
 };
 
+/** `GET /projects/department-codes` */
+const getDepartmentCodes = async (req, res) => ApiResponse.ok(res, await projectService.listDepartmentCodes());
+
+/** `PUT /projects/department-codes/:departmentId` — `{ code }`, null to clear. */
+const setDepartmentCode = async (req, res) => {
+  ApiResponse.ok(res, await projectService.setDepartmentCode(req.params.departmentId, req.body, requestContext(req)));
+};
+
 module.exports = {
   getProjects,
   getEnquiryOptions,
@@ -82,4 +90,6 @@ module.exports = {
   removeMachine,
   getMachineNumbering,
   setMachineNumbering,
+  getDepartmentCodes,
+  setDepartmentCode,
 };

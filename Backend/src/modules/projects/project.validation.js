@@ -86,6 +86,18 @@ const machineNumberingBody = z.object({
   next_number: z.coerce.number().int().min(1, 'Starts at 1 or more').max(9_999_999_999),
 }).partial().refine((d) => Object.values(d).some((v) => v !== undefined), { message: 'Nothing to update' });
 
+// A department's code for project tag numbers: letters, numbers and hyphens,
+// up to 10, kept in capitals; null (or blank) clears it.
+const departmentCodeParam = z.object({ departmentId: z.coerce.number().int().positive() });
+const departmentCodeBody = z.object({
+  code: z.preprocess(
+    (v) => (typeof v === 'string' && !v.trim() ? null : v),
+    z.string().trim().toUpperCase().max(10, 'At most 10 characters')
+      .regex(/^[A-Z0-9]+(-[A-Z0-9]+)*$/, 'Letters, numbers and single hyphens only (e.g. ELE, 12, PS-01)')
+      .nullable(),
+  ),
+});
+
 module.exports = {
   STATUSES,
   listProjectsQuery,
@@ -96,4 +108,6 @@ module.exports = {
   addMachinesBody,
   updateMachineBody,
   machineNumberingBody,
+  departmentCodeParam,
+  departmentCodeBody,
 };

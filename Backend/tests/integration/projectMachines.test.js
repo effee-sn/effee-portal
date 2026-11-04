@@ -38,9 +38,11 @@ after(async () => {
   try {
     await prisma.projectMachine.deleteMany({ where: { project_id: { in: made.projects } } });
     await prisma.project.deleteMany({ where: { id: { in: made.projects } } });
+    const subItems = (await prisma.subassembly.findMany({ where: { id: { in: made.subs } }, select: { material_id: true } })).map((x) => x.material_id).filter(Boolean);
     await prisma.subassemblyItem.deleteMany({ where: { subassembly_id: { in: made.subs } } });
     await prisma.subassemblyRevision.deleteMany({ where: { subassembly_id: { in: made.subs } } });
     await prisma.subassembly.deleteMany({ where: { id: { in: made.subs } } });
+    await prisma.material.deleteMany({ where: { id: { in: subItems } } });
     if (made.prefix) {
       await prisma.material.deleteMany({ where: { prefix_id: made.prefix } });
       await prisma.immPrefix.deleteMany({ where: { id: made.prefix } });
@@ -102,29 +104,32 @@ describe('Machine IDs', () => {
   });
 });
 
-describe('Department numbers and a subassembly\'s department', () => {
-  it('a department no. is unique among live departments', async () => {
-    const no = 900 + Math.floor(Math.random() * 99);
-    const d1 = await departments.create({ name: `${tag} Mechanical`, dept_no: no }, actor);
-    made.depts.push(d1.id);
-    assert.equal(d1.dept_no, no);
-    await assert.rejects(departments.create({ name: `${tag} Electrical`, dept_no: no }, actor), { name: 'ConflictError' });
+describe('Department codes and a subassembly\'s department', () => {
+  it('a department code is set in Configuration, unique among live departments', async () => {
+    const code = `E${tag.slice(-6)}`;
+    const d1 = await departments.create({ name: `${tag} Mechanical` }, actor);
     const d2 = await departments.create({ name: `${tag} Electrical` }, actor);
-    made.depts.push(d2.id);
-    await assert.rejects(departments.update(d2.id, { dept_no: no }, actor), { name: 'ConflictError' });
-    assert.equal((await departments.update(d2.id, { dept_no: no + 1 }, actor)).dept_no, no + 1);
-    assert.equal((await departments.update(d2.id, { dept_no: null }, actor)).dept_no, null, 'cleared');
-    made.dept = d1;
+    made.depts.push(d1.id, d2.id);
+    const list = await projects.setDepartmentCode(d1.id, { code }, actor);
+    assert.equal(list.find((d) => d.id === d1.id).dept_code, code);
+    await assert.rejects(projects.setDepartmentCode(d2.id, { code }, actor), { name: 'ConflictError' }, 'taken by d1');
+    await projects.setDepartmentCode(d2.id, { code: `${code}-2` }, actor);
+    const cleared = await projects.setDepartmentCode(d2.id, { code: null }, actor);
+    assert.equal(cleared.find((d) => d.id === d2.id).dept_code, null, 'cleared');
+    await assert.rejects(projects.setDepartmentCode(999999999, { code: 'X' }, actor), { name: 'NotFoundError' });
+    made.dept = { ...d1, dept_code: code };
   });
 
   it('a subassembly records the department it comes from', async () => {
-    made.prefix = (await materials.createPrefix({ prefix: tag, separator: '-', digits: 4 }, actor)).id;
-    const uom = (await prisma.unitOfMeasure.findUnique({ where: { code: 'Nos' } })).id;
-    const s = await subs.create({ name: 'Frame', drawing_no: `${tag}-FR`, department_id: made.dept.id, item: { mode: 'new', prefix_id: made.prefix, uom_id: uom } }, actor);
+    const s = await subs.create({ name: 'Frame', drawing_no: `${tag}-FR`, department_id: made.dept.id }, actor);
     made.subs.push(s.id);
-    assert.equal(s.department.dept_no, made.dept.dept_no);
+    assert.equal(s.department.dept_code, made.dept.dept_code);
     const cleared = await subs.updateDetails(s.id, { department_id: null }, actor);
     assert.equal(cleared.department, null);
     await assert.rejects(subs.updateDetails(s.id, { department_id: 999999999 }, actor), { name: 'ValidationError' });
+    const uncoded = await departments.create({ name: `${tag} No code` }, actor);
+    made.depts.push(uncoded.id);
+    await assert.rejects(subs.updateDetails(s.id, { department_id: uncoded.id }, actor), { name: 'ValidationError' }, 'a department without a code can\'t be chosen');
+    await assert.rejects(subs.create({ name: 'Other', drawing_no: `${tag}-OT`, department_id: uncoded.id }, actor), { name: 'ValidationError' });
   });
 });

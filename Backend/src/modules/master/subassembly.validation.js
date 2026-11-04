@@ -20,20 +20,8 @@ const items = z.array(z.object({
     .refine((v) => Math.abs(v * 1000 - Math.round(v * 1000)) < 1e-6, 'At most 3 decimals'),
 })).max(500, 'At most 500 lines on one revision');
 
-// How a subassembly gets its own item: a new IMM code, or an existing Finished material.
-const item = z.discriminatedUnion('mode', [
-  z.object({
-    mode: z.literal('new'),
-    prefix_id: z.coerce.number({ invalid_type_error: 'Choose an IMM code prefix' }).int().positive('Choose an IMM code prefix'),
-    uom_id: z.coerce.number({ invalid_type_error: 'Choose a unit' }).int().positive('Choose a unit'),
-    description: z.string().trim().max(5000).optional().nullable(),
-  }),
-  z.object({
-    mode: z.literal('existing'),
-    material_id: z.coerce.number({ invalid_type_error: 'Choose the material' }).int().positive('Choose the material'),
-  }),
-], { errorMap: () => ({ message: 'Choose how this subassembly gets its IMM code' }) });
-
+// A subassembly is identified by its drawing no. — its own item in the material
+// master is made with it (code = drawing no.), so there's nothing to choose.
 const fields = {
   name: z.string({ required_error: 'Subassembly name is required' }).trim().min(1, 'Subassembly name is required').max(191),
   drawing_no: z.string({ required_error: 'Drawing no. is required' }).trim().min(1, 'Drawing no. is required').max(100),
@@ -41,9 +29,9 @@ const fields = {
   department_id: z.preprocess((v) => (v === '' ? null : v), z.coerce.number().int().positive().nullable().optional()),
 };
 
-const createSubassemblyBody = z.object({ ...fields, items: items.optional(), item });
+const createSubassemblyBody = z.object({ ...fields, items: items.optional() });
 // Lines change through revisions (draftBody), not here.
-const updateSubassemblyBody = z.object({ ...fields, item }).partial().refine(
+const updateSubassemblyBody = z.object({ ...fields }).partial().refine(
   (d) => Object.values(d).some((v) => v !== undefined), { message: 'Nothing to update' },
 );
 
