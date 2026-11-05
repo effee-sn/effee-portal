@@ -12,6 +12,18 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|string[]|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.12.2',
+    date: '2026-11-05',
+    items: [
+      {
+        icon: 'spark',
+        title: 'Exact amounts on the dashboards',
+        text: 'Use the Short / Full switch at the top right of the dashboard: Full shows every amount exactly (₹33,79,12,345.00) in your chosen currency — on the dashboards, the enquiry list and the Kanban.',
+        perm: 'SALES_VIEW',
+      },
+    ],
+  },
+  {
     version: '1.12.1',
     date: '2026-11-03',
     items: [

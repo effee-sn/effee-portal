@@ -17,7 +17,8 @@ export function Stat({ label, value, sub, title, tone }) {
   return (
     <div className="bg-white px-4 py-3.5 min-w-0" title={title}>
       <p className="text-[11px] font-medium uppercase tracking-wider text-gray-500">{label}</p>
-      <p className={`text-xl font-semibold tabular-nums mt-1 leading-tight ${tone === 'warning' ? 'text-amber-700' : 'text-gray-900'}`}>{value}</p>
+      {/* Full amounts (₹33,79,12,345.00) wrap rather than spill out of a narrow tile. */}
+      <p className={`text-xl font-semibold tabular-nums mt-1 leading-tight [overflow-wrap:anywhere] ${tone === 'warning' ? 'text-amber-700' : 'text-gray-900'}`}>{value}</p>
       {sub && <p className="text-xs text-gray-500 mt-0.5 truncate">{sub}</p>}
     </div>
   );

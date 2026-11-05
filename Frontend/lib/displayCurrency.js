@@ -31,18 +31,39 @@ const subscribe = (cb) => {
   return () => { window.removeEventListener(EVENT, cb); window.removeEventListener('storage', cb); };
 };
 
+/*
+ * Short or full amounts — the switch at the top right of the dashboards.
+ * "Short" reads ₹33.79 Crore / €3.82 Million; "Full" shows the exact figure
+ * (₹33,79,12,345.00, €3,820,000.00) in every currency's own grouping, so totals
+ * can be checked to the rupee. Remembered per browser; short until changed.
+ */
+const STYLE_KEY = 'amount-style';
+const STYLE_EVENT = 'amount-style-change';
+const readStyle = () => {
+  try { return window.localStorage.getItem(STYLE_KEY) === 'full' ? 'full' : 'short'; }
+  catch { return 'short'; }
+};
+const subscribeStyle = (cb) => {
+  window.addEventListener(STYLE_EVENT, cb);
+  window.addEventListener('storage', cb);
+  return () => { window.removeEventListener(STYLE_EVENT, cb); window.removeEventListener('storage', cb); };
+};
+
 /**
  * Formatters for amounts already in a currency: `format` the full figure,
- * `compact` the short one in words (₹38.18 Lakh, €3.82 Million).
- * @param {string} code @param {string} [symbol]
+ * `compact` the short one in words (₹38.18 Lakh, €3.82 Million) — or, with the
+ * amount style "full", the full figure too.
+ * @param {string} code @param {string} [symbol] @param {'short'|'full'} [style]
  */
-export function formatterFor(code = 'INR', symbol) {
+export function formatterFor(code = 'INR', symbol, style = 'short') {
   const isInr = code === 'INR';
   const blank = (v) => v === null || v === undefined || v === '' || Number.isNaN(Number(v));
+  const format = (v) => (blank(v) ? '—' : formatMoney(Number(v), code, isInr ? '₹' : symbol));
   return {
     code,
-    format: (v) => (blank(v) ? '—' : formatMoney(Number(v), code, isInr ? '₹' : symbol)),
-    compact: (v) => (blank(v) ? '—' : shortMoney(Number(v), code, isInr ? '₹' : symbol)),
+    style,
+    format,
+    compact: style === 'full' ? format : (v) => (blank(v) ? '—' : shortMoney(Number(v), code, isInr ? '₹' : symbol)),
   };
 }
 
@@ -54,6 +75,7 @@ export function formatterFor(code = 'INR', symbol) {
 export function useDisplayCurrency() {
   const currencies = useCurrencies();
   const picked = useSyncExternalStore(subscribe, read, () => 'INR');
+  const style = useSyncExternalStore(subscribeStyle, readStyle, () => 'short');
   const list = useMemo(() => currencies?.list || [], [currencies]);
   // A currency since made inactive (or not loaded yet) falls back to INR.
   const code = list.some((c) => c.code === picked) ? picked : 'INR';
@@ -61,12 +83,39 @@ export function useDisplayCurrency() {
   return useMemo(() => ({
     code,
     list,
+    style,
     setCode: (next) => {
       try { window.localStorage.setItem(KEY, next); } catch { /* not remembered in private mode */ }
       window.dispatchEvent(new Event(EVENT));
     },
-    formatterFor: (c) => formatterFor(c || 'INR', list.find((x) => x.code === c)?.symbol),
-  }), [code, list]);
+    setStyle: (next) => {
+      try { window.localStorage.setItem(STYLE_KEY, next === 'full' ? 'full' : 'short'); } catch { /* not remembered in private mode */ }
+      window.dispatchEvent(new Event(STYLE_EVENT));
+    },
+    formatterFor: (c) => formatterFor(c || 'INR', list.find((x) => x.code === c)?.symbol, style),
+  }), [code, list, style]);
+}
+
+/**
+ * Short / Full amounts switch (top right of the dashboards). Every short
+ * amount that follows the display currency follows it too — dashboards, the
+ * enquiry list and Kanban.
+ * @param {{ money: ReturnType<typeof useDisplayCurrency> }} props
+ */
+export function AmountStyleSwitch({ money }) {
+  const opt = (value, label, hint) => (
+    <button type="button" onClick={() => money.setStyle(value)} aria-pressed={money.style === value} title={hint}
+      className={`px-2.5 py-1 text-xs font-medium cursor-pointer ${money.style === value
+        ? 'bg-[var(--ams-primary)] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+      {label}
+    </button>
+  );
+  return (
+    <div role="group" aria-label="Amounts" className="inline-flex shrink-0 rounded border border-gray-300 overflow-hidden">
+      {opt('short', 'Short', 'Amounts in words: ₹33.79 Crore, €3.82 Million')}
+      {opt('full', 'Full', 'Exact amounts: ₹33,79,12,345.00 — in each currency’s own grouping')}
+    </div>
+  );
 }
 
 /** Lets the charts and rows inside a page format amounts in the page's currency. */

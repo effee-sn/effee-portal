@@ -15,7 +15,7 @@ import { PRESETS, presetRange } from '@/lib/periods';
 import PeriodPicker from '@/components/PeriodPicker';
 import { formatMoney } from '@/lib/money';
 import ValueBasis from '@/components/sales/ValueBasis';
-import { DisplayCurrencyContext, useDisplayCurrency, useMoney } from '@/lib/displayCurrency';
+import { DisplayCurrencyContext, useDisplayCurrency, useMoney, AmountStyleSwitch } from '@/lib/displayCurrency';
 
 /**
  * Sales → Dashboard. How the sales team is doing over a period: headline
@@ -337,6 +337,7 @@ export default function SalesDashboardPage() {
               {refreshing && data && <span className="ml-2 text-gray-400">Updating…</span>}
             </p>
           </div>
+          <AmountStyleSwitch money={dc} />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

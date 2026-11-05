@@ -5,7 +5,7 @@ import Link from 'next/link';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
 import { apiGet } from '@/lib/api';
-import { useDisplayCurrency } from '@/lib/displayCurrency';
+import { useDisplayCurrency, AmountStyleSwitch } from '@/lib/displayCurrency';
 import {
   ACTIVE_STAGES, TEMPERATURE_STYLE, isAging, stageAgeDays,
 } from '@/lib/salesOptions';
@@ -175,7 +175,10 @@ export default function DashboardPage() {
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">{user?.role}</p>
         </div>
-        <p className="text-xs text-gray-400">{today}</p>
+        <div className="flex items-center gap-3">
+          <p className="text-xs text-gray-400">{today}</p>
+          <AmountStyleSwitch money={dc} />
+        </div>
       </header>
 
       {/* Needs your attention */}

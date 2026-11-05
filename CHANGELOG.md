@@ -13,6 +13,17 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.12.2] — 2026-11-05
+
+### Added — Short / Full amounts
+
+- A **Short / Full** switch at the top right of the home and Sales dashboards. **Short** reads ₹33.79 Crore, €3.82 Million as before; **Full** shows the exact amount (₹33,79,12,345.00) in each currency's own grouping — lakh/crore for ₹, thousands/millions for others — in the currency chosen in the navbar.
+- One choice, remembered in the browser, followed by the dashboard tiles and tables, the enquiry list and the Kanban — so totals can be checked to the rupee instead of adding rounded figures.
+
+**Upgrade:** frontend only — pull, then in Frontend `npm ci` and `npm run build`; restart effee-web.
+
+---
+
 ## [1.12.1] — 2026-11-03
 
 ### Improved — the document viewer
