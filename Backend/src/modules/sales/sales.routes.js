@@ -47,7 +47,7 @@ router.use(authenticate);
 router.get('/workflow', authorize(...SEE), asyncHandler(getWorkflow));
 router.put(
   '/workflow',
-  authorize('SALES_EDIT'),
+  authorize('SALES_EDIT', 'SALES_CONFIG_EDIT'),
   validate({ body: updateWorkflowBody }),
   asyncHandler(updateWorkflow)
 );
@@ -296,7 +296,7 @@ router.put(
 
 router.delete(
   '/attachments/:id',
-  authorize('SALES_EDIT'),
+  authorize('SALES_EDIT', 'SALES_EDIT_OWN'),
   validate({ params: attachmentValidation.attachmentIdParam }),
   asyncHandler(deleteAttachment)
 );

@@ -82,14 +82,15 @@ function createEnquiryService(repository) {
 
   /**
    * An update. Moving the stage is the holder's work (the flow gives access);
-   * anything else is the enquiry's details — the raiser's, with Sales → Edit;
-   * changing the owner is a reassignment.
+   * anything else is the enquiry's details — Sales → Edit on any open enquiry,
+   * or the raiser's with Sales own → Edit; changing the owner is a reassignment.
    * @throws {ForbiddenError}
    */
   function assertCanUpdate(enquiry, dto, actor) {
     if (actor?.is_system) return;
-    assertFlowWork(enquiry, actor, 'update this enquiry');
     const details = Object.keys(dto).filter((k) => dto[k] !== undefined && k !== 'stage');
+    const moving = dto.stage !== undefined && dto.stage !== enquiry.stage;
+    if (moving || !details.length) assertFlowWork(enquiry, actor, 'update this enquiry');
     if (details.length) assertDetailsEdit(enquiry, actor);
     if (dto.owner_id !== undefined && dto.owner_id !== null && dto.owner_id !== enquiry.owner_id && !canReassign(actor)) {
       throw new ForbiddenError('You need the Sales reassign permission to change the owner');

@@ -92,7 +92,8 @@ export default function EnquiryAttachments({
   // canDelete: Sales → Edit (defaults to canManage).
   // finalCost: the enquiry's final costing value — each offer shows its margin
   // over it. canCost: may enter it (the holder, Costing Review → Negotiation).
-  enquiryId, canEdit, canManage = canEdit, canDelete = canManage, owns = () => true, kinds = ALL_KINDS, bare = false, onChanged, currencyCode = 'INR', currencySymbol,
+  // canSend: mark an offer sent / withdraw its approval request — the holder's (defaults to canManage).
+  enquiryId, canEdit, canManage = canEdit, canDelete = canManage, canSend = canManage, owns = () => true, kinds = ALL_KINDS, bare = false, onChanged, currencyCode = 'INR', currencySymbol,
   finalCost = null, canCost = false,
 }) {
   const [items, setItems]   = useState([]);
@@ -459,7 +460,7 @@ export default function EnquiryAttachments({
                         {a.approval?.state === 'WAITING' && (
                           <p className="text-[11px] text-amber-700">
                             Waiting for approval from {a.approval.waiting_for} — price locked until it is decided
-                            {canManage && a.approval.can_withdraw && (
+                            {canSend && a.approval.can_withdraw && (
                               <button type="button" onClick={() => withdrawApproval(a)} disabled={busy}
                                 className="ml-2 text-gray-600 hover:text-gray-900 hover:underline cursor-pointer">Withdraw request</button>
                             )}
@@ -476,9 +477,9 @@ export default function EnquiryAttachments({
                           </p>
                         )}
                       </div>
-                      {canManage && (
+                      {(canSend || canDelete) && (
                         <div className="flex items-center gap-2 shrink-0 pt-0.5">
-                          {a.approval?.state === 'WAITING' ? (
+                          {!canSend ? null : a.approval?.state === 'WAITING' ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 text-amber-800 text-xs font-medium"
                               title={`Waiting for approval from ${a.approval.waiting_for}`}>
                               ⏳ Waiting for approval

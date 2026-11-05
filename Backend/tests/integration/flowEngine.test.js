@@ -314,7 +314,7 @@ describe('Flow engine: catalog', () => {
 // ═════════════════════════════════════════════════════════════════════════════
 // Part 2 — the blocks, on real enquiries.
 // ═════════════════════════════════════════════════════════════════════════════
-const FULL = ['SALES_VIEW', 'SALES_CREATE', 'SALES_EDIT'];
+const FULL = ['SALES_VIEW', 'SALES_CREATE', 'SALES_EDIT_OWN'];
 const as = (user) => ({ id: user.id, email: user.email, permissions: FULL });
 const n = (id, type, data) => ({ id, type, data, position: { x: 0, y: 0 } });
 const a = (source, target, sourceHandle) => ({ id: `${source}-${sourceHandle || 'next'}-${target}`, source, target, ...(sourceHandle ? { sourceHandle } : {}) });

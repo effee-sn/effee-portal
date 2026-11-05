@@ -12,7 +12,7 @@ const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wide
  * and a single Internal Sales handler selected here — it is not a step
  * workflow, so it lives as its own card rather than a Workflow row.
  *
- * Saving hits `/sales/workflow` (SALES_EDIT); pass `canEdit` to enable it.
+ * Saving hits `/sales/workflow` (Sales → Edit or Sales configuration → Edit); pass `canEdit` to enable it.
  */
 export default function SalesWorkflowCard({ canEdit = false }) {
   const [users, setUsers]           = useState([]);

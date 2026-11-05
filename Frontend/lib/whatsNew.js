@@ -12,6 +12,18 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|string[]|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.13.0',
+    date: '2026-11-05',
+    items: [
+      {
+        icon: 'lock',
+        title: 'Edit all, or only your own',
+        text: 'Two Sales edit permissions: Sales own → Edit (your own enquiries, as before) and Sales → Edit, which now lets a sales head correct any open enquiry — details, documents and offer prices. Stage moves stay with whoever holds the enquiry. Set them in Roles.',
+        perm: ['ROLE_EDIT', 'SALES_EDIT'],
+      },
+    ],
+  },
+  {
     version: '1.12.2',
     date: '2026-11-05',
     items: [

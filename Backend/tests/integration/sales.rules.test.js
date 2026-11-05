@@ -52,7 +52,7 @@ const suffix = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 // Test users act with full sales rights unless a test narrows them.
-const FULL = ['SALES_VIEW', 'SALES_CREATE', 'SALES_EDIT'];
+const FULL = ['SALES_VIEW', 'SALES_CREATE', 'SALES_EDIT_OWN'];
 const actor = (user, permissions = FULL) => ({ id: user.id, email: user.email, permissions });
 /** The creator without Edit: may work only while their enquiry is at New / Contacted. */
 const creatorOnly = (user) => actor(user, ['SALES_VIEW', 'SALES_CREATE']);
@@ -536,6 +536,52 @@ describe('Sales rules: each person changes only their own data', () => {
     await assert.rejects(activityService.remove(call.id, actor(fx.internal)), { name: 'ForbiddenError' });
     const review = await log(e.id, fx.internal, { type: 'MEETING', subject: 'review', is_review: true });
     await activityService.update(review.id, { minutes: 'notes' }, actor(fx.internal, [...FULL, 'SALES_ACTIVITY_EDIT'])); // its own: fine
+  });
+});
+
+describe('Sales rules: Sales → Edit edits all, Sales own → Edit only your own', () => {
+  // Internal acts on an enquiry Field raised and holds: neither raiser nor holder.
+  const editAll = (user) => actor(user, ['SALES_VIEW', 'SALES_CREATE', 'SALES_EDIT']);
+
+  it('details: Sales → Edit changes any open enquiry; Sales own → Edit does not', async () => {
+    const e = await newEnquiry('GENERATED');
+    await assert.rejects(enquiryService.update(e.id, { title: `TEST other ${suffix}` }, actor(fx.internal)), { name: 'ForbiddenError' });
+    const changed = await enquiryService.update(e.id, { title: `TEST fixed ${suffix}`, expected_value: 250000 }, editAll(fx.internal));
+    assert.equal(changed.title, `TEST fixed ${suffix}`);
+    assert.equal(Number(changed.expected_value), 250000);
+  });
+
+  it('the flow stays the holder\'s: no stage move with Sales → Edit', async () => {
+    const e = await newEnquiry('GENERATED');
+    await upload(e.id, 'FORMAT_PDF', fx.field);
+    await assert.rejects(enquiryService.update(e.id, { stage: 'REVIEW' }, editAll(fx.internal)), { name: 'ForbiddenError' });
+    assert.equal((await state(e.id)).stage, 'NEW');
+  });
+
+  it('documents: Sales → Edit uploads, replaces and deletes anyone\'s; Sales own → Edit only its own', async () => {
+    const e = await newEnquiry('GENERATED');
+    const format = await upload(e.id, 'FORMAT_PDF', fx.field);
+    await assert.rejects(attachmentService.remove(format.id, actor(fx.internal)), { name: 'ForbiddenError' });
+    const replaced = await attachmentService.record(e.id, {
+      originalname: 'format.pdf', filename: `test-${suffix}-${Math.random().toString(36).slice(2)}`, mimetype: 'application/pdf', size: 1,
+    }, { kind: 'FORMAT_PDF' }, editAll(fx.internal));
+    assert.equal(replaced.version, format.version + 1, 'Field\'s document replaced');
+    await attachmentService.remove(replaced.id, editAll(fx.internal)); // and deleted
+  });
+
+  it('offer price: Sales → Edit sets it; marking it sent stays the holder\'s', async () => {
+    const e = await toOfferReleased(); // Internal holds it
+    const offer = await upload(e.id, 'OFFER', fx.internal);
+    await assert.rejects(attachmentService.setOfferValue(offer.id, 120000, actor(fx.field)), { name: 'ForbiddenError' });
+    await attachmentService.setOfferValue(offer.id, 120000, editAll(fx.field));
+    assert.equal(Number((await prisma.enquiryAttachment.findUnique({ where: { id: offer.id } })).offer_value), 120000);
+    await assert.rejects(attachmentService.markSent(offer.id, true, editAll(fx.field)), { name: 'ForbiddenError' });
+  });
+
+  it('a Won or Lost enquiry is closed to Sales → Edit too (reopen first)', async () => {
+    const e = await newEnquiry('GENERATED');
+    await enquiryService.lose(e.id, { lost_reason: 'Not feasible' }, actor(fx.field));
+    await assert.rejects(enquiryService.update(e.id, { title: `TEST late ${suffix}` }, editAll(fx.internal)), { name: 'ForbiddenError' });
   });
 });
 

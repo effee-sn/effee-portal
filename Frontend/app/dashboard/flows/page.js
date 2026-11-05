@@ -379,7 +379,7 @@ function FlowBuilder() {
         <div className="space-y-4">
           <section>
             <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Setup</h2>
-            <SalesWorkflowCard canEdit={me?.is_system || can('SALES_EDIT')} />
+            <SalesWorkflowCard canEdit={me?.is_system || can('SALES_EDIT') || can('SALES_CONFIG_EDIT')} />
           </section>
           <section>
             <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Flows</h2>

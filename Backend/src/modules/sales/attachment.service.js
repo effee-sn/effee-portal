@@ -14,7 +14,7 @@ const { salesEvent } = require('./flowEvents');
 const { checkGuard } = require('../flowengine/guard');
 const { approvalsService } = require('../flowengine/approvals.service');
 const { NotFoundError, BadRequestError, ConflictError, ValidationError } = require('../../core');
-const { assertFullEdit, assertFlowWork, assertOwnItem, assertCanSeeEnquiry } = require('./access');
+const { assertFullEdit, assertFlowWork, assertDocumentWork, assertOwnDocument, assertCanSeeEnquiry } = require('./access');
 
 // Kinds that hold a single *current* document. Re-uploading creates the next
 // version and keeps the old one as superseded history. OFFER is the exception —
@@ -105,8 +105,8 @@ function createAttachmentService(repository) {
       let enquiry;
       try {
         enquiry = await loadEnquiry(enquiryId, actor);
-        // Upload / replace: the creator may too, while the enquiry is at New/Contacted.
-        assertFlowWork(enquiry, actor, 'upload documents on it');
+        // Upload / replace: whoever holds it, or Sales → Edit on any open enquiry.
+        assertDocumentWork(enquiry, actor, 'upload documents on it');
       } catch (err) {
         discard(file); // don't leave the multer-saved file behind
         throw err;
@@ -123,10 +123,10 @@ function createAttachmentService(repository) {
       // current doc becomes superseded history (still downloadable).
       const version = (await repository.maxVersion(enquiryId, dto.kind)) + 1;
       if (SINGLE_KINDS.has(dto.kind)) {
-        // A new version replaces the current one — only its uploader may.
+        // A new version replaces the current one — its uploader may (or Sales → Edit).
         const current = await repository.findCurrent(enquiryId, dto.kind);
         if (current) {
-          try { assertOwnItem(current, actor, 'replace this document'); }
+          try { assertOwnDocument(current, enquiry, actor, 'replace this document'); }
           catch (err) { discard(file); throw err; }
         }
       }
@@ -306,7 +306,7 @@ function createAttachmentService(repository) {
       if (!before) throw new NotFoundError('Attachment');
       if (before.kind !== 'OFFER') throw new ConflictError('Only offers have a price');
       const enquiry = await loadEnquiry(before.enquiry_id, actor);
-      assertFlowWork(enquiry, actor, 'change an offer price');
+      assertDocumentWork(enquiry, actor, 'change an offer price');
       if (before.sent_at && before.offer_value !== null) {
         throw new ConflictError('The price of a sent offer is fixed — upload a revised offer instead');
       }
@@ -337,7 +337,7 @@ function createAttachmentService(repository) {
       if (!before) throw new NotFoundError('Attachment');
       const enquiry = await loadEnquiry(before.enquiry_id, actor);
       assertFullEdit(enquiry, actor, 'delete documents');
-      assertOwnItem(before, actor, 'delete this document');
+      assertOwnDocument(before, enquiry, actor, 'delete this document');
       // History is the record of what was shared and when — previous versions
       // stay. Only the current document (or an offer revision) can be deleted.
       if (before.superseded_at) {

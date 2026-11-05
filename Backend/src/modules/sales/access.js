@@ -14,13 +14,18 @@ const { ForbiddenError, NotFoundError } = require('../../core');
  *   - **Won:** only the person who raised it, while it is with them.
  *     **Lost:** whoever holds it — the raiser, or Internal Sales (e.g. not
  *     feasible).
- *   - **Sales → Edit** (SALES_EDIT) adds, while holding it: editing the
- *     enquiry's details (only the person who raised it) and deleting their
+ *   - **Sales own → Edit** (SALES_EDIT_OWN) adds, while holding it: editing
+ *     the enquiry's details (only the person who raised it) and deleting their
  *     own documents.
- *   - **Your own data only:** a document is replaced or deleted, and an
- *     activity or review edited or deleted, only by whoever added it —
- *     editing your own activities and reviews needs Sales activity → Edit,
- *     deleting them Sales → Delete.
+ *   - **Sales → Edit** (SALES_EDIT) — edit all: on any open enquiry, whoever
+ *     raised or holds it, edit its details, upload / replace / delete anyone's
+ *     documents and set an offer's price (until it is sent or awaits
+ *     approval). Moving the stage, marking offers sent and Won / Lost stay the
+ *     holder's; Won / Lost enquiries are reopened first.
+ *   - **Your own data only:** a document is replaced or deleted (unless with
+ *     Sales → Edit), and an activity or review edited or deleted, only by
+ *     whoever added it — editing your own activities and reviews needs Sales
+ *     activity → Edit, deleting them Sales → Delete.
  *   - **Sales → Reassign** (SALES_REASSIGN): reassign, change the owner,
  *     reopen a closed enquiry.
  *   - **Seeing enquiries:** Sales → View shows all of them. Sales own → View
@@ -29,8 +34,14 @@ const { ForbiddenError, NotFoundError } = require('../../core');
  *   - System users (Super Admin): anything, any time — they fix mistakes.
  */
 
-/** @param {{ is_system?: boolean, permissions?: string[] }} [actor] */
-const hasEdit = (actor) => Boolean(actor?.is_system || actor?.permissions?.includes('SALES_EDIT'));
+/** Sales → Edit: edit all (system users too). @param {{ is_system?: boolean, permissions?: string[] }} [actor] */
+const hasEditAll = (actor) => Boolean(actor?.is_system || actor?.permissions?.includes('SALES_EDIT'));
+/** Sales own → Edit, or edit all. @param {{ is_system?: boolean, permissions?: string[] }} [actor] */
+const hasEdit = (actor) => hasEditAll(actor) || Boolean(actor?.permissions?.includes('SALES_EDIT_OWN'));
+/** Won and Lost enquiries are closed: reopen them to change anything. */
+const isOpen = (enquiry) => !['WON', 'LOST'].includes(enquiry?.stage);
+/** Edit all applies here: Sales → Edit on an open enquiry. */
+const editsAll = (enquiry, actor) => hasEditAll(actor) && isOpen(enquiry);
 
 /** The enquiry is with this person now (the workflow baton). */
 const isHandler = (enquiry, actor) => Boolean(actor?.id) && actor.id === (enquiry.handler_id ?? enquiry.owner_id);
@@ -54,22 +65,33 @@ function assertFlowWork(enquiry, actor, what = 'do that') {
 }
 
 /**
- * Editing beyond the stage's work: Sales → Edit and holding it.
+ * Documents and offer prices: whoever holds the enquiry, or Sales → Edit on
+ * any open one.
+ * @throws {ForbiddenError}
+ */
+function assertDocumentWork(enquiry, actor, what = 'do that') {
+  if (editsAll(enquiry, actor)) return;
+  assertFlowWork(enquiry, actor, what);
+}
+
+/**
+ * Editing beyond the stage's work: Sales → Edit on any open enquiry, or
+ * Sales own → Edit while holding it.
  * @throws {ForbiddenError}
  */
 function assertFullEdit(enquiry, actor, what = 'update this enquiry') {
-  if (actor?.is_system) return;
+  if (actor?.is_system || editsAll(enquiry, actor)) return;
   if (!hasEdit(actor)) throw new ForbiddenError(`You need Sales edit access to ${what}`);
   assertFlowWork(enquiry, actor, what);
 }
 
 /**
- * The enquiry's details: only the person who raised it, with Sales → Edit,
- * while it is with them (or a system user).
+ * The enquiry's details: Sales → Edit on any open enquiry; with Sales own →
+ * Edit, only the person who raised it, while it is with them (or a system user).
  * @throws {ForbiddenError}
  */
 function assertDetailsEdit(enquiry, actor) {
-  if (actor?.is_system) return;
+  if (actor?.is_system || editsAll(enquiry, actor)) return;
   assertFullEdit(enquiry, actor, 'edit this enquiry');
   if (!isCreator(enquiry, actor)) {
     throw new ForbiddenError('Only the person who raised this enquiry can change its details');
@@ -86,6 +108,12 @@ function assertOwnItem(item, actor, what) {
   if (actor?.is_system) return;
   if (item?.created_by && actor?.id === item.created_by) return;
   throw new ForbiddenError(`Only the person who added it can ${what}`);
+}
+
+/** A document: its uploader — or anyone with Sales → Edit on an open enquiry. @throws {ForbiddenError} */
+function assertOwnDocument(item, enquiry, actor, what) {
+  if (editsAll(enquiry, actor)) return;
+  assertOwnItem(item, actor, what);
 }
 
 /** Won: the person who raised it, while it is with them. @throws {ForbiddenError} */
@@ -177,8 +205,8 @@ const stageName = (s) => (s === 'OFFER_RELEASED' ? 'Offer' : s.charAt(0) + s.sli
 
 module.exports = {
   assertActivityAccess, enquiryScope, canSeeEnquiry, assertCanSeeEnquiry,
-  hasEdit, isHandler, isCreator, canReassign,
-  assertFlowWork, assertFullEdit, assertDetailsEdit, assertOwnItem, assertCanWin, assertCanLose,
+  hasEdit, hasEditAll, isHandler, isCreator, canReassign,
+  assertFlowWork, assertDocumentWork, assertFullEdit, assertDetailsEdit, assertOwnItem, assertOwnDocument, assertCanWin, assertCanLose,
   // Earlier name for the flow check, still used by callers.
   assertCreatorWork: assertFlowWork,
 };

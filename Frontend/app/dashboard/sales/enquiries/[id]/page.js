@@ -484,15 +484,17 @@ export default function EnquiryDetailPage() {
   const isClosed = enquiry.stage === 'WON' || enquiry.stage === 'LOST';
   const handlerId = enquiry.handler_id ?? enquiry.owner_id;
   const isHolder = me?.id != null && me.id === handlerId;
-  const hasEditPerm = me?.is_system || can('SALES_EDIT');
   const isCreator = me?.id != null && (me.id === enquiry.created_by || me.id === enquiry.owner_id);
   // Matches the API (Backend/src/modules/sales/access.js):
   //   - the flow gives access: whoever holds it does the stage's work;
-  //   - Sales → Edit adds deleting (own items) and editing details (raiser);
+  //   - Sales → Edit (edit all): any open enquiry's details, anyone's documents, offer prices;
+  //   - Sales own → Edit: deleting (own items) and editing details (raiser), while holding it;
   //   - Won: the raiser; Lost: whoever holds it; Reopen: Sales → Reassign.
   const canFlow = me?.is_system || isHolder;
-  const canManage = me?.is_system || (hasEditPerm && isHolder);
-  const canEditDetails = me?.is_system || (canManage && isCreator);
+  const canEditAll = Boolean(me?.is_system || (can('SALES_EDIT') && !isClosed));
+  const canEditOwn = can('SALES_EDIT_OWN') && isHolder;
+  const canManage = canEditAll || canEditOwn;
+  const canEditDetails = canEditAll || (canEditOwn && isCreator);
   const canWin = me?.is_system || (isHolder && isCreator);
   const canReopen = me?.is_system || can('SALES_REASSIGN');
   // Activities & reviews: open at every stage until Won / Lost — log with
@@ -502,6 +504,8 @@ export default function EnquiryDetailPage() {
   const canEditActivity = me?.is_system || can('SALES_ACTIVITY_EDIT');
   const canDeleteActivity = me?.is_system || can('SALES_DELETE');
   const owns = (item) => Boolean(me?.is_system || (me?.id != null && item?.created_by === me.id));
+  // Documents: their uploader — or anyone with Sales → Edit on an open enquiry.
+  const ownsDocument = (item) => owns(item) || canEditAll;
   // An entry is edited only while the enquiry is still in the stage it was logged in.
   const editableAt = (item) => Boolean(me?.is_system || (item?.stage && item.stage === enquiry.stage));
   const wonBlocked = readiness?.blocked?.WON || [];
@@ -578,9 +582,9 @@ export default function EnquiryDetailPage() {
               <EnquiryQueueBanner enquiry={enquiry} me={me} onAssigned={() => load()} />
             )}
           </div>
-          {(canFlow || canReopen || canDelete || canReassign) && (
+          {(canFlow || canReopen || canDelete || canReassign || canEditDetails) && (
             <div className="flex items-center gap-2 shrink-0">
-              {(canFlow || canReopen) && (
+              {(canFlow || canReopen || canEditDetails) && (
                 <>
                   {canEditDetails && (
                     <button onClick={() => setModal('edit')} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Edit</button>
@@ -689,7 +693,7 @@ export default function EnquiryDetailPage() {
                   )}
                 </div>
               </Section>
-              <EnquiryAttachments enquiryId={enquiry.id} canEdit={canFlow} canManage={canFlow} canDelete={canManage} owns={owns} kinds={visibleDocKinds(enquiry.stage, enquiry.is_refurbishment)} onChanged={load}
+              <EnquiryAttachments enquiryId={enquiry.id} canEdit={canFlow || canEditAll} canManage={canFlow || canEditAll} canSend={canFlow} canDelete={canManage} owns={ownsDocument} kinds={visibleDocKinds(enquiry.stage, enquiry.is_refurbishment)} onChanged={load}
                 currencyCode={enquiry.currency_code} currencySymbol={enquiry.currency?.symbol}
                 finalCost={enquiry.final_cost} canCost={canFlow && COSTED_STAGES.includes(enquiry.stage)} />
             </div>

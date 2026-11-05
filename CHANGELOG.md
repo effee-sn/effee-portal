@@ -13,6 +13,19 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.13.0] — 2026-11-05
+
+### Added — two levels of Sales edit access
+
+- **Sales own → Edit** (`SALES_EDIT_OWN`, new): your own enquiries while they are with you — details only if you raised it, delete only your own documents. This is what Sales → Edit allowed until now.
+- **Sales → Edit** (`SALES_EDIT`) now means **edit all**: on any open enquiry, whoever raised or holds it — edit its details, upload / replace / delete anyone's documents, set an offer's price (until it is sent or awaits approval).
+- Unchanged for both: moving the stage, marking an offer sent and Won / Lost stay with whoever holds the enquiry; Won / Lost enquiries are reopened first; activities and reviews are changed only by whoever logged them.
+- The Internal Sales handler setting (Flows) needs Sales → Edit or Sales configuration → Edit.
+
+**Upgrade:** one migration (`sales_edit_own_permission`) — every role that had Sales → Edit moves to Sales own → Edit, so nobody gains access. Pull; in Backend `npm ci`, `npx prisma migrate deploy` and `npx prisma generate`; in Frontend `npm ci` and `npm run build`; restart both. **Then, in Roles, tick Sales → Edit for the roles that should edit all enquiries** (e.g. Sales head, Admin).
+
+---
+
 ## [1.12.2] — 2026-11-05
 
 ### Added — Short / Full amounts

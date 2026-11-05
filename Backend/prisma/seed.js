@@ -51,7 +51,7 @@ const MODULES = [
   { name: 'SERVICE',    slug: 'service',    description: 'Service desk tickets' },
   { name: 'SALES',      slug: 'sales',      description: 'Sales — enquiries, quotations, customers' },
   { name: 'SALES_ACTIVITY', slug: 'sales-activity', description: 'Sales — edit the activities and reviews you logged' },
-  { name: 'SALES_OWN', slug: 'sales-own', description: 'Sales — see only your own enquiries' },
+  { name: 'SALES_OWN', slug: 'sales-own', description: 'Sales — only your own enquiries' },
   { name: 'SALES_FOLLOWUP', slug: 'sales-followup', description: 'Sales — follow-ups of everyone' },
   { name: 'SALES_FOLLOWUP_OWN', slug: 'sales-followup-own', description: 'Sales — only the follow-ups you added' },
   { name: 'FLOW',       slug: 'flow',       description: 'Workflow / flow builder' },
@@ -104,6 +104,8 @@ const PERMISSIONS = [
   { module: 'sales', action: 'REASSIGN', code: 'SALES_REASSIGN' },
   { module: 'sales-activity', action: 'EDIT', code: 'SALES_ACTIVITY_EDIT' },
   { module: 'sales-own', action: 'VIEW', code: 'SALES_VIEW_OWN' },
+  // Sales → Edit edits all open enquiries; Sales own → Edit only your own, while with you.
+  { module: 'sales-own', action: 'EDIT', code: 'SALES_EDIT_OWN' },
   { module: 'sales-followup', action: 'VIEW', code: 'SALES_FOLLOWUP_VIEW' },
   { module: 'sales-followup-own', action: 'VIEW', code: 'SALES_FOLLOWUP_VIEW_OWN' },
 
