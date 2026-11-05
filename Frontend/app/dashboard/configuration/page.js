@@ -7,9 +7,9 @@ import usePermissions from '@/lib/usePermissions';
 import { SkeletonLine } from '@/components/Skeleton';
 import SalesConfig from '@/components/config/SalesConfig';
 import MaterialCodesConfig from '@/components/config/MaterialCodesConfig';
+import MaterialTypesConfig from '@/components/config/MaterialTypesConfig';
 import UnitsConfig from '@/components/config/UnitsConfig';
 import RevisionsConfig from '@/components/config/RevisionsConfig';
-import MachineIdsConfig from '@/components/config/MachineIdsConfig';
 import DepartmentCodesConfig from '@/components/config/DepartmentCodesConfig';
 
 /**
@@ -27,8 +27,13 @@ const SECTIONS = [
     render: (has) => <SalesConfig has={has} />,
   },
   {
+    key: 'material-types', label: 'Material Types', perm: 'MATERIAL_CONFIG_VIEW',
+    hint: 'Kinds of item: revisions, tagging, make/buy',
+    render: (has) => <MaterialTypesConfig has={has} />,
+  },
+  {
     key: 'material-codes', label: 'Material Codes', perm: 'MATERIAL_CONFIG_VIEW',
-    hint: 'IMM code prefixes and numbering',
+    hint: 'IMM code prefixes, numbering and type',
     render: (has) => <MaterialCodesConfig has={has} />,
   },
   {
@@ -42,13 +47,8 @@ const SECTIONS = [
     render: (has) => <RevisionsConfig has={has} />,
   },
   {
-    key: 'machine-ids', label: 'Machine IDs', perm: 'PROJECT_CONFIG_VIEW',
-    hint: 'How project machines are numbered',
-    render: (has) => <MachineIdsConfig has={has} />,
-  },
-  {
     key: 'department-codes', label: 'Department Codes', perm: 'PROJECT_CONFIG_VIEW',
-    hint: 'Each department’s code in project tags',
+    hint: 'Each department’s short code',
     render: (has) => <DepartmentCodesConfig has={has} />,
   },
 ];

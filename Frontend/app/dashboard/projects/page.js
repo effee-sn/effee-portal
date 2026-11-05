@@ -3,34 +3,11 @@
 import { useEffect, useState } from 'react';
 import useAuth from '@/lib/useAuth';
 import usePermissions from '@/lib/usePermissions';
-import { useRouter } from 'next/navigation';
-import { apiGet, apiDelete } from '@/lib/api';
+import { apiGet } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
-import ProjectModal, { StatusBadge } from '@/components/projects/ProjectModal';
-
-// ── Delete modal ──────────────────────────────────────────────────────────────
-function DeleteModal({ project, onClose, onDeleted }) {
-  const [error, setError]   = useState('');
-  const [saving, setSaving] = useState(false);
-  const del = async () => {
-    setSaving(true); setError('');
-    try { await apiDelete(`/projects/${project.id}`); onDeleted(project.id); onClose(); }
-    catch (err) { setError(err.message); setSaving(false); }
-  };
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-sm bg-white rounded-lg shadow-xl p-6">
-        <h2 className="text-base font-semibold text-gray-800 mb-2">Delete Project</h2>
-        <p className="text-sm text-gray-500 mb-4">Delete <span className="font-medium text-gray-700">{project.code} · {project.name}</span>? This cannot be undone.</p>
-        {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm mb-3">{error}</div>}
-        <div className="flex gap-3">
-          <button onClick={onClose} className="btn-secondary flex-1 justify-center py-2">Cancel</button>
-          <button onClick={del} disabled={saving} className="btn-danger flex-1 justify-center py-2">{saving ? 'Deleting…' : 'Delete'}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
+import { useRouter } from 'next/navigation';
+import { formatMoney } from '@/lib/money';
+import { StatusBadge, ProjectModal, DeleteModal } from '@/components/projects/ProjectForms';
 
 // ── Page ────────────────────────────────────────────────────────────────────────
 export default function ProjectsPage() {
@@ -74,7 +51,7 @@ export default function ProjectsPage() {
 
   const onSaved = (row, isEdit) => {
     if (isEdit) setRows((prev) => prev.map((r) => r.id === row.id ? { ...r, ...row } : r));
-    else router.push(`/dashboard/projects/${row.id}`); // straight to its machines
+    else { fetchRows(1, ''); setPage(1); setSearch(''); }
   };
   const onDeleted = (id) => { setRows((prev) => prev.filter((r) => r.id !== id)); setTotal((n) => n - 1); };
 
@@ -146,8 +123,8 @@ export default function ProjectsPage() {
                   <th className="px-3 py-3 font-normal">Code</th>
                   <th className="px-3 py-3 font-normal">Project</th>
                   <th className="px-3 py-3 font-normal">Status</th>
-                  <th className="px-3 py-3 font-normal text-right">Machines</th>
                   <th className="px-3 py-3 font-normal">Linked enquiry</th>
+                  <th className="px-3 py-3 font-normal text-right">Cost</th>
                   <th className="px-3 py-3 font-normal">Owner</th>
                   <th className="px-3 py-3 w-16" />
                 </tr>
@@ -158,8 +135,8 @@ export default function ProjectsPage() {
                     <td className="px-3 py-3 font-mono text-xs text-gray-500 tabular-nums">{p.code}</td>
                     <td className="px-3 py-3"><div className="font-medium text-gray-800">{p.name}</div></td>
                     <td className="px-3 py-3"><StatusBadge status={p.status} /></td>
-                    <td className="px-3 py-3 text-right tabular-nums text-gray-700">{p._count?.machines ?? 0}</td>
                     <td className="px-3 py-3 text-gray-600">{p.enquiry ? `${p.enquiry.ref_no}` : '—'}</td>
+                    <td className="px-3 py-3 text-right tabular-nums text-gray-800">{p.cost != null ? formatMoney(p.cost, p.cost_currency) : '—'}</td>
                     <td className="px-3 py-3 text-gray-600">{p.owner?.name || '—'}</td>
                     <td className="px-3 py-3 text-right">
                       <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

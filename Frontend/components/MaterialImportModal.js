@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiGet, apiPost, apiPostForm, downloadFile } from '@/lib/api';
 import SearchableSelect from '@/components/SearchableSelect';
-import { MATERIAL_TYPE_LABEL, formatImmCode, prefixForCode, fromImportRow, IMPORT_HANDOFF } from '@/lib/materialOptions';
+import { formatImmCode, prefixForCode, fromImportRow, IMPORT_HANDOFF } from '@/lib/materialOptions';
+import useMaterialTypes, { TypeName } from '@/lib/materialTypes';
 
 /**
  * Materials → Import: the whole Excel import in one popup.
@@ -35,6 +36,7 @@ export default function MaterialImportModal({ canKeepCodes, onClose, onImported 
   const fileInput = useRef(null);
   const [prefixes, setPrefixes] = useState([]);
   const [units, setUnits] = useState([]);
+  const { types: materialTypes } = useMaterialTypes();
   const [file, setFile] = useState(null); // { name, data } as read
   const [taken, setTaken] = useState({ drawings: new Map(), codes: new Map() });
   const [dupes, setDupes] = useState(new Map()); // row index → match
@@ -63,8 +65,8 @@ export default function MaterialImportModal({ canKeepCodes, onClose, onImported 
 
   /** The file's rows matched to prefixes, units and types (before the defaults chosen here). */
   const mapped = useMemo(() => (file?.data.rows || []).map((x) => ({
-    excelRow: x.row, ...fromImportRow(x, { prefixes: activePrefixes, units, canKeepCodes }),
-  })), [file, activePrefixes, units, canKeepCodes]);
+    excelRow: x.row, ...fromImportRow(x, { prefixes: activePrefixes, units, types: materialTypes, canKeepCodes }),
+  })), [file, activePrefixes, units, materialTypes, canKeepCodes]);
 
   /** Each row as it would be saved, with what stops it. */
   const checked = useMemo(() => {
@@ -285,7 +287,7 @@ export default function MaterialImportModal({ canKeepCodes, onClose, onImported 
                         </td>
                         <td className="px-2 py-1.5 font-mono text-xs text-gray-600">{c.row.drawing_no || '—'}</td>
                         <td className="px-2 py-1.5 text-gray-800">{c.row.item_name || <span className="text-gray-400">—</span>}</td>
-                        <td className="px-2 py-1.5 text-gray-600">{MATERIAL_TYPE_LABEL[c.row.material_type] || '—'}</td>
+                        <td className="px-2 py-1.5 text-gray-600"><TypeName code={c.row.material_type} /></td>
                         <td className="px-2 py-1.5 text-gray-600">{c.row.material || '—'}</td>
                         <td className="px-2 py-1.5 text-gray-600">{units.find((u) => String(u.id) === c.row.uom_id)?.code || '—'}</td>
                         <td className="px-2 py-1.5 text-xs">

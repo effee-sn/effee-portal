@@ -1,5 +1,4 @@
 const { materialService } = require('./material.service');
-const { TYPES } = require('./material.validation');
 const { parseListQuery, ApiResponse, BadRequestError } = require('../../core');
 const { requestContext } = require('../../core/http/requestContext');
 
@@ -37,7 +36,7 @@ const listQuery = (reqQuery) => {
     defaultSort: 'created_at',
     defaultOrder: 'desc',
     filterable: {
-      material_type: (v) => (TYPES.includes(v) ? v : undefined),
+      material_type: (v) => (typeof v === 'string' && v.length <= 30 ? v : undefined),
       prefix_id: (v) => Number(v) || undefined,
       uom_id: (v) => Number(v) || undefined,
       is_active: (v) => (v === 'true' ? true : v === 'false' ? false : undefined),
@@ -89,6 +88,25 @@ const getWhereUsed = async (req, res) => ApiResponse.ok(res, await materialServi
 const getHistory = async (req, res) => {
   const { items, total, page, limit } = await materialService.history(req.params.id, req.query);
   ApiResponse.paginated(res, items, { page, limit, total });
+};
+
+/** `GET /materials/types` */
+const listTypes = async (req, res) => ApiResponse.ok(res, await materialService.listTypes());
+
+/** `POST /materials/types` */
+const createType = async (req, res) => {
+  ApiResponse.created(res, await materialService.createType(req.body, requestContext(req)));
+};
+
+/** `PUT /materials/types/:id` */
+const updateType = async (req, res) => {
+  ApiResponse.ok(res, await materialService.updateType(req.params.id, req.body, requestContext(req)));
+};
+
+/** `DELETE /materials/types/:id` */
+const deleteType = async (req, res) => {
+  await materialService.deleteType(req.params.id, requestContext(req));
+  ApiResponse.ok(res, { id: req.params.id });
 };
 
 /** `GET /materials/units` */
@@ -158,5 +176,6 @@ module.exports = {
   getDrawingCheck, listMaterials, getMaterial, createMaterials, updateMaterial, deleteMaterial,
   listRevisions, newRevision, saveRevisionDraft, releaseRevision, discardRevisionDraft,
   exportMaterials, getImportTemplate, readImport, findDuplicates, getWhereUsed, getHistory,
+  listTypes, createType, updateType, deleteType,
   listUnits, createUnit, updateUnit, deleteUnit,
 };

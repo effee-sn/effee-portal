@@ -275,7 +275,7 @@ describe('A subassembly is an item', () => {
     const item = await materials.getById(a.material.id);
     assert.equal(item.prefix, null, 'no prefix');
     assert.equal(item.uom.code, 'Nos');
-    assert.equal(item.material_type, 'FINISHED');
+    assert.equal(item.material_type, 'SUBASSEMBLY', 'the built-in type');
     assert.deepEqual(await prisma.immPrefix.findMany({ select: { id: true, next_number: true } }), before, 'no IMM number used');
     await subs.updateDetails(a.id, { name: 'Main frame', drawing_no: `${tag}-FR2` }, actor);
     const renamed = await materials.getById(a.material.id);

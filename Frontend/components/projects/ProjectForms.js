@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { apiGet, apiPost, apiPut } from '@/lib/api';
+import { useState } from 'react';
+import { apiPost, apiPut, apiDelete } from '@/lib/api';
 import EnquiryPicker from '@/components/EnquiryPicker';
+import useCurrencies from '@/lib/money';
 
 /**
- * Create / edit a project. A new project also says how many machines it
- * starts with; each gets its Machine ID on save (previewed here).
+ * Projects: the create / edit form, the delete dialog and the status badge —
+ * shared by the list (Projects) and a project's own page.
  */
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
@@ -18,7 +19,7 @@ export const STATUSES = [
   { value: 'COMPLETED', label: 'Completed' },
   { value: 'CANCELLED', label: 'Cancelled' },
 ];
-const STATUS_STYLE = {
+export const STATUS_STYLE = {
   PLANNING:  { label: 'Planning',  color: '#4F46E5', bg: '#EEF2FF' },
   ACTIVE:    { label: 'Active',    color: '#15803D', bg: '#F0FDF4' },
   ON_HOLD:   { label: 'On hold',   color: '#B45309', bg: '#FFFBEB' },
@@ -26,9 +27,6 @@ const STATUS_STYLE = {
   CANCELLED: { label: 'Cancelled', color: '#DC2626', bg: '#FEF2F2' },
 };
 const toDateInput = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : '');
-
-/** prefix + separator + zero-padded number — mirrors the server. */
-export const formatMachineNo = (n, num) => `${n.prefix}${n.separator || ''}${String(num).padStart(n.digits, '0')}`;
 
 export function StatusBadge({ status }) {
   const s = STATUS_STYLE[status] || { label: status, color: '#6b7280', bg: '#f3f4f6' };
@@ -38,7 +36,8 @@ export function StatusBadge({ status }) {
   );
 }
 
-export default function ProjectModal({ project, users, onClose, onSaved }) {
+// ── Create / edit modal ─────────────────────────────────────────────────────────
+export function ProjectModal({ project, users, onClose, onSaved }) {
   const isEdit = Boolean(project);
   const [form, setForm] = useState({
     name:        project?.name || '',
@@ -48,34 +47,23 @@ export default function ProjectModal({ project, users, onClose, onSaved }) {
     start_date:  toDateInput(project?.start_date),
     end_date:    toDateInput(project?.end_date),
     description: project?.description || '',
-    machines:    '1',
+    cost:          project?.cost != null ? String(project.cost) : '',
+    cost_currency: project?.cost_currency || '',
   });
-  const [numbering, setNumbering] = useState(null);
+  const currencies = useCurrencies();
+  // A new project starts in the default currency.
+  const currency = form.cost_currency || currencies?.defaultCode || 'INR';
   const [error, setError]   = useState('');
   const [saving, setSaving] = useState(false);
   const change = (e) => { setForm({ ...form, [e.target.name]: e.target.value }); setError(''); };
-
-  // The Machine IDs a new project's machines will get.
-  useEffect(() => {
-    if (isEdit) return undefined;
-    let cancelled = false;
-    apiGet('/projects/machine-numbering', { silent: true }).then((r) => { if (!cancelled) setNumbering(r.data); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [isEdit]);
-  const count = Math.max(0, Math.min(50, Number(form.machines) || 0));
-  const preview = numbering && count
-    ? count === 1 ? formatMachineNo(numbering, numbering.next_number)
-      : `${formatMachineNo(numbering, numbering.next_number)} … ${formatMachineNo(numbering, numbering.next_number + count - 1)}`
-    : null;
 
   const submit = async (e) => {
     e.preventDefault();
     setSaving(true); setError('');
     try {
-      const { machines, ...rest } = form;
       const res = isEdit
-        ? await apiPut(`/projects/${project.id}`, rest)
-        : await apiPost('/projects', { ...rest, machines: count });
+        ? await apiPut(`/projects/${project.id}`, { ...form, cost_currency: currency })
+        : await apiPost('/projects', { ...form, cost_currency: currency });
       onSaved(res.data, isEdit);
       onClose();
     } catch (err) { setError(err.message); }
@@ -121,6 +109,18 @@ export default function ProjectModal({ project, users, onClose, onSaved }) {
             />
           </div>
 
+          <div>
+            <label className={label}>Project cost</label>
+            <div className="flex gap-2">
+              <select name="cost_currency" value={currency} onChange={change} aria-label="Cost currency" className="ams-input w-28 shrink-0">
+                {(currencies?.list || [{ code: currency }]).map((c) => <option key={c.code} value={c.code}>{c.code}</option>)}
+              </select>
+              <input name="cost" type="number" min="0" step="0.01" inputMode="decimal" value={form.cost} onChange={change}
+                placeholder="Amount" aria-label="Project cost" className="ams-input flex-1" />
+            </div>
+            <p className="text-[11px] text-gray-500 mt-1">Entered here for now — later it will come from the linked enquiry&apos;s final costing value.</p>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={label}>Start date</label>
@@ -131,17 +131,6 @@ export default function ProjectModal({ project, users, onClose, onSaved }) {
               <input name="end_date" type="date" value={form.end_date} onChange={change} className="ams-input" />
             </div>
           </div>
-
-          {!isEdit && (
-            <div>
-              <label className={label}>Machines</label>
-              <div className="flex items-center gap-3 flex-wrap">
-                <input name="machines" type="number" min={0} max={50} value={form.machines} onChange={change} className="ams-input w-28" />
-                {preview && <span className="text-sm text-gray-600">Machine IDs <span className="font-mono font-semibold text-gray-800">{preview}</span> <span className="text-gray-400">(given on save)</span></span>}
-              </div>
-              <p className="text-[11px] text-gray-500 mt-1">Each machine gets its own Machine ID, used in the project&apos;s BOM and tag numbers. You can add more later.</p>
-            </div>
-          )}
 
           <div>
             <label className={label}>Description</label>
@@ -155,6 +144,30 @@ export default function ProjectModal({ project, users, onClose, onSaved }) {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Delete modal ──────────────────────────────────────────────────────────────
+export function DeleteModal({ project, onClose, onDeleted }) {
+  const [error, setError]   = useState('');
+  const [saving, setSaving] = useState(false);
+  const del = async () => {
+    setSaving(true); setError('');
+    try { await apiDelete(`/projects/${project.id}`); onDeleted(project.id); onClose(); }
+    catch (err) { setError(err.message); setSaving(false); }
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="w-full max-w-sm bg-white rounded-lg shadow-xl p-6">
+        <h2 className="text-base font-semibold text-gray-800 mb-2">Delete Project</h2>
+        <p className="text-sm text-gray-500 mb-4">Delete <span className="font-medium text-gray-700">{project.code} · {project.name}</span>? This cannot be undone.</p>
+        {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm mb-3">{error}</div>}
+        <div className="flex gap-3">
+          <button onClick={onClose} className="btn-secondary flex-1 justify-center py-2">Cancel</button>
+          <button onClick={del} disabled={saving} className="btn-danger flex-1 justify-center py-2">{saving ? 'Deleting…' : 'Delete'}</button>
+        </div>
       </div>
     </div>
   );

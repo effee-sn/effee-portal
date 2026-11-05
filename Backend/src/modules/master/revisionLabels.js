@@ -1,4 +1,5 @@
 const { settingsRepository } = require('../settings/settings.repository');
+const { ConflictError } = require('../../core');
 
 /**
  * How drawing revisions are labelled — subassemblies and Finished parts alike
@@ -49,7 +50,20 @@ async function loadRevisionConfig() {
     scheme: SCHEMES.includes(s.revision_scheme) ? s.revision_scheme : 'LETTERS',
     first: FIRST_RELEASE.includes(s.revision_first_release) ? s.revision_first_release : 'ORIGINAL',
     originalLabel: s.revision_original_label || DEFAULT_ORIGINAL,
+    makerChecker: Boolean(s.revision_maker_checker),
   };
 }
 
-module.exports = { SCHEMES, FIRST_RELEASE, DEFAULT_ORIGINAL, labelFor, revName, loadRevisionConfig };
+/**
+ * Maker-checker (Configuration → Revisions): when on, whoever drafted a
+ * revision can't release it — someone else with the Approve permission must.
+ * @param {{ created_by?: number|null, rev: string }} draft @param {{ id?: number }} actor
+ */
+async function assertMayRelease(draft, actor) {
+  const cfg = await loadRevisionConfig();
+  if (cfg.makerChecker && draft.created_by && actor?.id && draft.created_by === actor.id) {
+    throw new ConflictError(`You drafted ${revName(draft.rev)} — someone else must release it (Configuration → Revisions: maker-checker is on)`);
+  }
+}
+
+module.exports = { SCHEMES, FIRST_RELEASE, DEFAULT_ORIGINAL, labelFor, revName, loadRevisionConfig, assertMayRelease };

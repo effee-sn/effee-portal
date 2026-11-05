@@ -3,7 +3,9 @@ const { schemas } = require('../../core');
 
 /** Request schemas for the material master and its IMM code prefixes. */
 
-const TYPES = ['FINISHED', 'BOUGHT_OUT', 'CONSUMABLE'];
+// A material type's code (Configuration → Material Types; checked against the list by the service).
+const typeCode = z.string({ required_error: 'Choose a material type', invalid_type_error: 'Choose a material type' })
+  .trim().min(1, 'Choose a material type').max(30, 'Choose a material type');
 
 const optionalText = (max) =>
   z.string().trim().max(max).optional().nullable().transform((v) => (v === '' || v == null ? null : v));
@@ -22,6 +24,8 @@ const prefixFields = {
   next_number: z.coerce.number().int().min(1, 'Starts at 1 or more').max(9_999_999_999),
   description: optionalText(191),
   is_active: z.boolean(),
+  // The type its materials are; null = any.
+  type_code: typeCode.nullable(),
 };
 
 const createPrefixBody = z.object({
@@ -30,6 +34,7 @@ const createPrefixBody = z.object({
   digits: prefixFields.digits.optional(),
   next_number: prefixFields.next_number.optional(),
   is_active: prefixFields.is_active.optional(),
+  type_code: prefixFields.type_code.optional(),
 });
 const updatePrefixBody = z.object(prefixFields).partial().refine(
   (d) => Object.values(d).some((v) => v !== undefined), { message: 'Nothing to update' },
@@ -41,7 +46,7 @@ const materialFields = {
   item_name: requiredText('Item name', 191),
   description: requiredText('Description', 5000),
   technical_spec: requiredText('Technical specification', 5000),
-  material_type: z.enum(TYPES, { message: 'Material type must be Finished, Bought-out or Consumables' }),
+  material_type: typeCode,
   material: requiredText('Material', 191),
   uom_id: z.coerce.number({ required_error: 'Choose a unit of measure', invalid_type_error: 'Choose a unit of measure' })
     .int().positive('Choose a unit of measure'),
@@ -58,6 +63,20 @@ const bulkCreateBody = z.object({
 });
 
 const updateMaterialBody = z.object({ ...materialFields, is_active: z.boolean() }).partial().refine(
+  (d) => Object.values(d).some((v) => v !== undefined), { message: 'Nothing to update' },
+);
+
+// ── Material types ───────────────────────────────────────────────────────────
+const typeFields = {
+  name: requiredText('Name', 60),
+  has_revisions: z.boolean(),
+  tag_each_piece: z.boolean(),
+  default_make_buy: z.enum(['MAKE', 'BUY', 'SUBCONTRACT'], { message: 'Make, Buy or Subcontract' }),
+  is_active: z.boolean(),
+  sort_order: z.coerce.number().int().min(0).max(9999),
+};
+const createTypeBody = z.object({ name: typeFields.name }).merge(z.object(typeFields).partial());
+const updateTypeBody = z.object(typeFields).partial().refine(
   (d) => Object.values(d).some((v) => v !== undefined), { message: 'Nothing to update' },
 );
 
@@ -115,5 +134,5 @@ const drawingCheckQuery = z.object({
 
 module.exports = {
   drawingCheckQuery, duplicatesBody, revisionParam, revisionDraftBody, revisionReleaseBody, historyQuery, createUnitBody, updateUnitBody,
-  TYPES, idParam, createPrefixBody, updatePrefixBody, bulkCreateBody, updateMaterialBody, listMaterialsQuery,
+  createTypeBody, updateTypeBody, idParam, createPrefixBody, updatePrefixBody, bulkCreateBody, updateMaterialBody, listMaterialsQuery,
 };

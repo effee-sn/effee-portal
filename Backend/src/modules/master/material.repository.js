@@ -10,15 +10,20 @@ function createMaterialRepository(db) {
 
   const prefixSelect = Object.freeze({
     id: true, prefix: true, separator: true, digits: true, next_number: true,
-    description: true, is_active: true, created_at: true, updated_at: true,
+    description: true, is_active: true, type_code: true, created_at: true, updated_at: true,
+    type: { select: { code: true, name: true } },
     _count: { select: { materials: true } },
   });
+
+  // What a material's type decides (Configuration → Material Types).
+  const typeBrief = Object.freeze({ select: { code: true, name: true, has_revisions: true, tag_each_piece: true, default_make_buy: true } });
 
   const materialSelect = Object.freeze({
     id: true, imm_code: true, prefix_id: true, drawing_no: true, item_name: true,
     description: true, technical_spec: true, material_type: true, material: true,
     remarks: true, is_active: true, created_at: true, updated_at: true, created_by: true, uom_id: true,
-    prefix: { select: { id: true, prefix: true } },
+    type: typeBrief,
+    prefix: { select: { id: true, prefix: true, type_code: true } },
     uom: { select: { id: true, code: true, name: true } },
     // Set when the material is a subassembly's own item.
     subassembly: { select: { id: true } },
@@ -30,6 +35,12 @@ function createMaterialRepository(db) {
     id: true, material_id: true, seq: true, rev: true, status: true, change_note: true,
     description: true, technical_spec: true, material_text: true,
     released_at: true, released_by: true, created_at: true, created_by: true, updated_at: true,
+  });
+
+  const typeSelect = Object.freeze({
+    id: true, code: true, name: true, has_revisions: true, tag_each_piece: true, default_make_buy: true,
+    is_system: true, is_active: true, sort_order: true, created_at: true, updated_at: true,
+    _count: { select: { materials: { where: { deleted_at: null } }, prefixes: true } },
   });
 
   const unitSelect = Object.freeze({
@@ -66,6 +77,11 @@ function createMaterialRepository(db) {
 
     deletePrefix(id) {
       return db.immPrefix.delete({ where: { id }, select: { id: true } });
+    },
+
+    /** Live materials under a prefix that are of another type. @param {number} prefixId @param {string} code */
+    countPrefixMaterialsNotOfType(prefixId, code) {
+      return db.material.count({ where: { prefix_id: prefixId, deleted_at: null, NOT: { material_type: code } } });
     },
 
     /**
@@ -151,6 +167,77 @@ function createMaterialRepository(db) {
       return db.material.findMany({ where: active(where), select: materialSelect, orderBy, take });
     },
 
+    // ── Material types ───────────────────────────────────────────────────────
+    listTypes() {
+      return db.materialType.findMany({
+        select: { ...typeSelect },
+        orderBy: [{ sort_order: 'asc' }, { name: 'asc' }],
+      });
+    },
+
+    /** @param {number} id */
+    findType(id) {
+      return db.materialType.findUnique({ where: { id }, select: typeSelect });
+    },
+
+    /** @param {string} code */
+    findTypeByCode(code) {
+      return db.materialType.findUnique({ where: { code }, select: typeSelect });
+    },
+
+    /** Another type with this name (compared without regard to case). @param {string} name @param {number} [exceptId] */
+    findTypeByName(name, exceptId) {
+      return db.materialType.findFirst({ where: { name, ...(exceptId ? { NOT: { id: exceptId } } : {}) }, select: { id: true } });
+    },
+
+    createType(data) {
+      return db.materialType.create({ data, select: typeSelect });
+    },
+
+    updateType(id, data) {
+      return db.materialType.update({ where: { id }, data, select: typeSelect });
+    },
+
+    deleteType(id) {
+      return db.materialType.delete({ where: { id }, select: { id: true } });
+    },
+
+    /**
+     * What uses a type — deleted materials too (they keep their type) and BOM
+     * snapshots aren't linked, so they don't count.
+     * @param {string} code
+     */
+    async countTypeUse(code) {
+      const [materials, prefixes] = await Promise.all([
+        db.material.count({ where: { material_type: code } }),
+        db.immPrefix.count({ where: { type_code: code } }),
+      ]);
+      return { materials, prefixes };
+    },
+
+    /**
+     * A type's materials got drawing revisions switched on: those without
+     * any get their first revision (released, from their current details).
+     * @returns {Promise<number>} how many
+     */
+    async startRevisionsFor(code, label, actorId) {
+      const parts = await db.material.findMany({
+        where: { material_type: code, deleted_at: null, subassembly: null, revisions: { none: {} } },
+        select: { id: true, description: true, technical_spec: true, material: true },
+      });
+      if (!parts.length) return 0;
+      const now = new Date();
+      await db.materialRevision.createMany({
+        data: parts.map((m) => ({
+          material_id: m.id, seq: 1, rev: label, status: 'RELEASED', change_note: 'First release (drawing revisions switched on for its type)',
+          description: m.description, technical_spec: m.technical_spec, material_text: m.material,
+          released_at: now, released_by: actorId, created_by: actorId, updated_by: actorId,
+        })),
+        skipDuplicates: true,
+      });
+      return parts.length;
+    },
+
     // ── Units of measure ─────────────────────────────────────────────────────
     listUnits() {
       return db.unitOfMeasure.findMany({ select: unitSelect, orderBy: [{ sort_order: 'asc' }, { code: 'asc' }] });
@@ -193,8 +280,8 @@ function createMaterialRepository(db) {
     createMany(rows, formatCode, actorId, originalLabel, keptMax) {
       return db.$transaction(async (tx) => {
         const created = await this.createManyIn(tx, rows, formatCode, actorId, keptMax);
-        // A Finished part starts with its first drawing revision, released.
-        const parts = created.filter((m) => m.material_type === 'FINISHED');
+        // A material whose type has drawing revisions starts with its first one, released.
+        const parts = created.filter((m) => m.type?.has_revisions);
         if (!parts.length) return created;
         const now = new Date();
         await tx.materialRevision.createMany({
@@ -204,7 +291,7 @@ function createMaterialRepository(db) {
             released_at: now, released_by: actorId, created_by: actorId, updated_by: actorId,
           })),
         });
-        return Promise.all(created.map((m) => (m.material_type === 'FINISHED'
+        return Promise.all(created.map((m) => (m.type?.has_revisions
           ? tx.material.findUnique({ where: { id: m.id }, select: materialSelect }) : m)));
       });
     },

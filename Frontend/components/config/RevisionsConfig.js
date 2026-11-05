@@ -39,12 +39,12 @@ export default function RevisionsConfig({ has }) {
   const canView = has('MATERIAL_CONFIG_VIEW');
   const canEdit = has('MATERIAL_CONFIG_EDIT');
   const [saved, setSaved] = useState(null);
-  const [form, setForm] = useState({ scheme: 'LETTERS', first_release: 'ORIGINAL', original_label: 'Original' });
+  const [form, setForm] = useState({ scheme: 'LETTERS', first_release: 'ORIGINAL', original_label: 'Original', maker_checker: false });
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const pick = (d) => ({ scheme: d.scheme, first_release: d.first_release, original_label: d.original_label });
+  const pick = (d) => ({ scheme: d.scheme, first_release: d.first_release, original_label: d.original_label, maker_checker: Boolean(d.maker_checker) });
 
   useEffect(() => {
     if (!canView) return undefined;
@@ -56,14 +56,14 @@ export default function RevisionsConfig({ has }) {
   }, [canView]);
 
   const set = (k, v) => { setForm((f) => ({ ...f, [k]: v })); setNotice(''); setError(''); };
-  const changed = saved && ['scheme', 'first_release', 'original_label'].some((k) => form[k] !== saved[k]);
+  const changed = saved && ['scheme', 'first_release', 'original_label', 'maker_checker'].some((k) => form[k] !== saved[k]);
 
   const save = async () => {
     setBusy(true); setError(''); setNotice('');
     try {
       const r = await apiPut('/subassemblies/revision-scheme', { ...form, original_label: form.original_label.trim() });
       setSaved(pick(r.data)); setForm(pick(r.data));
-      setNotice(`Saved — new drawings go ${preview(r.data).join(' → ')} …`);
+      setNotice(`Saved — new drawings go ${preview(r.data).join(' → ')} …${r.data.maker_checker ? '; whoever drafts a revision can’t release it' : ''}`);
     } catch (e) { setError(e.message); }
     finally { setBusy(false); }
   };
@@ -82,7 +82,7 @@ export default function RevisionsConfig({ has }) {
     <div className="bg-white rounded border border-gray-200">
       <div className="px-4 py-3 border-b border-gray-200">
         <span className="text-sm font-medium text-gray-700">Revisions</span>
-        <span className="ml-2 text-xs text-gray-400">How drawing revisions are labelled — subassemblies and Finished parts</span>
+        <span className="ml-2 text-xs text-gray-400">How drawing revisions are labelled and released — subassemblies, and parts whose type has revisions</span>
       </div>
       <div className="px-4 py-4 space-y-4">
         {error && <p className="px-3 py-2 rounded text-sm border bg-red-50 border-red-200 text-red-700">{error}</p>}
@@ -112,6 +112,13 @@ export default function RevisionsConfig({ has }) {
                 <span className="w-20 font-medium">{s.label}</span>
               </label>
             ))}
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Releasing</p>
+            <label className="flex items-start gap-3 text-sm text-gray-800 cursor-pointer">
+              <input type="checkbox" className="mt-1" checked={form.maker_checker} onChange={(e) => set('maker_checker', e.target.checked)} />
+              <span><span className="font-medium">Maker-checker</span> <span className="text-gray-500">— whoever drafted a revision can&apos;t release it; someone else with the Approve permission must check and release it.</span></span>
+            </label>
           </div>
         </fieldset>
         <p className="text-sm text-gray-700">

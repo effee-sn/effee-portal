@@ -1,12 +1,5 @@
-/** Shared labels for the material master. */
-
-export const MATERIAL_TYPES = Object.freeze([
-  { value: 'FINISHED', label: 'Finished' },
-  { value: 'BOUGHT_OUT', label: 'Bought-out' },
-  { value: 'CONSUMABLE', label: 'Consumables' },
-]);
-
-export const MATERIAL_TYPE_LABEL = Object.freeze(Object.fromEntries(MATERIAL_TYPES.map((t) => [t.value, t.label])));
+/** Shared helpers for the material master. Material types are configurable: see lib/materialTypes. */
+import { typeFromText } from '@/lib/materialTypes';
 
 /**
  * A drawing revision as read: "Rev A", "Rev 01" — the first release reads as
@@ -36,30 +29,21 @@ export function prefixForCode(code, prefixes) {
   return null;
 }
 
-/** "Bought-out", "bought out", "BO" … → BOUGHT_OUT; '' when not recognised. */
-export function typeFromText(t) {
-  const s = String(t || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
-  if (!s) return '';
-  if (s.startsWith('fin')) return 'FINISHED';
-  if (s.startsWith('bo') || s.startsWith('bought')) return 'BOUGHT_OUT';
-  if (s.startsWith('con')) return 'CONSUMABLE';
-  return '';
-}
-
 /**
  * One row of an Excel import (as the server read it) → a material row, with
  * the prefix (from its kept IMM code, else its prefix column), unit and type
  * matched. A code is kept only for those allowed; '' ids mean "not matched".
  * @param {object} x  { row, imm_code, prefix, drawing_no, item_name, … }
- * @param {{ prefixes: object[], units: object[], canKeepCodes: boolean }} ctx  active prefixes, all units
+ * @param {{ prefixes: object[], units: object[], types: object[], canKeepCodes: boolean }} ctx  active prefixes, all units, all material types
  * @returns {{ row: object, notes: string[] }}
  */
-export function fromImportRow(x, { prefixes, units, canKeepCodes }) {
+export function fromImportRow(x, { prefixes, units, types = [], canKeepCodes }) {
   const notes = [];
   const imm_code = canKeepCodes ? String(x.imm_code || '').trim().toUpperCase() : '';
   const kept = imm_code ? prefixForCode(imm_code, prefixes)?.prefix : null;
   const p = kept || (x.prefix ? prefixes.find((a) => a.prefix.toLowerCase() === String(x.prefix).toLowerCase()) : null);
-  const material_type = typeFromText(x.material_type);
+  // No type in the file: the prefix's type, if it has one.
+  const material_type = typeFromText(x.material_type, types) || (!x.material_type && p?.type_code) || '';
   const uom_id = unitFromText(x.unit, units);
   if (x.prefix && !p && !imm_code) notes.push(`prefix "${x.prefix}" not found or inactive`);
   if (x.material_type && !material_type) notes.push(`material type "${x.material_type}" not recognised`);

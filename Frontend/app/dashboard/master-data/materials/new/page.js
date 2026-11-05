@@ -8,8 +8,9 @@ import { apiGet, apiPost, apiPostForm, downloadFile } from '@/lib/api';
 import SearchableSelect from '@/components/SearchableSelect';
 import { TableSkeleton } from '@/components/Skeleton';
 import {
-  MATERIAL_TYPES, formatImmCode, unitFromText, typeFromText, prefixForCode, fromImportRow, IMPORT_HANDOFF,
+  formatImmCode, unitFromText, prefixForCode, fromImportRow, IMPORT_HANDOFF,
 } from '@/lib/materialOptions';
+import useMaterialTypes, { typeFromText } from '@/lib/materialTypes';
 
 /**
  * Master Data → Materials → New: add many materials at once.
@@ -84,6 +85,13 @@ export default function NewMaterialsPage() {
   const activeUnits = useMemo(() => units.filter((u) => u.is_active), [units]);
 
   const activePrefixes = useMemo(() => (prefixes || []).filter((p) => p.is_active), [prefixes]);
+  const { types: materialTypes, choosable: choosableTypes } = useMaterialTypes();
+  /** The type a prefix's materials are ('' = any). */
+  const prefixType = (id) => (prefixes || []).find((x) => String(x.id) === String(id))?.type_code || '';
+  /** A row's type: its prefix's, when the prefix has one — else what was chosen. */
+  const typeOf = (r) => prefixType(r.prefix_id) || r.material_type;
+  /** A field's value as saved (the type may come from the prefix). */
+  const val = (r, f) => (f === 'material_type' ? typeOf(r) : r[f]);
   const prefixOptions = useMemo(() => activePrefixes.map((p) => ({
     value: String(p.id), label: p.prefix, sub: `next ${p.preview}${p.description ? ` · ${p.description}` : ''}`,
   })), [activePrefixes]);
@@ -143,7 +151,7 @@ export default function NewMaterialsPage() {
     const pasted = lines.map((l) => {
       const c = l.split('\t');
       return { ...blank(defaultPrefix, defaultUnit), drawing_no: c[0] || '', item_name: c[1] || '', description: c[2] || '',
-        technical_spec: c[3] || '', material_type: typeFromText(c[4]), material: c[5] || '',
+        technical_spec: c[3] || '', material_type: typeFromText(c[4], materialTypes), material: c[5] || '',
         uom_id: unitFromText(c[6], units) || defaultUnit, remarks: c[7] || '' };
     });
     setDupes(null);
@@ -182,7 +190,7 @@ export default function NewMaterialsPage() {
       notes.push(`${codesInFile} IMM code${codesInFile === 1 ? ' was' : 's were'} in the file but not kept — new codes will be given (only a Super Admin or whoever edits the prefixes can keep codes)`);
     }
     const added = data.rows.map((x) => {
-      const { row, notes: n } = fromImportRow(x, { prefixes: activePrefixes, units, canKeepCodes });
+      const { row, notes: n } = fromImportRow(x, { prefixes: activePrefixes, units, types: materialTypes, canKeepCodes });
       n.forEach((t) => notes.push(`Excel row ${x.row}: ${t}`));
       return { ...blank(), ...row, prefix_id: row.prefix_id || (row.imm_code ? '' : defaultPrefix), uom_id: row.uom_id || defaultUnit };
     });
@@ -198,7 +206,7 @@ export default function NewMaterialsPage() {
   }
 
   const filled = rows.filter((r) => !isEmpty(r));
-  const missing = (r, f) => tried && !isEmpty(r) && !String(r[f] || '').trim();
+  const missing = (r, f) => tried && !isEmpty(r) && !String(val(r, f) || '').trim();
   /** Why a row's drawing no. can't be used: another material has it, or an earlier row repeats it. */
   const drawingIssue = (r) => {
     const k = drawingKey(r.drawing_no);
@@ -217,7 +225,7 @@ export default function NewMaterialsPage() {
     const first = filled.find((x) => x.imm_code === r.imm_code);
     return first && first !== r ? `Same as row ${rows.indexOf(first) + 1}` : null;
   };
-  const invalidCount = filled.filter((r) => REQUIRED.some((f) => !String(r[f] || '').trim()) || drawingIssue(r) || codeIssue(r)).length;
+  const invalidCount = filled.filter((r) => REQUIRED.some((f) => !String(val(r, f) || '').trim()) || drawingIssue(r) || codeIssue(r)).length;
 
   // Row number on screen of the n-th filled row.
   const rowNo = (n) => rows.indexOf(filled[n]) + 1;
@@ -237,7 +245,7 @@ export default function NewMaterialsPage() {
         if (check.data.matches.length) { setDupes(check.data.matches); return; }
       }
       const body = { rows: filled.map((r) => ({
-        ...Object.fromEntries(FIELDS.map((f) => [f, r[f]])), prefix_id: Number(r.prefix_id), uom_id: Number(r.uom_id),
+        ...Object.fromEntries(FIELDS.map((f) => [f, val(r, f)])), prefix_id: Number(r.prefix_id), uom_id: Number(r.uom_id),
         ...(r.imm_code ? { imm_code: r.imm_code } : {}),
       })) };
       const res = await apiPost('/materials/bulk', body);
@@ -428,9 +436,14 @@ export default function NewMaterialsPage() {
                   <textarea aria-label={`Row ${i + 1} technical specification`} value={r.technical_spec} onChange={(e) => set(r.key, 'technical_spec', e.target.value)} rows={2} className={`${cell} resize-y ${bad('technical_spec')}`} />
                 </td>
                 <td className="px-2 py-2">
-                  <select aria-label={`Row ${i + 1} material type`} value={r.material_type} onChange={(e) => set(r.key, 'material_type', e.target.value)} className={`${cell} ${bad('material_type')}`}>
+                  {/* A prefix with a type sets it (Configuration → Material Codes). */}
+                  <select aria-label={`Row ${i + 1} material type`} value={typeOf(r)} disabled={Boolean(prefixType(r.prefix_id))}
+                    title={prefixType(r.prefix_id) ? 'Set by the prefix' : undefined}
+                    onChange={(e) => set(r.key, 'material_type', e.target.value)} className={`${cell} ${bad('material_type')} disabled:opacity-80`}>
                     <option value="">Select…</option>
-                    {MATERIAL_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    {[...choosableTypes, ...materialTypes.filter((t) => t.code === typeOf(r) && !choosableTypes.includes(t))].map((t) => (
+                      <option key={t.code} value={t.code}>{t.name}</option>
+                    ))}
                   </select>
                 </td>
                 <td className="px-2 py-2">

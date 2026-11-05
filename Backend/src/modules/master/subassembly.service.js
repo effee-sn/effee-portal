@@ -2,7 +2,7 @@ const { subassemblyRepository } = require('./subassembly.repository');
 const { materialRepository } = require('./material.repository');
 const { materialService } = require('./material.service');
 const { settingsRepository } = require('../settings/settings.repository');
-const { SCHEMES, FIRST_RELEASE, labelFor, revName, loadRevisionConfig } = require('./revisionLabels');
+const { SCHEMES, FIRST_RELEASE, labelFor, revName, loadRevisionConfig, assertMayRelease } = require('./revisionLabels');
 const { auditService } = require('../audit/audit.service');
 const { NotFoundError, ConflictError, ValidationError, buildSearchClause } = require('../../core');
 
@@ -27,7 +27,7 @@ const { NotFoundError, ConflictError, ValidationError, buildSearchClause } = req
  *     revision the line shows it; only a new draft moves the line on. No
  *     loops (a subassembly never contains itself, at any depth) and at most
  *     MAX_LEVELS levels.
- *   - A **Finished part** on a line is held at a drawing revision of it the
+ *   - A **part with revisions** (its type has them) on a line is held at a drawing revision of it the
  *     same way (the part's current one when added; a new draft moves it on).
  *   - A material appears once per revision. Only active materials (and
  *     subassemblies with a released revision) can be added; one made inactive
@@ -47,8 +47,8 @@ function createSubassemblyService(repository) {
 
   /** A child subassembly's current (released) revision, or null. */
   const currentOf = (sub) => (sub && !sub.deleted_at ? sub.revisions?.[0] ?? null : null);
-  /** A plain Finished part (not a subassembly's item): it has drawing revisions. */
-  const isPart = (m) => m.material_type === 'FINISHED' && (!m.subassembly || m.subassembly.deleted_at);
+  /** A part whose type has drawing revisions (not a subassembly's item). */
+  const isPart = (m) => Boolean(m.type?.has_revisions) && (!m.subassembly || m.subassembly.deleted_at);
   /** A part's current (released) drawing revision, or null. */
   const partCurrentOf = (m) => (isPart(m) ? m.revisions?.find((r) => r.status === 'RELEASED') ?? null : null);
 
@@ -173,7 +173,7 @@ function createSubassemblyService(repository) {
           data: {
             imm_code: sub.drawing_no, prefix_id: null, uom_id: unit.id, item_name: sub.name, drawing_no: sub.drawing_no,
             description: sub.name, technical_spec: `As per drawing ${sub.drawing_no}`,
-            material_type: 'FINISHED', material: 'Assembly', remarks: null,
+            material_type: 'SUBASSEMBLY', material: 'Assembly', remarks: null,
             created_by: actor?.id ?? null, updated_by: actor?.id ?? null,
           },
           select: { id: true, imm_code: true, item_name: true },
@@ -307,7 +307,7 @@ function createSubassemblyService(repository) {
     async getRevisionScheme() {
       const cfg = await loadRevisionConfig();
       return {
-        scheme: cfg.scheme, first_release: cfg.first, original_label: cfg.originalLabel,
+        scheme: cfg.scheme, first_release: cfg.first, original_label: cfg.originalLabel, maker_checker: cfg.makerChecker,
         examples: [1, 2, 3].map((n) => labelFor(cfg, n)),
       };
     },
@@ -319,6 +319,7 @@ function createSubassemblyService(repository) {
       if (dto.scheme && SCHEMES.includes(dto.scheme)) data.revision_scheme = dto.scheme;
       if (dto.first_release && FIRST_RELEASE.includes(dto.first_release)) data.revision_first_release = dto.first_release;
       if (dto.original_label) data.revision_original_label = dto.original_label;
+      if (typeof dto.maker_checker === 'boolean') data.revision_maker_checker = dto.maker_checker;
       await settingsRepository.update(before.id, data);
       await auditService.record({
         action: auditService.Action.UPDATE, entity: 'CompanySettings', entityId: before.id, actor,
@@ -427,6 +428,7 @@ function createSubassemblyService(repository) {
     async release(id, revId, dto, actor) {
       const s = await loadSub(id);
       const draft = await loadDraft(id, revId);
+      await assertMayRelease(draft, actor);
       if (!s.material) {
         // Made before items existed: it gets its item now (lines and BOMs point at it).
         await assertDrawingFree(s.drawing_no, id);

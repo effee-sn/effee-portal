@@ -25,6 +25,14 @@ const updateRef = z.preprocess(
   z.coerce.number().int().positive().nullable().optional()
 );
 
+/** The project cost: an amount (blank clears it) in a currency of the currency master. */
+const cost = z.preprocess(
+  (v) => (v === '' || v === null ? null : v),
+  z.coerce.number({ invalid_type_error: 'Cost must be a number' }).min(0, 'Cost can\'t be negative').max(999_999_999_999, 'Cost is too large')
+    .refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, 'At most 2 decimals').nullable().optional()
+);
+const costCurrency = z.string().trim().toUpperCase().length(3, 'Choose a currency').optional();
+
 const listProjectsQuery = schemas.listQuery.extend({
   status:     z.enum(STATUSES).optional(),
   owner_id:   z.coerce.number().int().positive().optional(),
@@ -32,6 +40,7 @@ const listProjectsQuery = schemas.listQuery.extend({
 });
 
 const projectIdParam = schemas.idParam;
+const historyQuery = z.object({ page: z.coerce.number().int().min(1).optional(), limit: z.coerce.number().int().min(1).max(100).optional() });
 
 const createProjectBody = z.object({
   name:        z.string().trim().min(1, 'Name is required').max(191),
@@ -41,8 +50,8 @@ const createProjectBody = z.object({
   owner_id:    createRef,
   start_date:  optionalDate,
   end_date:    optionalDate,
-  // How many machines (each given its Machine ID) the project starts with.
-  machines:    z.coerce.number().int().min(0, 'Zero or more').max(50, 'At most 50 at a time').optional(),
+  cost,
+  cost_currency: costCurrency,
 });
 
 const updateProjectBody = z.object({
@@ -53,41 +62,15 @@ const updateProjectBody = z.object({
   owner_id:    updateRef,
   start_date:  optionalDate,
   end_date:    optionalDate,
+  cost,
+  cost_currency: costCurrency,
 }).refine(
   (data) => Object.values(data).some((v) => v !== undefined),
   { message: 'At least one field must be provided' }
 );
 
-// ── Machines ─────────────────────────────────────────────────────────────────
-const machineParam = z.object({
-  id:        z.coerce.number().int().positive(),
-  machineId: z.coerce.number().int().positive(),
-});
-
-const nullableText = (max) =>
-  z.string().trim().max(max).optional().nullable().transform((v) => (v === '' || v == null ? null : v));
-
-const addMachinesBody = z.object({
-  count: z.coerce.number().int().min(1, 'At least 1').max(50, 'At most 50 at a time').optional(),
-  name:  nullableText(191),
-});
-
-const updateMachineBody = z.object({
-  name:        nullableText(191),
-  description: nullableText(5000),
-}).refine((d) => Object.values(d).some((v) => v !== undefined), { message: 'Nothing to update' });
-
-// Machine ID numbering: prefix + separator + zero-padded number.
-const machineNumberingBody = z.object({
-  prefix: z.string().trim().toUpperCase().min(1, 'Prefix is required').max(20, 'At most 20 characters')
-    .regex(/^[A-Z0-9]+$/, 'Letters and numbers only (add a separator if needed)'),
-  separator:   z.enum(['', '-', '_'], { message: 'Separator must be none, - or _' }),
-  digits:      z.coerce.number().int().min(1, 'At least 1 digit').max(10, 'At most 10 digits'),
-  next_number: z.coerce.number().int().min(1, 'Starts at 1 or more').max(9_999_999_999),
-}).partial().refine((d) => Object.values(d).some((v) => v !== undefined), { message: 'Nothing to update' });
-
-// A department's code for project tag numbers: letters, numbers and hyphens,
-// up to 10, kept in capitals; null (or blank) clears it.
+// A department's code (Configuration → Department Codes): letters, numbers and
+// single hyphens, up to 10, kept in capitals; null (or blank) clears it.
 const departmentCodeParam = z.object({ departmentId: z.coerce.number().int().positive() });
 const departmentCodeBody = z.object({
   code: z.preprocess(
@@ -100,14 +83,11 @@ const departmentCodeBody = z.object({
 
 module.exports = {
   STATUSES,
+  departmentCodeParam,
+  departmentCodeBody,
+  historyQuery,
   listProjectsQuery,
   projectIdParam,
   createProjectBody,
   updateProjectBody,
-  machineParam,
-  addMachinesBody,
-  updateMachineBody,
-  machineNumberingBody,
-  departmentCodeParam,
-  departmentCodeBody,
 };

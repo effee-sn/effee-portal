@@ -7,10 +7,10 @@ import { TableSkeleton } from '@/components/Skeleton';
 /**
  * Department Codes — a section of Administrator → Configuration.
  *
- * Each department's code in project tag numbers (Machine ID - code -
- * subassembly - part), e.g. ELE, 12 or PS-01: pick a department, give it a
- * code; change or remove it later. Codes are unique. A locked project BOM
- * keeps the tags it was locked with; a new code applies to BOMs locked after.
+ * Each department's short code, e.g. ELE, 12 or PS-01: pick a department,
+ * give it a code; change or remove it later. Codes are unique. Only
+ * departments with a code can be chosen on a subassembly. (Project tag
+ * numbers built from them are to be redesigned.)
  */
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1';
@@ -72,7 +72,7 @@ export default function DepartmentCodesConfig({ has }) {
     if (await save(dept.id, editing.code, `${dept.name}'s code is now ${editing.code}.`)) setEditing(null);
   };
   const remove = (dept) => {
-    if (!window.confirm(`Remove ${dept.name}'s code ${dept.dept_code}? Its subassemblies can't go on a project BOM that is locked until it has a code again.`)) return;
+    if (!window.confirm(`Remove ${dept.name}'s code ${dept.dept_code}? It can't be chosen on subassemblies until it has a code again.`)) return;
     save(dept.id, null, `${dept.name}'s code removed.`);
   };
 
@@ -80,12 +80,11 @@ export default function DepartmentCodesConfig({ has }) {
     <div className="bg-white rounded border border-gray-200">
       <div className="px-4 py-3 border-b border-gray-200">
         <span className="text-sm font-medium text-gray-700">Department Codes</span>
-        <span className="ml-2 text-xs text-gray-400">Each department&apos;s code in project tag numbers</span>
+        <span className="ml-2 text-xs text-gray-400">Each department&apos;s short code</span>
       </div>
       <div className="px-4 py-4 space-y-4 max-w-2xl">
         <p className="text-xs text-gray-500">
-          Tags read <span className="font-mono">Machine ID - department code - subassembly - part</span>, e.g.
-          <span className="font-mono"> M0001-ELE-EI-DWG-1001</span>. A locked project BOM keeps its tags; a changed code applies to BOMs locked after.
+          A short code per department, e.g. <span className="font-mono">ELE</span>, <span className="font-mono">12</span>. Only departments with a code can be chosen on a subassembly.
         </p>
         {error && <p className="px-3 py-2 rounded text-sm border bg-red-50 border-red-200 text-red-700">{error}</p>}
         {notice && <p className="px-3 py-2 rounded text-sm border bg-green-50 border-green-200 text-green-800">{notice}</p>}

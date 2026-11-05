@@ -8,7 +8,8 @@ import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
 import { SideCard, SideRow, KeyFacts, TabBar } from '@/components/DetailSide';
-import { MATERIAL_TYPES, MATERIAL_TYPE_LABEL, revName } from '@/lib/materialOptions';
+import { revName } from '@/lib/materialOptions';
+import useMaterialTypes from '@/lib/materialTypes';
 
 /**
  * Master Data → Materials → one material: its details, where it is used (the
@@ -38,6 +39,10 @@ function EditModal({ material, units, unitLocked, onClose, onSaved }) {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const set = (k, v) => { setForm((f) => ({ ...f, [k]: v })); setError(''); };
+  const { types: materialTypes, choosable } = useMaterialTypes();
+  // A prefix with a type fixes it (Configuration → Material Codes).
+  const typeFixed = Boolean(material.prefix?.type_code);
+  const typeOptions = [...choosable, ...materialTypes.filter((t) => t.code === material.material_type && !choosable.includes(t))];
   // A subassembly's own item takes its name, drawing no. and type from the subassembly.
   const owned = Boolean(material.subassembly);
   // A Finished part changes its description, specification and material through a new revision.
@@ -94,8 +99,9 @@ function EditModal({ material, units, unitLocked, onClose, onSaved }) {
             </div>
             <div>
               <label className={label} htmlFor="m-type">Material type<span className="text-red-500"> *</span></label>
-              <select id="m-type" value={form.material_type} onChange={(e) => set('material_type', e.target.value)} disabled={owned} className="ams-input disabled:bg-gray-50">
-                {MATERIAL_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              <select id="m-type" value={form.material_type} onChange={(e) => set('material_type', e.target.value)} disabled={owned || typeFixed}
+                title={typeFixed ? `Set by its prefix ${material.prefix.prefix}` : undefined} className="ams-input disabled:bg-gray-50">
+                {typeOptions.map((t) => <option key={t.code} value={t.code}>{t.name}</option>)}
               </select>
             </div>
             <div>
@@ -136,8 +142,8 @@ function EditModal({ material, units, unitLocked, onClose, onSaved }) {
   );
 }
 
-/** A Finished part (not a subassembly's item): it has drawing revisions. */
-const isRevisable = (m) => m.material_type === 'FINISHED' && !m.subassembly;
+/** Its type has drawing revisions, and it isn't a subassembly's item. */
+const isRevisable = (m) => Boolean(m.type?.has_revisions) && !m.subassembly;
 const REV_STATUS = {
   DRAFT: { text: 'Draft', cls: 'bg-amber-50 text-amber-800' },
   RELEASED: { text: 'Released', cls: 'bg-green-50 text-green-700' },
@@ -146,7 +152,7 @@ const REV_STATUS = {
 const REV_FIELDS = [['description', 'Description'], ['technical_spec', 'Technical specification'], ['material_text', 'Material']];
 
 /** A Finished part's drawing revisions: the list, a draft being changed, and its release. */
-function Revisions({ material, canEdit, canApprove, onReleased }) {
+function Revisions({ material, canEdit: mayEdit, canApprove: mayApprove, onReleased }) {
   const [data, setData] = useState(null);
   const [open, setOpen] = useState(null); // a revision shown in full
   const [draft, setDraft] = useState(null); // the draft's fields being edited
@@ -191,7 +197,18 @@ function Revisions({ material, canEdit, canApprove, onReleased }) {
   }, `${revName(draft.rev)} released — it is now the current revision.`);
 
   if (!data) return <TableSkeleton cols={4} rows={3} />;
-  if (!data.revisable) return <p className="text-sm text-gray-500">Only Finished parts have drawing revisions{material.subassembly ? ' — this is a subassembly’s item, revised on its subassembly' : ''}.</p>;
+  if (!data.revisable && !data.items.length) {
+    return (
+      <p className="text-sm text-gray-500">
+        {material.subassembly
+          ? 'This is a subassembly’s item — it is revised on its subassembly.'
+          : `Its type (${material.type?.name ?? material.material_type}) has no drawing revisions — Configuration → Material Types.`}
+      </p>
+    );
+  }
+  // Revisions switched off for its type: the past ones stay readable, nothing new.
+  const canEdit = mayEdit && data.revisable;
+  const canApprove = mayApprove && data.revisable;
 
   const items = data.items;
   const previousOf = (r) => items.find((x) => x.seq < r.seq && x.status !== 'DRAFT');
@@ -201,6 +218,11 @@ function Revisions({ material, canEdit, canApprove, onReleased }) {
     <div className="space-y-4">
       {error && <p className="px-3 py-2 rounded text-sm border bg-red-50 border-red-200 text-red-700">{error}</p>}
       {notice && <p className="px-3 py-2 rounded text-sm border bg-green-50 border-green-200 text-green-800">{notice}</p>}
+      {!data.revisable && (
+        <p className="px-3 py-2 rounded text-xs border bg-gray-50 border-gray-200 text-gray-600">
+          Drawing revisions are off for its type ({material.type?.name ?? material.material_type}) — the revisions below are history; changes are now made directly.
+        </p>
+      )}
 
       {draft ? (
         <div className="rounded border border-amber-200 bg-amber-50/40 p-4 space-y-3">
@@ -337,6 +359,7 @@ function WhereUsed({ data }) {
 }
 
 function History({ materialId, units }) {
+  const { nameOf } = useMaterialTypes();
   const [items, setItems] = useState(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -354,7 +377,7 @@ function History({ materialId, units }) {
   const unitCode = (id) => units.find((u) => u.id === Number(id))?.code ?? id;
   const show = (field, v) => {
     if (v === null || v === undefined || v === '') return '—';
-    if (field === 'material_type') return MATERIAL_TYPE_LABEL[v] || v;
+    if (field === 'material_type') return nameOf(v);
     if (field === 'uom_id') return unitCode(v);
     if (field === 'is_active') return v ? 'Active' : 'Inactive';
     return String(v);
@@ -464,7 +487,7 @@ export default function MaterialPage() {
   const draftRev = material.revisions?.find((r) => r.status === 'DRAFT');
   const tabs = [
     { key: 'details', label: 'Details' },
-    ...(revisable ? [{ key: 'revisions', label: 'Revisions' }] : []),
+    ...(revisable || (!material.subassembly && material.revisions?.length) ? [{ key: 'revisions', label: 'Revisions' }] : []),
     { key: 'used', label: `Where used${used ? ` (${new Set(used.subassemblies.map((s) => s.id)).size})` : ''}` },
     { key: 'history', label: 'History' },
   ];
@@ -483,7 +506,7 @@ export default function MaterialPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-mono text-sm font-semibold text-gray-500">{material.imm_code}</span>
               <span className={`${chip} ${material.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{material.is_active ? 'Active' : 'Inactive'}</span>
-              <span className={`${chip} bg-gray-100 text-gray-700`}>{MATERIAL_TYPE_LABEL[material.material_type]}</span>
+              <span className={`${chip} bg-gray-100 text-gray-700`}>{material.type?.name ?? material.material_type}</span>
               {revisable && currentRev && <span className={`${chip} bg-[var(--ams-primary-mid)] text-[var(--ams-primary)]`} title="Current drawing revision">{revName(currentRev.rev)}</span>}
               {revisable && draftRev && (
                 <button type="button" onClick={() => setTab('revisions')} className={`${chip} bg-amber-50 text-amber-800 hover:underline cursor-pointer`}>Draft {revName(draftRev.rev)} open</button>
@@ -538,7 +561,7 @@ export default function MaterialPage() {
                 </section>
               </div>
             )}
-            {tab === 'revisions' && revisable && (
+            {tab === 'revisions' && (revisable || (!material.subassembly && material.revisions?.length > 0)) && (
               <Revisions material={material} canEdit={canEdit} canApprove={canApprove}
                 onReleased={(m) => setMaterial(m)} />
             )}
@@ -554,7 +577,7 @@ export default function MaterialPage() {
             <SideRow name={material.prefix ? 'IMM code' : 'Code'} mono>{material.imm_code}</SideRow>
             {material.prefix && <SideRow name="Prefix" mono>{material.prefix.prefix}</SideRow>}
             <SideRow name="Drawing no." mono>{material.drawing_no}</SideRow>
-            <SideRow name="Type">{MATERIAL_TYPE_LABEL[material.material_type]}</SideRow>
+            <SideRow name="Type">{material.type?.name ?? material.material_type}</SideRow>
             <SideRow name="Unit">{material.uom?.code}</SideRow>
             <SideRow name="Status">{material.is_active ? 'Active' : 'Inactive'}</SideRow>
           </SideCard>

@@ -14,9 +14,10 @@ function createSubassemblyRepository(db) {
   const materialBrief = Object.freeze({
     id: true, imm_code: true, item_name: true, drawing_no: true, material_type: true,
     material: true, is_active: true, deleted_at: true, uom: { select: { code: true } },
+    type: { select: { code: true, name: true, has_revisions: true, tag_each_piece: true } },
     // Set when this material is itself a subassembly: its current (released) revision.
     subassembly: { select: { id: true, deleted_at: true, revisions: { where: { status: 'RELEASED' }, select: { id: true, rev: true } } } },
-    // A Finished part's current drawing revision.
+    // A part's current drawing revision (its type has revisions).
     revisions: { where: { status: 'RELEASED' }, select: { id: true, rev: true, status: true } },
   });
 
@@ -87,6 +88,7 @@ function createSubassemblyRepository(db) {
         where: { id: { in: ids } },
         select: {
           id: true, is_active: true, deleted_at: true, imm_code: true, material_type: true,
+          type: { select: { code: true, name: true, has_revisions: true, tag_each_piece: true } },
           subassembly: { select: { id: true, deleted_at: true, revisions: { where: { status: 'RELEASED' }, select: { id: true, rev: true } } } },
           revisions: { where: { status: 'RELEASED' }, select: { id: true, rev: true, status: true } },
         },

@@ -72,17 +72,16 @@ function readMaterialsFile(buffer) {
  * a sheet listing the prefixes, material types and units it accepts.
  * @param {{ prefixes: Array<{ prefix: string, description?: string|null }>, units: Array<{ code: string, name: string }> }} lists  active ones
  */
-function materialsTemplate({ prefixes, units }) {
+function materialsTemplate({ prefixes, units, types = [] }) {
   const head = COLUMNS.map((c) => c.head);
-  const example = ['', prefixes[0]?.prefix || '', 'DRG-1001', 'Coil support bracket', 'Bracket holding the coil', '6 mm plate, 2 holes Ø12', 'Finished', 'MS', units[0]?.code || 'Nos', 'Example row — delete it'];
+  const example = ['', prefixes[0]?.prefix || '', 'DRG-1001', 'Coil support bracket', 'Bracket holding the coil', '6 mm plate, 2 holes Ø12', types[0]?.name || 'Finished', 'MS', units[0]?.code || 'Nos', 'Example row — delete it'];
   const ws = XLSX.utils.aoa_to_sheet([head, example]);
   ws['!cols'] = head.map((h) => ({ wch: Math.max(14, h.length + 4) }));
 
   const lists = [['IMM code prefix', 'About', '', 'Material type', '', 'Unit', 'Name']];
-  const types = ['Finished', 'Bought-out', 'Consumables'];
   const n = Math.max(prefixes.length, types.length, units.length);
   for (let i = 0; i < n; i += 1) {
-    lists.push([prefixes[i]?.prefix || '', prefixes[i]?.description || '', '', types[i] || '', '', units[i]?.code || '', units[i]?.name || '']);
+    lists.push([prefixes[i]?.prefix || '', prefixes[i]?.description || '', '', types[i]?.name || '', '', units[i]?.code || '', units[i]?.name || '']);
   }
   const help = XLSX.utils.aoa_to_sheet([
     ['Fill the Materials sheet, one material per row; keep the headings. Required: Item name, Description, Technical specification, Material type, Material, Unit, and a prefix (here or chosen on screen).'],

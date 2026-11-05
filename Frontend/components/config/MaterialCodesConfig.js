@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
 import { formatImmCode } from '@/lib/materialOptions';
+import useMaterialTypes from '@/lib/materialTypes';
 
 /**
  * Material codes — a section of Administrator → Configuration.
@@ -31,7 +32,10 @@ function PrefixModal({ prefix, onClose, onSaved }) {
     next_number: String(prefix?.next_number ?? 1),
     description: prefix?.description || '',
     is_active: prefix?.is_active ?? true,
+    type_code: prefix?.type_code || '',
   });
+  const { types: materialTypes, choosable } = useMaterialTypes();
+  const typeOptions = [...choosable, ...materialTypes.filter((t) => t.code === form.type_code && !choosable.includes(t))];
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const set = (k, v) => { setForm((f) => ({ ...f, [k]: v })); setError(''); };
@@ -46,7 +50,7 @@ function PrefixModal({ prefix, onClose, onSaved }) {
     try {
       const body = {
         prefix: form.prefix.trim().toUpperCase(), separator: form.separator, digits, next_number: next,
-        description: form.description, is_active: form.is_active,
+        description: form.description, is_active: form.is_active, type_code: form.type_code || null,
       };
       if (isEdit && used) { delete body.prefix; delete body.separator; delete body.digits; }
       const res = isEdit ? await apiPut(`/materials/prefixes/${prefix.id}`, body) : await apiPost('/materials/prefixes', body);
@@ -97,6 +101,15 @@ function PrefixModal({ prefix, onClose, onSaved }) {
           <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2.5">
             <p className="text-xs text-gray-500">Next code will be</p>
             <p className="text-lg font-mono font-semibold text-gray-800 mt-0.5">{preview}</p>
+          </div>
+
+          <div>
+            <label className={label} htmlFor="pf-type">Material type</label>
+            <select id="pf-type" value={form.type_code} onChange={(e) => set('type_code', e.target.value)} className="ams-input">
+              <option value="">Any type</option>
+              {typeOptions.map((t) => <option key={t.code} value={t.code}>{t.name}</option>)}
+            </select>
+            <p className="text-[11px] text-gray-500 mt-1">Its materials are of this type — picking the prefix picks the type (and so whether they have drawing revisions). Set in Material Types.</p>
           </div>
 
           <div>
@@ -185,6 +198,7 @@ export default function MaterialCodesConfig({ has }) {
                 <th className="px-3 py-3 font-normal">Prefix</th>
                 <th className="px-3 py-3 font-normal">Next code</th>
                 <th className="px-3 py-3 font-normal">Format</th>
+                <th className="px-3 py-3 font-normal">Material type</th>
                 <th className="px-3 py-3 font-normal text-right">Materials</th>
                 <th className="px-3 py-3 font-normal">Status</th>
                 <th className="px-3 py-3"><span className="sr-only">Actions</span></th>
@@ -201,6 +215,7 @@ export default function MaterialCodesConfig({ has }) {
                   <td className="px-3 py-2.5 text-xs text-gray-500">
                     separator {p.separator ? <code className="font-mono">{p.separator}</code> : 'none'} · {p.digits} digits
                   </td>
+                  <td className="px-3 py-2.5 text-gray-700">{p.type?.name ?? <span className="text-xs text-gray-400">Any</span>}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{p.material_count}</td>
                   <td className="px-3 py-2.5">
                     <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium ${p.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>

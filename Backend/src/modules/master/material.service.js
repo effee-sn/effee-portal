@@ -1,7 +1,7 @@
 const XLSX = require('xlsx');
 const { materialRepository } = require('./material.repository');
 const { readMaterialsFile, materialsTemplate } = require('./material.import');
-const { labelFor, revName, loadRevisionConfig } = require('./revisionLabels');
+const { labelFor, revName, loadRevisionConfig, assertMayRelease } = require('./revisionLabels');
 const { auditService } = require('../audit/audit.service');
 const { NotFoundError, ConflictError, ValidationError, buildSearchClause } = require('../../core');
 
@@ -24,12 +24,20 @@ const { NotFoundError, ConflictError, ValidationError, buildSearchClause } = req
  *   - **A subassembly's own item** (Master Data → Subassemblies) takes its name,
  *     drawing no. and type from the subassembly: those are changed there, and
  *     the item is deleted with it.
- *   - **Drawing revisions** — Finished parts only (not a subassembly's item,
- *     which has its subassembly's): the first is released when the part is
- *     made ("Original", see revisionLabels); a change to its description,
- *     specification or material is a new draft revision, released with
- *     Materials → Approve and a change note. The part always carries its current
- *     revision's values; subassembly and project BOM lines hold it at a revision.
+ *   - **Material types** (Administrator → Configuration → Material Types): a
+ *     configurable list; each type decides whether its materials have drawing
+ *     revisions, whether a locked project BOM tags each piece, and their
+ *     default make/buy. A type in use can't be deleted (only deactivated) and
+ *     an inactive one isn't offered for new materials. SUBASSEMBLY is built in.
+ *     A prefix may belong to a type: its materials are then of that type.
+ *   - **Drawing revisions** — materials whose type has them (not a
+ *     subassembly's item, which has its subassembly's): the first is released
+ *     when the part is made ("Original", see revisionLabels); a change to its
+ *     description, specification or material is a new draft revision, released
+ *     with Materials → Approve and a change note. The part always carries its
+ *     current revision's values; subassembly and project BOM lines hold it at a
+ *     revision. Switching revisions on for a type gives its parts their first
+ *     revision; switching them off leaves the history readable.
  *
  * @param {ReturnType<typeof import('./material.repository').createMaterialRepository>} repository
  */
@@ -139,15 +147,59 @@ function createMaterialService(repository) {
     if (errors.length) throw new ValidationError('Validation failed', errors);
   }
 
-  /** A Finished part that is not a subassembly's item: it has drawing revisions. */
-  const hasRevisions = (m) => m.material_type === 'FINISHED' && !m.subassembly;
+  /** A material whose type has drawing revisions, and not a subassembly's item. */
+  const hasRevisions = (m) => Boolean(m.type?.has_revisions) && !m.subassembly;
+
+  const MAKE_BUY = Object.freeze(['MAKE', 'BUY', 'SUBCONTRACT']);
+  const shapeType = (t) => {
+    const { _count, ...rest } = t;
+    return { ...rest, material_count: _count.materials, prefix_count: _count.prefixes };
+  };
+  /** A type's code from its name: capitals, numbers and underscores, unique. */
+  async function codeFor(name) {
+    const base = String(name).toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 26) || 'TYPE';
+    for (let n = 1; n < 1000; n += 1) {
+      const code = n === 1 ? base : `${base}_${n}`;
+      if (!(await repository.findTypeByCode(code))) return code;
+    }
+    throw new ConflictError('Could not make a code for this type — try another name');
+  }
+
+  /**
+   * Each row's type must exist, be active and not the built-in one, and match
+   * its prefix's type when the prefix has one.
+   * @param {Array<{ material_type?: string, prefix_id?: number }>} rows
+   * @param {(i: number) => string} where @param {Map<number, object>} [prefixes]
+   * @param {string} [keepType]  the material's current type (may stay even if inactive)
+   */
+  async function assertTypes(rows, where, prefixes = new Map(), keepType) {
+    const types = new Map((await repository.listTypes()).map((t) => [t.code, t]));
+    const errors = [];
+    rows.forEach((r, i) => {
+      if (r.material_type === undefined) return;
+      const t = types.get(r.material_type);
+      const at = rows.length > 1 ? `Row ${i + 1}: ` : '';
+      const p = prefixes.get(r.prefix_id);
+      if (!t || t.is_system) errors.push({ field: where(i), message: `${at}choose a material type` });
+      else if (!t.is_active && t.code !== keepType) errors.push({ field: where(i), message: `${at}material type "${t.name}" is inactive` });
+      else if (p?.type_code && p.type_code !== t.code) errors.push({ field: where(i), message: `${at}prefix "${p.prefix}" is for ${types.get(p.type_code)?.name ?? p.type_code} materials` });
+    });
+    if (errors.length) throw new ValidationError('Validation failed', errors);
+  }
+
+  /** A prefix's type must be a real, non-built-in type. @param {string|null|undefined} code */
+  async function assertPrefixType(code) {
+    if (code === null || code === undefined) return;
+    const t = await repository.findTypeByCode(code);
+    if (!t || t.is_system) throw new ValidationError('Validation failed', [{ field: 'type_code', message: 'Choose a material type' }]);
+  }
   // What a drawing revision carries (material field → revision field).
   const REVISED = Object.freeze({ description: 'description', technical_spec: 'technical_spec', material: 'material_text' });
 
   async function loadPart(id) {
     const m = await repository.findById(id);
     if (!m) throw new NotFoundError('Material');
-    if (!hasRevisions(m)) throw new ConflictError(`${m.imm_code} has no drawing revisions — only Finished parts do (a subassembly's item is revised on its subassembly)`);
+    if (!hasRevisions(m)) throw new ConflictError(`${m.imm_code} has no drawing revisions — its type (${m.type?.name ?? m.material_type}) doesn't have them${m.subassembly ? ', and a subassembly\'s item is revised on its subassembly' : ''}`);
     return m;
   }
 
@@ -194,6 +246,7 @@ function createMaterialService(repository) {
 
     async createPrefix(dto, actor) {
       if (await repository.findPrefixByText(dto.prefix)) throw new ConflictError(`Prefix "${dto.prefix}" already exists`);
+      await assertPrefixType(dto.type_code);
       const p = await repository.createPrefix({
         prefix: dto.prefix,
         separator: dto.separator ?? '',
@@ -201,6 +254,7 @@ function createMaterialService(repository) {
         next_number: dto.next_number ?? 1,
         description: dto.description ?? null,
         is_active: dto.is_active ?? true,
+        type_code: dto.type_code ?? null,
         created_by: actor?.id ?? null,
         updated_by: actor?.id ?? null,
       });
@@ -224,8 +278,14 @@ function createMaterialService(repository) {
           { field: 'next_number', message: `Can't go back below ${before.next_number} — those numbers may already be used` },
         ]);
       }
+      if (dto.type_code !== undefined && dto.type_code !== before.type_code && dto.type_code !== null) {
+        await assertPrefixType(dto.type_code);
+        // Its materials must already be of that type.
+        const others = await repository.countPrefixMaterialsNotOfType(id, dto.type_code);
+        if (others) throw new ConflictError(`"${before.prefix}" has ${others} material(s) of another type — it can't be set to this type`);
+      }
       const data = { updated_by: actor?.id ?? null };
-      for (const k of ['prefix', 'separator', 'digits', 'next_number', 'description', 'is_active']) {
+      for (const k of ['prefix', 'separator', 'digits', 'next_number', 'description', 'is_active', 'type_code']) {
         if (dto[k] !== undefined) data[k] = dto[k];
       }
       const p = await repository.updatePrefix(id, data);
@@ -271,6 +331,7 @@ function createMaterialService(repository) {
       });
       if (errors.length) throw new ValidationError('Validation failed', errors);
       const keptMax = await assertKeptCodes(dto.rows, all, actor);
+      await assertTypes(dto.rows, (i) => `rows.${i}.material_type`, prefixes);
       await assertUnits(dto.rows, (i) => `rows.${i}.uom_id`);
       await assertDrawingNosFree(dto.rows, (i) => `rows.${i}.drawing_no`);
 
@@ -330,15 +391,18 @@ function createMaterialService(repository) {
     },
 
     // ── Drawing revisions (Finished parts) ───────────────────────────────────
-    /** A part's revisions, newest first, with who released each. */
+    /**
+     * A part's revisions, newest first, with who released each. When its type
+     * no longer has revisions, the ones it had stay readable (not revisable).
+     */
     async revisions(id) {
       const m = await repository.findById(id);
       if (!m) throw new NotFoundError('Material');
-      if (!hasRevisions(m)) return { items: [], revisable: false };
+      if (m.subassembly) return { items: [], revisable: false };
       const items = await repository.listRevisions(id);
       const names = await repository.userNames(items.flatMap((r) => [r.released_by, r.created_by]));
       return {
-        revisable: true,
+        revisable: hasRevisions(m),
         items: items.map((r) => ({ ...r, released_by_name: names.get(r.released_by) ?? null, created_by_name: names.get(r.created_by) ?? null })),
       };
     },
@@ -383,6 +447,7 @@ function createMaterialService(repository) {
     async releaseRevision(id, revId, dto, actor) {
       const m = await loadPart(id);
       const draft = await loadRevisionDraft(m, revId);
+      await assertMayRelease(draft, actor);
       const note = (dto.change_note || '').trim();
       if (!note) throw new ValidationError('Validation failed', [{ field: 'change_note', message: 'Say what changed and why' }]);
       const all = await repository.listRevisions(id);
@@ -424,11 +489,10 @@ function createMaterialService(repository) {
     async exportXlsx(query) {
       const search = buildSearchClause(query.search, [...SEARCHABLE_FIELDS]);
       const rows = await repository.findAll({ where: { ...query.filters, ...(search || {}) }, orderBy: query.orderBy, take: 20000 });
-      const TYPE_LABEL = { FINISHED: 'Finished', BOUGHT_OUT: 'Bought-out', CONSUMABLE: 'Consumables' };
       const head = ['IMM code', 'Drawing no.', 'Item name', 'Description', 'Technical specification', 'Material type', 'Material', 'Unit', 'Remarks', 'Status'];
       const body = rows.map((m) => [
         m.imm_code, m.drawing_no || '', m.item_name, m.description, m.technical_spec,
-        TYPE_LABEL[m.material_type] || m.material_type, m.material, m.uom?.code || '', m.remarks || '', m.is_active ? 'Active' : 'Inactive',
+        m.type?.name || m.material_type, m.material, m.uom?.code || '', m.remarks || '', m.is_active ? 'Active' : 'Inactive',
       ]);
       const ws = XLSX.utils.aoa_to_sheet([head, ...body]);
       ws['!cols'] = head.map((h, ci) => ({ wch: Math.min(48, Math.max(8, h.length, ...body.map((r) => String(r[ci]).length)) + 2) }));
@@ -439,8 +503,11 @@ function createMaterialService(repository) {
 
     /** The import template, listing the active prefixes and units. */
     async importTemplate() {
-      const [prefixes, units] = await Promise.all([repository.listPrefixes(), repository.listUnits()]);
-      return materialsTemplate({ prefixes: prefixes.filter((p) => p.is_active), units: units.filter((u) => u.is_active) });
+      const [prefixes, units, types] = await Promise.all([repository.listPrefixes(), repository.listUnits(), repository.listTypes()]);
+      return materialsTemplate({
+        prefixes: prefixes.filter((p) => p.is_active), units: units.filter((u) => u.is_active),
+        types: types.filter((t) => t.is_active && !t.is_system),
+      });
     },
 
     /**
@@ -453,6 +520,67 @@ function createMaterialService(repository) {
       const codes = [...new Set(out.rows.map((r) => (r.imm_code || '').toUpperCase()).filter(Boolean))];
       const taken = await repository.findByCodes(codes);
       return { ...out, taken_codes: taken.map((m) => ({ imm_code: m.imm_code, item_name: m.item_name, deleted: Boolean(m.deleted_at) })) };
+    },
+
+    // ── Material types (Configuration → Material Types) ──────────────────────
+    /** Every type, with how many materials and prefixes use it. The built-in one too (marked). */
+    async listTypes() {
+      return (await repository.listTypes()).map(shapeType);
+    },
+
+    /** @param {{ name: string, has_revisions?: boolean, tag_each_piece?: boolean, default_make_buy?: string, is_active?: boolean, sort_order?: number }} dto */
+    async createType(dto, actor) {
+      if (await repository.findTypeByName(dto.name)) throw new ConflictError(`Material type "${dto.name}" already exists`);
+      const t = await repository.createType({
+        code: await codeFor(dto.name), name: dto.name,
+        has_revisions: dto.has_revisions ?? false, tag_each_piece: dto.tag_each_piece ?? false,
+        default_make_buy: MAKE_BUY.includes(dto.default_make_buy) ? dto.default_make_buy : 'BUY',
+        is_active: dto.is_active ?? true, sort_order: dto.sort_order ?? 0,
+        created_by: actor?.id ?? null, updated_by: actor?.id ?? null,
+      });
+      await auditService.record({ action: auditService.Action.CREATE, entity: 'MaterialType', entityId: t.id, actor, changes: { code: t.code, name: t.name } });
+      return shapeType(t);
+    },
+
+    /**
+     * Renames a type or changes how it behaves. Switching drawing revisions on
+     * gives its parts without one their first revision (from their current
+     * details); switching them off leaves past revisions readable.
+     */
+    async updateType(id, dto, actor) {
+      const before = await repository.findType(id);
+      if (!before) throw new NotFoundError('Material type');
+      if (before.is_system) throw new ConflictError(`"${before.name}" is built in — it can't be changed`);
+      if (dto.name !== undefined && dto.name !== before.name && await repository.findTypeByName(dto.name, id)) {
+        throw new ConflictError(`Material type "${dto.name}" already exists`);
+      }
+      const data = { updated_by: actor?.id ?? null };
+      for (const k of ['name', 'has_revisions', 'tag_each_piece', 'is_active', 'sort_order']) if (dto[k] !== undefined) data[k] = dto[k];
+      if (MAKE_BUY.includes(dto.default_make_buy)) data.default_make_buy = dto.default_make_buy;
+      const t = await repository.updateType(id, data);
+      let started = 0;
+      if (dto.has_revisions === true && !before.has_revisions) {
+        started = await repository.startRevisionsFor(t.code, labelFor(await loadRevisionConfig(), 1), actor?.id ?? null);
+      }
+      await auditService.record({
+        action: auditService.Action.UPDATE, entity: 'MaterialType', entityId: id, actor,
+        changes: { ...auditService.diff(before, data), ...(started ? { revisions_started: started } : {}) },
+      });
+      return { ...shapeType(t), revisions_started: started };
+    },
+
+    /** Only a type nothing uses can be deleted; otherwise make it inactive. */
+    async deleteType(id, actor) {
+      const before = await repository.findType(id);
+      if (!before) throw new NotFoundError('Material type');
+      if (before.is_system) throw new ConflictError(`"${before.name}" is built in — it can't be deleted`);
+      const used = await repository.countTypeUse(before.code);
+      if (used.materials || used.prefixes) {
+        const what = [used.materials && `${used.materials} material(s)`, used.prefixes && `${used.prefixes} prefix(es)`].filter(Boolean).join(' and ');
+        throw new ConflictError(`"${before.name}" is used by ${what} and can't be deleted — make it inactive instead`);
+      }
+      await repository.deleteType(id);
+      await auditService.record({ action: auditService.Action.DELETE, entity: 'MaterialType', entityId: id, actor, changes: { code: before.code, name: before.name } });
     },
 
     // ── Units of measure ─────────────────────────────────────────────────────
@@ -513,6 +641,10 @@ function createMaterialService(repository) {
           throw new ConflictError(`${before.imm_code} has drawing revisions — change its ${revised.map((k) => k.replace('_', ' ')).join(', ')} through a new revision`);
         }
       }
+      if (dto.material_type !== undefined && dto.material_type !== before.material_type) {
+        const prefix = before.prefix ? new Map([[before.prefix.id, { ...before.prefix }]]) : new Map();
+        await assertTypes([{ material_type: dto.material_type, prefix_id: before.prefix_id }], () => 'material_type', prefix, before.material_type);
+      }
       if (dto.drawing_no && dto.drawing_no !== before.drawing_no) await assertDrawingNosFree([dto], () => 'drawing_no', id);
       if (dto.uom_id !== undefined && dto.uom_id !== before.uom_id) {
         const used = await repository.usageCount(id);
@@ -524,7 +656,7 @@ function createMaterialService(repository) {
         if (dto[k] !== undefined) data[k] = dto[k];
       }
       let m = await repository.updateMaterial(id, data);
-      // Made a Finished part just now: it starts its drawing revisions.
+      // Its type has revisions and it has none yet (just changed type): it starts them.
       if (hasRevisions(m) && !(await repository.lastRevisionSeq(id))) {
         await repository.createRevision({
           material_id: id, seq: 1, rev: labelFor(await loadRevisionConfig(), 1), status: 'RELEASED', change_note: 'First release',

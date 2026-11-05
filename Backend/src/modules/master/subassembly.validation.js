@@ -58,6 +58,8 @@ const schemeBody = z.object({
   original_label: z.string().trim().min(1, 'Give the first release a name').max(10, 'At most 10 characters')
     .refine((v) => !/^([A-Z]{1,3}|\d+)$/.test(v), 'That reads like a revision label — use a word, e.g. Original')
     .optional(),
+  // The person who drafted a revision can't release it.
+  maker_checker: z.boolean().optional(),
 }).refine((d) => Object.values(d).some((v) => v !== undefined), { message: 'Nothing to update' });
 
 module.exports = {

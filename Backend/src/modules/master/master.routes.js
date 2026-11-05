@@ -195,6 +195,27 @@ router.delete(
   asyncHandler(materialController.deletePrefix)
 );
 
+// Material types: same access pattern as the prefixes.
+router.get('/materials/types', authorize('MATERIAL_VIEW', 'MATERIAL_CONFIG_VIEW', 'SUBASSEMBLY_VIEW'), asyncHandler(materialController.listTypes));
+router.post(
+  '/materials/types',
+  authorize('MATERIAL_CONFIG_CREATE'),
+  validate({ body: materialValidation.createTypeBody }),
+  asyncHandler(materialController.createType)
+);
+router.put(
+  '/materials/types/:id',
+  authorize('MATERIAL_CONFIG_EDIT'),
+  validate({ params: materialValidation.idParam, body: materialValidation.updateTypeBody }),
+  asyncHandler(materialController.updateType)
+);
+router.delete(
+  '/materials/types/:id',
+  authorize('MATERIAL_CONFIG_DELETE'),
+  validate({ params: materialValidation.idParam }),
+  asyncHandler(materialController.deleteType)
+);
+
 // Units of measure: same access pattern as the prefixes.
 router.get('/materials/units', authorize('MATERIAL_VIEW', 'MATERIAL_CONFIG_VIEW'), asyncHandler(materialController.listUnits));
 router.post(

@@ -10,7 +10,7 @@ import MaterialImportModal from '@/components/MaterialImportModal';
 import { TableSkeleton } from '@/components/Skeleton';
 import usePageSize from '@/lib/usePageSize';
 import PageSizeSelect from '@/components/PageSizeSelect';
-import { MATERIAL_TYPES, MATERIAL_TYPE_LABEL } from '@/lib/materialOptions';
+import useMaterialTypes from '@/lib/materialTypes';
 
 /**
  * Master Data → Materials. The list, with search and filters, and an Excel
@@ -43,6 +43,7 @@ export default function MaterialsPage() {
   const [exportError, setExportError] = useState('');
   const [showImport, setShowImport] = useState(false);
   const canKeepCodes = has('MATERIAL_CONFIG_EDIT');
+  const { types: materialTypes } = useMaterialTypes();
   const [limit, setLimit, limitRef] = usePageSize('materials', 20);
 
   /** The current search and filters as a query string. */
@@ -114,7 +115,7 @@ export default function MaterialsPage() {
         <div className="flex-1" />
         <select value={type} onChange={(e) => onType(e.target.value)} aria-label="Material type" className={selectCls}>
           <option value="">All types</option>
-          {MATERIAL_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          {materialTypes.filter((t) => !t.is_system).map((t) => <option key={t.code} value={t.code}>{t.name}{t.is_active ? '' : ' (inactive)'}</option>)}
         </select>
         <select value={prefixId} onChange={(e) => onPrefix(e.target.value)} aria-label="Prefix" className={selectCls}>
           <option value="">All prefixes</option>
@@ -185,7 +186,7 @@ export default function MaterialsPage() {
                     {m.subassembly && <span className="ml-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700">Subassembly</span>}
                   </td>
                   <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{m.drawing_no || '—'}</td>
-                  <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{MATERIAL_TYPE_LABEL[m.material_type]}</td>
+                  <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{m.type?.name ?? m.material_type}</td>
                   <td className="px-3 py-2.5 text-gray-600">{m.material}</td>
                   <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{m.uom?.code}</td>
                   <td className="px-3 py-2.5 text-gray-500 max-w-xs truncate" title={m.description}>{m.description}</td>

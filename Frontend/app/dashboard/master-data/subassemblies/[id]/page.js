@@ -9,7 +9,8 @@ import useNav from '@/lib/useNav';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { TableSkeleton } from '@/components/Skeleton';
 import { SideCard, SideRow, KeyFacts, TabBar } from '@/components/DetailSide';
-import { MATERIAL_TYPE_LABEL, revName } from '@/lib/materialOptions';
+import { revName } from '@/lib/materialOptions';
+import { TypeName } from '@/lib/materialTypes';
 
 /**
  * Master Data → Subassemblies → one subassembly (new, copied or existing).
@@ -110,7 +111,7 @@ function LinePicker({ excludeIds, onPick }) {
                       {m.subassembly?.revisions?.[0] && <span className="text-[11px] text-gray-500">{revName(m.subassembly.revisions[0].rev)}</span>}
                     </span>
                     <span className="block text-xs text-gray-500 mt-0.5">
-                      {m.drawing_no ? `Drawing ${m.drawing_no} · ` : ''}{MATERIAL_TYPE_LABEL[m.material_type]} · {m.material} · {m.uom?.code}
+                      {m.drawing_no ? `Drawing ${m.drawing_no} · ` : ''}<TypeName code={m.material_type} /> · {m.material} · {m.uom?.code}
                     </span>
                   </button>
                 </li>
@@ -207,7 +208,7 @@ function LinesTable({ lines, editable, exclude, onAdd, onQty, onRemove, onUseCur
                     </td>
                     <td className="px-3 py-2 text-gray-800">{m.item_name}</td>
                     <td className="px-3 py-2 text-gray-600">{m.drawing_no || '—'}</td>
-                    <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{MATERIAL_TYPE_LABEL[m.material_type]} · {m.material}</td>
+                    <td className="px-3 py-2 text-gray-600 whitespace-nowrap"><TypeName code={m.material_type} /> · {m.material}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       {editable ? (
                         <input type="number" min="0" step="any" inputMode="decimal" aria-label={`Quantity of ${m.imm_code}`}
@@ -332,7 +333,7 @@ function Structure({ id, revId }) {
                     {t.unbuilt && <span className="ml-2 font-sans font-medium text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700" title="A subassembly with no lines in the revision held">No lines</span>}
                   </td>
                   <td className="py-1.5 pr-3 text-gray-700">{t.material.item_name}</td>
-                  <td className="py-1.5 pr-3 text-gray-500">{MATERIAL_TYPE_LABEL[t.material.material_type]}</td>
+                  <td className="py-1.5 pr-3 text-gray-500"><TypeName code={t.material.material_type} /></td>
                   <td className="py-1.5 text-right tabular-nums text-gray-800 font-medium whitespace-nowrap">{qtyFmt(t.quantity)} <span className="text-xs text-gray-500 font-normal">{t.material.uom?.code}</span></td>
                 </tr>
               ))}
@@ -457,7 +458,7 @@ const toLines = (items) => items.map((i) => ({ material: i.material, quantity: S
 /** A picked material as a line: a child subassembly (or a Finished part) is held at its current revision. */
 const pickedLine = (m) => {
   const current = m.subassembly?.revisions?.[0] ?? null;
-  const partCurrent = !m.subassembly && m.material_type === 'FINISHED' ? m.revisions?.find((r) => r.status === 'RELEASED') ?? null : null;
+  const partCurrent = !m.subassembly && m.type?.has_revisions ? m.revisions?.find((r) => r.status === 'RELEASED') ?? null : null;
   return {
     material: m, quantity: '1',
     child: m.subassembly ? { subassembly_id: m.subassembly.id, held: current, current, newer: false } : null,
@@ -659,14 +660,14 @@ function SubassemblyEditor() {
         <select id="sa-dept" value={form.department_id} disabled={disabled} onChange={(e) => { setForm((f) => ({ ...f, department_id: e.target.value })); setNotice(''); }}
           className="ams-input disabled:bg-gray-50">
           <option value="">— None —</option>
-          {/* Only departments with a code (it goes into project tags) — and the one it already has. */}
+          {/* Only departments with a code — and the one it already has. */}
           {departments.filter((d) => d.dept_code || d.id === sub?.department?.id).map((d) => (
             <option key={d.id} value={d.id}>{d.name}{d.dept_code ? ` (${d.dept_code})` : ' (no code yet)'}</option>
           ))}
         </select>
         <p className="text-[11px] text-gray-500 mt-1">
           {departments.some((d) => d.dept_code) ? 'Only departments with a code are listed — ' : 'No department has a code yet — '}
-          set codes in Administrator → Configuration → Department Codes. The code goes into project tag numbers.
+          set codes in Administrator → Configuration → Department Codes.
         </p>
       </div>
     </>

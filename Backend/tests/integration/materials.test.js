@@ -21,7 +21,7 @@ const it = (name, fn) => test(name, async (t) => {
 
 let prisma; let svc;
 const tag = `T${Date.now().toString().slice(-6)}`;
-const made = { prefixes: [], units: [], subs: [] };
+const made = { prefixes: [], units: [], subs: [], types: [], makerChecker: null };
 const actor = { id: null, email: 'materials-test@local', is_system: true, permissions: [] };
 let nos; // the "Nos" unit's id
 const row = (prefix_id, extra = {}) => ({
@@ -46,6 +46,9 @@ after(async () => {
     await prisma.auditLog.deleteMany({ where: { entity: 'Material', entity_id: { in: ids } } });
     await prisma.material.deleteMany({ where: { prefix_id: { in: made.prefixes } } });
     await prisma.immPrefix.deleteMany({ where: { id: { in: made.prefixes } } });
+    await prisma.auditLog.deleteMany({ where: { entity: 'MaterialType', entity_id: { in: made.types.map(String) } } });
+    await prisma.materialType.deleteMany({ where: { id: { in: made.types } } });
+    if (made.makerChecker !== null) await prisma.companySettings.updateMany({ data: { revision_maker_checker: made.makerChecker } });
     await prisma.unitOfMeasure.deleteMany({ where: { id: { in: made.units } } });
   } finally { await prisma.$disconnect(); }
 });
@@ -194,5 +197,77 @@ describe('Keeping IMM codes from an import', () => {
     const editor = { ...clerk, permissions: ['MATERIAL_CREATE', 'MATERIAL_CONFIG_EDIT'] };
     const [m] = await svc.createBulk({ rows: [row(k.id, { imm_code: `${tag}K-0200` })] }, editor);
     assert.equal(m.imm_code, `${tag}K-0200`);
+  });
+});
+
+describe('Material types', () => {
+  let raw; let px;
+
+  it('a new type gets a code from its name; names are unique', async () => {
+    raw = await svc.createType({ name: `${tag} Raw material` }, actor);
+    made.types.push(raw.id);
+    assert.match(raw.code, new RegExp(`^${tag}_RAW_MATERIAL`));
+    assert.equal(raw.has_revisions, false);
+    assert.equal(raw.default_make_buy, 'BUY');
+    await assert.rejects(svc.createType({ name: `${tag} raw material` }, actor), { name: 'ConflictError' }, 'same name, any case');
+  });
+
+  it('a prefix of a type only takes materials of that type', async () => {
+    px = await svc.createPrefix({ prefix: `${tag}R`, separator: '-', digits: 3, type_code: raw.code }, actor);
+    made.prefixes.push(px.id);
+    assert.equal(px.type_code, raw.code);
+    await assert.rejects(svc.createBulk({ rows: [row(px.id, { material_type: 'BOUGHT_OUT', item_name: 'Wrong type' })] }, actor), { name: 'ValidationError' });
+    const [m] = await svc.createBulk({ rows: [row(px.id, { material_type: raw.code, item_name: 'Copper bar' })] }, actor);
+    assert.equal(m.type.name, raw.name);
+    assert.equal((await svc.revisions(m.id)).revisable, false, 'its type has no revisions');
+    const edited = await svc.update(m.id, { description: 'Edited directly' }, actor);
+    assert.equal(edited.description, 'Edited directly');
+    await assert.rejects(svc.updatePrefix(px.id, { type_code: 'BOUGHT_OUT' }, actor), { name: 'ConflictError' }, 'its materials are of another type');
+  });
+
+  it('switching revisions on starts them for existing parts; off leaves the history readable', async () => {
+    const [m] = await svc.createBulk({ rows: [row(px.id, { material_type: raw.code, item_name: 'Copper strip' })] }, actor);
+    const on = await svc.updateType(raw.id, { has_revisions: true }, actor);
+    assert.ok(on.revisions_started >= 2, 'both parts of the type');
+    const revs = await svc.revisions(m.id);
+    assert.equal(revs.revisable, true);
+    assert.equal(revs.items.length, 1);
+    await assert.rejects(svc.update(m.id, { description: 'Not directly' }, actor), { name: 'ConflictError' }, 'now through a revision');
+    await svc.updateType(raw.id, { has_revisions: false }, actor);
+    const off = await svc.revisions(m.id);
+    assert.equal(off.revisable, false);
+    assert.equal(off.items.length, 1, 'history still there');
+    assert.equal((await svc.update(m.id, { description: 'Directly again' }, actor)).description, 'Directly again');
+  });
+
+  it('an inactive type is not offered for new materials; the built-in one never', async () => {
+    await svc.updateType(raw.id, { is_active: false }, actor);
+    await assert.rejects(svc.createBulk({ rows: [row(px.id, { material_type: raw.code })] }, actor), { name: 'ValidationError' });
+    await svc.updateType(raw.id, { is_active: true }, actor);
+    await assert.rejects(svc.createBulk({ rows: [row(px.id, { material_type: 'SUBASSEMBLY' })] }, actor), { name: 'ValidationError' });
+    const sys = (await svc.listTypes()).find((t) => t.code === 'SUBASSEMBLY');
+    assert.equal(sys.is_system, true);
+    await assert.rejects(svc.updateType(sys.id, { name: 'X' }, actor), { name: 'ConflictError' });
+    await assert.rejects(svc.deleteType(sys.id, actor), { name: 'ConflictError' });
+  });
+
+  it('a type in use can\'t be deleted; an unused one can', async () => {
+    await assert.rejects(svc.deleteType(raw.id, actor), { name: 'ConflictError' });
+    const spare = await svc.createType({ name: `${tag} Spare`, tag_each_piece: true, default_make_buy: 'SUBCONTRACT' }, actor);
+    assert.equal(spare.tag_each_piece, true);
+    assert.equal(spare.default_make_buy, 'SUBCONTRACT');
+    await svc.deleteType(spare.id, actor);
+    assert.ok(!(await svc.listTypes()).some((t) => t.id === spare.id));
+  });
+
+  it('maker-checker: whoever drafted a revision can\'t release it', async () => {
+    const { assertMayRelease } = require('../../src/modules/master/revisionLabels');
+    const st = await prisma.companySettings.findFirst();
+    made.makerChecker = st.revision_maker_checker;
+    await prisma.companySettings.update({ where: { id: st.id }, data: { revision_maker_checker: false } });
+    await assertMayRelease({ created_by: 7, rev: 'A' }, { id: 7 });
+    await prisma.companySettings.update({ where: { id: st.id }, data: { revision_maker_checker: true } });
+    await assert.rejects(assertMayRelease({ created_by: 7, rev: 'A' }, { id: 7 }), { name: 'ConflictError' });
+    await assertMayRelease({ created_by: 7, rev: 'A' }, { id: 8 });
   });
 });
