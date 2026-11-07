@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { apiGet, apiPost } from '@/lib/api';
 import { pushSupported, currentPushState, enablePush, disablePush } from '@/lib/push';
 import useNav from '@/lib/useNav';
+import { useIssues } from '@/lib/issues';
 import { ListSkeleton } from '@/components/Skeleton';
 
 /** Compact relative time for a notification row. */
@@ -25,6 +26,7 @@ const timeAgo = (iso) => {
  */
 export default function NotificationBell() {
   const nav = useNav();
+  const issues = useIssues();
   const [open, setOpen]     = useState(false);
   const [items, setItems]   = useState([]);
   const [unread, setUnread] = useState(0);
@@ -88,6 +90,8 @@ export default function NotificationBell() {
       try { const r = await apiPost(`/notifications/${n.id}/read`, {}, { silent: true }); setUnread(r.data?.unread ?? 0); } catch { /* silent */ }
       setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)));
     }
+    // An issue opens in the side panel, beside the page you are on.
+    if (n.entity_type === 'Issue' && Number(n.entity_id)) { issues.open({ mode: 'issue', id: Number(n.entity_id) }); return; }
     if (n.link) nav(n.link);
   };
 

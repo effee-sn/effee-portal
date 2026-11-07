@@ -7,6 +7,7 @@ import usePermissions from '@/lib/usePermissions';
 import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import useNav from '@/lib/useNav';
 import { DetailPageSkeleton } from '@/components/Skeleton';
+import IssueRecordButton from '@/components/issues/IssueRecordButton';
 
 const label = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
 
@@ -190,6 +191,7 @@ export default function CustomerDetailPage() {
           <h1 className="text-lg font-semibold text-gray-800 truncate">{customer.name}</h1>
           <p className="text-xs text-gray-400">{[customer.city, customer.state].filter(Boolean).join(', ') || 'Customer'}</p>
         </div>
+        <IssueRecordButton module="master-data" entityType="Customer" entityId={customer.id} label={customer.name} />
         {canEdit && (
           <button onClick={() => setModal({ type: 'edit-customer' })} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Edit</button>
         )}

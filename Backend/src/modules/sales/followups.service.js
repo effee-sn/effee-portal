@@ -96,6 +96,7 @@ function createFollowupsService(repository) {
         ...(q.medium ? { next_medium: q.medium } : {}),
         enquiry: {
           deleted_at: null,
+          archived_at: null,
           ...(q.stage ? { stage: q.stage } : {}),
         },
         ...(term ? {

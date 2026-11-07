@@ -89,7 +89,7 @@ async function runDueFollowupReminders(now = new Date()) {
       follow_up_done_at: null,
       reminded_at: null,
       follow_up_at: { not: null },
-      enquiry: { deleted_at: null, stage: { notIn: ['WON', 'LOST'] } },
+      enquiry: { deleted_at: null, archived_at: null, stage: { notIn: ['WON', 'LOST'] } },
       AND: [
         // A review's next date only matters while the enquiry is still at Review;
         // once it has moved on, the old date is stale and must not nag anyone.
@@ -188,6 +188,7 @@ async function runStageAgingReminders() {
   const candidates = await prisma.enquiry.findMany({
     where: {
       deleted_at: null,
+      archived_at: null,
       OR: Object.entries(STAGE_AGING_DAYS).map(([stage, days]) => ({
         stage,
         stage_since: { lte: new Date(now - days * DAY_MS) },
@@ -265,7 +266,7 @@ async function runOverdueFollowupDigest(now = new Date()) {
       follow_up_ended: false,
       follow_up_done_at: null,
       follow_up_at: { not: null, lt: startOfToday },
-      enquiry: { deleted_at: null, stage: { notIn: ['WON', 'LOST'] } },
+      enquiry: { deleted_at: null, archived_at: null, stage: { notIn: ['WON', 'LOST'] } },
     },
     select: {
       id: true, subject: true, next_action: true, next_medium: true, follow_up_at: true, follow_up_timed: true, created_by: true,

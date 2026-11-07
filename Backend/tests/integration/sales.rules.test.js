@@ -585,6 +585,86 @@ describe('Sales rules: Sales → Edit edits all, Sales own → Edit only your ow
   });
 });
 
+describe('Sales rules: archiving an enquiry (Sales → Archive)', () => {
+  const ARCHIVER = [...FULL, 'SALES_ARCHIVE'];
+  const listed = async (search, archived) => (await enquiryService.list(
+    { filters: {}, search, orderBy: { created_at: 'desc' }, skip: 0, take: 50, ...(archived ? { archived: 'true' } : {}) },
+    admin(fx.field),
+  )).items.map((e) => e.id);
+
+  it('needs Sales → Archive and a reason; Other needs a note; a Won enquiry stays', async () => {
+    const e = await newEnquiry('GENERATED', fx.field, { title: `ARCH ${suffix} rules` });
+    await assert.rejects(enquiryService.archive(e.id, { reason: 'MISTAKE' }, actor(fx.field)), { name: 'ForbiddenError' });
+    await assert.rejects(enquiryService.archive(e.id, { reason: '' }, actor(fx.field, ARCHIVER)), { name: 'ValidationError' });
+    await assert.rejects(enquiryService.archive(e.id, { reason: 'OTHER', note: '  ' }, actor(fx.field, ARCHIVER)), { name: 'ValidationError' });
+    await assert.rejects(enquiryService.archive(e.id, { reason: 'DUPLICATE', duplicate_of_id: e.id }, actor(fx.field, ARCHIVER)),
+      { name: 'ValidationError' }, 'not a duplicate of itself');
+
+    const won = await newEnquiry('GENERATED', fx.field, { title: `ARCH ${suffix} won` });
+    await prisma.enquiry.update({ where: { id: won.id }, data: { stage: 'WON', won_at: new Date(), order_value: 1000 } });
+    await assert.rejects(enquiryService.archive(won.id, { reason: 'MISTAKE' }, actor(fx.field, ARCHIVER)), { name: 'ConflictError' });
+  });
+
+  it('a duplicate is archived with the enquiry it duplicates, and leaves the list and the counts', async () => {
+    const kept = await newEnquiry('GENERATED', fx.field2, { title: `ARCH ${suffix} kept` });
+    const dup = await newEnquiry('GENERATED', fx.field2, { title: `ARCH ${suffix} dup`, expected_value: 5000 });
+    const before = (await analyticsService.overview({ owner_id: fx.field2.id })).headline;
+
+    const r = await enquiryService.archive(dup.id, { reason: 'DUPLICATE', duplicate_of_id: kept.id, note: 'raised twice' }, actor(fx.field, ARCHIVER));
+    assert.ok(r.archived_at);
+    assert.equal(r.archive_reason, 'DUPLICATE');
+    assert.equal(r.duplicate_of?.id, kept.id);
+    assert.equal(r.archived_by?.id, fx.field.id);
+
+    const ids = await listed(`ARCH ${suffix}`);
+    assert.ok(ids.includes(kept.id));
+    assert.ok(!ids.includes(dup.id), 'hidden from the list');
+    assert.deepEqual(await listed(`ARCH ${suffix}`, true), [dup.id], 'the Archived filter shows only it');
+
+    const after = (await analyticsService.overview({ owner_id: fx.field2.id })).headline;
+    assert.equal(after.raised, before.raised - 1, 'not counted as raised');
+    assert.equal(after.open_count, before.open_count - 1, 'not in the open pipeline');
+    assert.equal(after.open_value, before.open_value - 5000);
+
+    await assert.rejects(enquiryService.archive(dup.id, { reason: 'MISTAKE' }, actor(fx.field, ARCHIVER)), { name: 'ConflictError' }, 'already archived');
+    const another = await newEnquiry('GENERATED', fx.field2, { title: `ARCH ${suffix} another` });
+    await assert.rejects(enquiryService.archive(another.id, { reason: 'DUPLICATE', duplicate_of_id: dup.id }, actor(fx.field, ARCHIVER)),
+      { name: 'ValidationError' }, 'not a duplicate of an archived enquiry');
+  });
+
+  it('an archived enquiry is read-only for everyone, a Super Admin too, until restored', async () => {
+    const e = await newEnquiry('GENERATED', fx.field, { title: `ARCH ${suffix} readonly` });
+    await enquiryService.archive(e.id, { reason: 'MISTAKE' }, actor(fx.field, ARCHIVER));
+
+    await assert.rejects(enquiryService.update(e.id, { title: 'changed' }, admin(fx.field)), { name: 'ForbiddenError' });
+    await assert.rejects(enquiryService.update(e.id, { title: 'changed' }, actor(fx.field)), { name: 'ForbiddenError' });
+    await assert.rejects(log(e.id, fx.field), { name: 'ForbiddenError' });
+    await assert.rejects(upload(e.id, 'FORMAT_PDF', fx.field), { name: 'ForbiddenError' });
+    await assert.rejects(enquiryService.lose(e.id, { lost_reason: 'x' }, actor(fx.field)), { name: 'ForbiddenError' });
+    await assert.rejects(enquiryService.reassign(e.id, { handler_id: fx.field2.id }, admin(fx.field)), { name: 'ForbiddenError' });
+    // Still readable.
+    assert.equal((await enquiryService.getById(e.id, actor(fx.field))).id, e.id);
+
+    await assert.rejects(enquiryService.restore(e.id, { note: 'x' }, actor(fx.field)), { name: 'ForbiddenError' });
+    await assert.rejects(enquiryService.restore(e.id, { note: ' ' }, actor(fx.field, ARCHIVER)), { name: 'ValidationError' }, 'say why');
+    const r = await enquiryService.restore(e.id, { note: 'archived by mistake' }, actor(fx.field, ARCHIVER));
+    assert.equal(r.archived_at, null);
+    assert.equal(r.archive_reason, null);
+    await enquiryService.update(e.id, { title: `ARCH ${suffix} back` }, actor(fx.field));
+    assert.ok((await listed(`ARCH ${suffix} back`)).includes(e.id), 'listed again');
+    await assert.rejects(enquiryService.restore(e.id, { note: 'again' }, actor(fx.field, ARCHIVER)), { name: 'ConflictError' });
+  });
+
+  it('a Lost enquiry can be archived; archiving tells the holder and the raiser', async () => {
+    const e = await newEnquiry('GENERATED', fx.field, { title: `ARCH ${suffix} lost` });
+    await enquiryService.lose(e.id, { lost_reason: 'test' }, actor(fx.field));
+    await enquiryService.archive(e.id, { reason: 'WITHDRAWN' }, actor(fx.field2, ARCHIVER));
+    assert.equal(await notified(fx.field.id, 'ENQUIRY_ARCHIVED', e.id), 1);
+    assert.equal(await notified(fx.field2.id, 'ENQUIRY_ARCHIVED', e.id), 0, 'not the person who archived it');
+    await assert.rejects(enquiryService.reopen(e.id, admin(fx.field)), { name: 'ForbiddenError' }, 'restore before reopening');
+  });
+});
+
 describe('Sales rules: refurbishment enquiries skip Concept', () => {
   it('Review moves straight to Costing — no concept documents needed, and Concept is refused', async () => {
     const id = (await newEnquiry('GENERATED', fx.field, { is_refurbishment: true })).id;

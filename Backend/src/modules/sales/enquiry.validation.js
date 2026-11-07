@@ -51,6 +51,8 @@ const listEnquiriesQuery = schemas.listQuery.extend({
   application_id: z.coerce.number().int().positive().optional(),
   // Show each value in this currency (default INR).
   display_currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/, 'A 3-letter currency code').optional(),
+  // true: only archived enquiries (hidden otherwise).
+  archived: z.enum(['true', 'false']).optional(),
 });
 
 const enquiryIdParam = schemas.idParam;
@@ -116,6 +118,19 @@ const reassignEnquiryBody = z.object({
   { message: 'Choose a new owner or handler' }
 );
 
+// Archive (Sales → Archive): the reason is mandatory; OTHER needs a note; a
+// duplicate may name the enquiry it duplicates (checked in the service).
+const archiveEnquiryBody = z.object({
+  reason: z.enum(['DUPLICATE', 'MISTAKE', 'WITHDRAWN', 'OTHER'], { errorMap: () => ({ message: 'Choose why it is archived' }) }),
+  note:   optionalText(1000),
+  duplicate_of_id: z.preprocess((x) => (x === '' ? null : x), z.coerce.number().int().positive().nullable().optional()),
+}).refine((d) => d.reason !== 'OTHER' || (d.note && d.note.trim()), { message: 'Say why it is archived', path: ['note'] });
+
+// Restore: say why.
+const restoreEnquiryBody = z.object({
+  note: z.string().trim().min(1, 'Say why it is restored').max(1000),
+});
+
 // A department head hands a waiting enquiry to someone in their team.
 const assignFromQueueBody = z.object({
   user_id: z.coerce.number().int().positive('Choose someone in the department'),
@@ -134,4 +149,6 @@ module.exports = {
   winEnquiryBody,
   loseEnquiryBody,
   reassignEnquiryBody,
+  archiveEnquiryBody,
+  restoreEnquiryBody,
 };

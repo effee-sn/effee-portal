@@ -15,6 +15,9 @@ import PageSizeSelect from '@/components/PageSizeSelect';
 import EnquiryKanban from '@/components/sales/EnquiryKanban';
 import { useDisplayCurrency } from '@/lib/displayCurrency';
 
+// The stage filter's "Archived" choice: archived enquiries (duplicates, mistakes).
+const ARCHIVED = 'ARCHIVED';
+
 // List or Kanban — remembered per browser.
 const VIEW_KEY = 'sales-enquiries-view';
 const savedView = () => {
@@ -213,7 +216,9 @@ export default function EnquiriesPage() {
     setLoading(true);
     try {
       const q = new URLSearchParams({ page: String(p), limit: String(limitRef.current), search: s });
-      if (st) q.set('stage', st);
+      // "Archived" in the stage filter lists only archived enquiries (hidden otherwise).
+      if (st === ARCHIVED) q.set('archived', 'true');
+      else if (st) q.set('stage', st);
       if (app) q.set('application_id', app);
       if (cur && cur !== 'INR') q.set('display_currency', cur); // values converted by the server
       q.set('sort', sortRef.current.field); q.set('order', sortRef.current.dir);
@@ -302,6 +307,7 @@ export default function EnquiriesPage() {
               className="shrink-0 text-sm border border-gray-300 rounded px-2 py-1.5 text-gray-700 bg-white cursor-pointer">
               <option value="">All stages</option>
               {ALL_STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              <option value={ARCHIVED}>Archived</option>
             </select>
           )}
           {config?.applications?.length > 0 && (

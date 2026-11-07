@@ -39,6 +39,11 @@ const EMAIL_DEFAULTS = Object.freeze({
     actionLabel: 'Open ticket',
     reason: "You're receiving this because you're involved in this ticket in the portal.",
   },
+  Issue: {
+    eyebrow: 'Issues',
+    actionLabel: 'Open issue',
+    reason: "You're receiving this because you're involved in this issue in the portal.",
+  },
 });
 
 function createNotificationService(repository) {
@@ -84,11 +89,18 @@ function createNotificationService(repository) {
     ENQUIRY_ASSIGNED:           'ENQUIRY_ASSIGNED',
     ENQUIRY_WON:                'ENQUIRY_WON',
     ENQUIRY_LOST:               'ENQUIRY_LOST',
+    ENQUIRY_ARCHIVED:           'ENQUIRY_ARCHIVED',
     OFFER_SENT:                 'OFFER_SENT',
     STAGE_AGING:                'STAGE_AGING',
     ACTIVITY_FOLLOWUP:          'ACTIVITY_FOLLOWUP',
     FOLLOWUP_DUE:               'FOLLOWUP_DUE',
     FOLLOWUP_OVERDUE:           'FOLLOWUP_OVERDUE',
+    // Issues (the issue logger).
+    ISSUE_ASSIGNED:             'ISSUE_ASSIGNED',
+    ISSUE_COMMENT:              'ISSUE_COMMENT',
+    ISSUE_RESOLVED:             'ISSUE_RESOLVED',
+    ISSUE_REOPENED:             'ISSUE_REOPENED',
+    ISSUE_CLOSED:               'ISSUE_CLOSED',
     // Flow Builder flows (a Notify block; approvals asked and decided).
     FLOW_NOTIFY:                'FLOW_NOTIFY',
     FLOW_APPROVAL:              'FLOW_APPROVAL',

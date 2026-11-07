@@ -18,6 +18,7 @@ const departmentRoutes = require('../modules/department/department.routes');
 const projectRoutes   = require('../modules/projects/project.routes');
 const masterRoutes    = require('../modules/master/master.routes');
 const reportsRoutes   = require('../modules/reports/reports.routes');
+const issueRoutes     = require('../modules/issues/issue.routes');
 
 const router = Router();
 
@@ -45,6 +46,7 @@ router.use('/approvals',   approvalRoutes);
 router.use('/departments', departmentRoutes);
 router.use('/projects',    projectRoutes);
 router.use('/reports',     reportsRoutes);
+router.use('/issues',      issueRoutes);
 // Master data (customers, contacts) — mounted at root so paths are /customers, /contacts.
 router.use('/', masterRoutes);
 

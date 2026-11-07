@@ -20,7 +20,7 @@ const STAGE_LABEL = Object.freeze({
  */
 async function loadEnquiryFacts(id) {
   const e = await prisma.enquiry.findFirst({
-    where: { id: Number(id), deleted_at: null },
+    where: { id: Number(id), deleted_at: null, archived_at: null }, // archived: flows leave it alone
     select: {
       id: true, ref_no: true, title: true, stage: true, enquiry_type: true, is_refurbishment: true, currency_code: true,
       expected_value: true, order_value: true, order_fx_rate: true, won_at: true, final_cost: true, application_id: true, customer_id: true,
@@ -74,7 +74,7 @@ async function openEnquiryCounts(userIds) {
   if (!userIds.length) return new Map();
   const rows = await prisma.enquiry.groupBy({
     by: ['handler_id'],
-    where: { handler_id: { in: userIds }, deleted_at: null, stage: { notIn: ['WON', 'LOST'] } },
+    where: { handler_id: { in: userIds }, deleted_at: null, archived_at: null, stage: { notIn: ['WON', 'LOST'] } },
     _count: { _all: true },
   });
   return new Map(rows.map((r) => [r.handler_id, r._count._all]));
@@ -93,7 +93,7 @@ async function handlerAtStage(enquiryId, stage) {
 /** Open enquiries at these stages, with who holds them — for "move current enquiries?" after a publish. */
 async function openEnquiriesAt(stages) {
   return prisma.enquiry.findMany({
-    where: { deleted_at: null, stage: { in: stages } },
+    where: { deleted_at: null, archived_at: null, stage: { in: stages } },
     select: {
       id: true, ref_no: true, title: true, stage: true, owner_id: true, handler_id: true, queue_department_id: true,
       handler: { select: { name: true } }, customer: { select: { name: true } },

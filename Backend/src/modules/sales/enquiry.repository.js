@@ -31,6 +31,8 @@ function createEnquiryRepository(db) {
     handler: { select: { id: true, name: true } },
     queue_department_id: true,
     won_at: true,
+    archived_at: true,
+    archive_reason: true,
     created_at: true,
     _count: {
       select: {
@@ -66,6 +68,13 @@ function createEnquiryRepository(db) {
     lost_at: true,
     lost_reason: true,
     lost_to: true,
+    archived_at: true,
+    archive_reason: true,
+    archive_note: true,
+    archived_by_id: true,
+    archived_by: { select: { id: true, name: true } },
+    duplicate_of_id: true,
+    duplicate_of: { select: { id: true, ref_no: true, title: true } },
     customer_id: true,
     customer: { select: { id: true, name: true, state: true, state_code: true, gstin: true } },
     application_id: true,
@@ -227,7 +236,7 @@ function createEnquiryRepository(db) {
      * @param {number[]|null} departmentIds
      */
     async queue(departmentIds) {
-      const where = active({ queue_department_id: departmentIds ? { in: departmentIds } : { not: null } });
+      const where = active({ archived_at: null, queue_department_id: departmentIds ? { in: departmentIds } : { not: null } });
       const items = await db.enquiry.findMany({
         where,
         select: { ...enquiryListSelect, queued_at: true, queue_department_id: true, queue_department: { select: { id: true, name: true } } },
@@ -248,7 +257,7 @@ function createEnquiryRepository(db) {
     /** Waiting enquiries whose head has not been reminded, queued before `before`. */
     staleQueue(before) {
       return db.enquiry.findMany({
-        where: active({ queue_department_id: { not: null }, queued_at: { lte: before }, queue_reminded_at: null }),
+        where: active({ archived_at: null, queue_department_id: { not: null }, queued_at: { lte: before }, queue_reminded_at: null }),
         select: { id: true, ref_no: true, title: true, stage: true, handler_id: true, queued_at: true, queue_department: { select: { name: true } } },
       });
     },

@@ -19,6 +19,7 @@ import useCurrencies, { MoneyText, formatMoney } from '@/lib/money';
 import { useDisplayCurrency } from '@/lib/displayCurrency';
 import { DetailPageSkeleton } from '@/components/Skeleton';
 import ValueBasis from '@/components/sales/ValueBasis';
+import IssueRecordButton from '@/components/issues/IssueRecordButton';
 
 // Stages where the final costing value can be entered (matches the API).
 const COSTED_STAGES = ['COSTING_REVIEW', 'OFFER_RELEASED', 'NEGOTIATION'];
@@ -159,6 +160,138 @@ function LoseModal({ enquiryId, onClose, onDone }) {
         <div className="flex gap-3 mt-5">
           <button type="button" onClick={onClose} className="btn-secondary flex-1 justify-center py-2">Cancel</button>
           <button type="submit" disabled={saving} className="btn-danger flex-1 justify-center py-2">{saving ? 'Saving…' : 'Confirm Lost'}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ── Archive / restore (Sales → Archive) ───────────────────────────────────────
+// Matches the API: the reason is mandatory; Other needs a note; a duplicate
+// may name the enquiry being kept.
+const ARCHIVE_REASONS = [
+  { value: 'DUPLICATE', label: 'Duplicate' },
+  { value: 'MISTAKE',   label: 'Created by mistake' },
+  { value: 'WITHDRAWN', label: 'Withdrawn by customer' },
+  { value: 'OTHER',     label: 'Other' },
+];
+const ARCHIVE_REASON_LABEL = Object.fromEntries(ARCHIVE_REASONS.map((r) => [r.value, r.label]));
+
+function ArchiveModal({ enquiry, onClose, onDone }) {
+  const [form, setForm]     = useState({ reason: '', note: '' });
+  const [dup, setDup]       = useState(null); // { id, ref_no, title }
+  const [term, setTerm]     = useState('');
+  const [found, setFound]   = useState([]);
+  const [error, setError]   = useState('');
+  const [saving, setSaving] = useState(false);
+  const change = (e) => { setForm({ ...form, [e.target.name]: e.target.value }); setError(''); };
+
+  // Find the enquiry it duplicates (archived ones are not listed).
+  useEffect(() => {
+    if (form.reason !== 'DUPLICATE' || dup || term.trim().length < 2) { setFound([]); return undefined; }
+    const t = setTimeout(() => {
+      apiGet(`/sales/enquiries?search=${encodeURIComponent(term.trim())}&limit=8`, { silent: true })
+        .then((r) => setFound((r.data || []).filter((e) => e.id !== enquiry.id)))
+        .catch(() => setFound([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [term, form.reason, dup, enquiry.id]);
+
+  const go = async (e) => {
+    e.preventDefault();
+    if (!form.reason) { setError('Choose why it is archived'); return; }
+    if (form.reason === 'OTHER' && !form.note.trim()) { setError('Say why it is archived'); return; }
+    setSaving(true); setError('');
+    try {
+      const body = { reason: form.reason, note: form.note.trim() || null, duplicate_of_id: form.reason === 'DUPLICATE' && dup ? dup.id : null };
+      const res = await apiPost(`/sales/enquiries/${enquiry.id}/archive`, body);
+      onDone(res.data); onClose();
+    } catch (err) { setError(err.message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <form onSubmit={go} className="w-full max-w-md bg-white rounded-lg shadow-xl p-6">
+        <h2 className="text-base font-semibold text-gray-800 mb-1">Archive {enquiry.ref_no}</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          It leaves the list, dashboards, reports, reminders and flows, and is read-only until restored.
+        </p>
+        {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm mb-3">{error}</div>}
+        <div className="space-y-4">
+          <div>
+            <label className={label}>Reason<span className="text-red-500"> *</span></label>
+            <select name="reason" value={form.reason} onChange={change} required className="ams-input">
+              <option value="">Choose…</option>
+              {ARCHIVE_REASONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+          </div>
+          {form.reason === 'DUPLICATE' && (
+            <div>
+              <label className={label}>Duplicate of</label>
+              {dup ? (
+                <div className="flex items-center justify-between gap-2 px-3 py-2 rounded border border-gray-200 bg-gray-50 text-sm">
+                  <span className="min-w-0 truncate"><span className="font-mono text-xs text-gray-500">{dup.ref_no}</span> {dup.title}</span>
+                  <button type="button" onClick={() => { setDup(null); setTerm(''); }} className="text-xs text-blue-600 hover:underline cursor-pointer shrink-0">Change</button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Search by ref no. or title (optional)" className="ams-input" />
+                  {found.length > 0 && (
+                    <div className="absolute z-10 left-0 right-0 mt-1 max-h-56 overflow-auto rounded border border-gray-200 bg-white shadow-lg">
+                      {found.map((e) => (
+                        <button type="button" key={e.id} onClick={() => { setDup(e); setFound([]); }}
+                          className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer">
+                          <span className="font-mono text-xs text-gray-500">{e.ref_no}</span> {e.title}
+                          <span className="block text-xs text-gray-400">{e.customer?.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              <p className="text-xs text-gray-400 mt-1">The enquiry being kept.</p>
+            </div>
+          )}
+          <div>
+            <label className={label}>Note{form.reason === 'OTHER' && <span className="text-red-500"> *</span>}</label>
+            <textarea name="note" value={form.note} onChange={change} rows={3} required={form.reason === 'OTHER'}
+              placeholder="Anything that helps later" className="ams-input resize-none" />
+          </div>
+        </div>
+        <div className="flex gap-3 mt-5">
+          <button type="button" onClick={onClose} className="btn-secondary flex-1 justify-center py-2">Cancel</button>
+          <button type="submit" disabled={saving} className="btn-danger flex-1 justify-center py-2">{saving ? 'Archiving…' : 'Archive'}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function RestoreModal({ enquiry, onClose, onDone }) {
+  const [note, setNote]     = useState('');
+  const [error, setError]   = useState('');
+  const [saving, setSaving] = useState(false);
+  const go = async (e) => {
+    e.preventDefault();
+    if (!note.trim()) { setError('Say why it is restored'); return; }
+    setSaving(true); setError('');
+    try { const res = await apiPost(`/sales/enquiries/${enquiry.id}/restore`, { note: note.trim() }); onDone(res.data); onClose(); }
+    catch (err) { setError(err.message); }
+    finally { setSaving(false); }
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <form onSubmit={go} className="w-full max-w-md bg-white rounded-lg shadow-xl p-6">
+        <h2 className="text-base font-semibold text-gray-800 mb-1">Restore {enquiry.ref_no}</h2>
+        <p className="text-sm text-gray-500 mb-4">It goes back to {enquiry.stage === 'LOST' ? 'Lost' : 'its stage'} with whoever held it, and is counted again.</p>
+        {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm mb-3">{error}</div>}
+        <label className={label}>Why<span className="text-red-500"> *</span></label>
+        <textarea value={note} onChange={(e) => { setNote(e.target.value); setError(''); }} rows={3} required
+          placeholder="Archived by mistake, not a duplicate after all…" className="ams-input resize-none" />
+        <div className="flex gap-3 mt-5">
+          <button type="button" onClick={onClose} className="btn-secondary flex-1 justify-center py-2">Cancel</button>
+          <button type="submit" disabled={saving} className="btn-primary flex-1 justify-center py-2">{saving ? 'Restoring…' : 'Restore'}</button>
         </div>
       </form>
     </div>
@@ -482,6 +615,10 @@ export default function EnquiryDetailPage() {
   const shownCurrent = shownIn(enquiry.current_value_display);
 
   const isClosed = enquiry.stage === 'WON' || enquiry.stage === 'LOST';
+  // Archived: read-only for everyone until restored (Sales → Archive).
+  const isArchived = Boolean(enquiry.archived_at);
+  const live = !isArchived;
+  const canArchive = Boolean(me?.is_system || can('SALES_ARCHIVE'));
   const handlerId = enquiry.handler_id ?? enquiry.owner_id;
   const isHolder = me?.id != null && me.id === handlerId;
   const isCreator = me?.id != null && (me.id === enquiry.created_by || me.id === enquiry.owner_id);
@@ -490,20 +627,21 @@ export default function EnquiryDetailPage() {
   //   - Sales → Edit (edit all): any open enquiry's details, anyone's documents, offer prices;
   //   - Sales own → Edit: deleting (own items) and editing details (raiser), while holding it;
   //   - Won: the raiser; Lost: whoever holds it; Reopen: Sales → Reassign.
-  const canFlow = me?.is_system || isHolder;
-  const canEditAll = Boolean(me?.is_system || (can('SALES_EDIT') && !isClosed));
-  const canEditOwn = can('SALES_EDIT_OWN') && isHolder;
+  const canFlow = live && (me?.is_system || isHolder);
+  const canEditAll = live && Boolean(me?.is_system || (can('SALES_EDIT') && !isClosed));
+  const canEditOwn = live && can('SALES_EDIT_OWN') && isHolder;
   const canManage = canEditAll || canEditOwn;
   const canEditDetails = canEditAll || (canEditOwn && isCreator);
-  const canWin = me?.is_system || (isHolder && isCreator);
-  const canReopen = me?.is_system || can('SALES_REASSIGN');
+  const canWin = live && (me?.is_system || (isHolder && isCreator));
+  const canReopen = live && (me?.is_system || can('SALES_REASSIGN'));
+  const canReassignHere = live && canReassign;
   // Activities & reviews: open at every stage until Won / Lost — log with
   // Sales → View + Create, or View while it is with you (the flow gives access);
   // your own entries: edit with Sales activity → Edit while still in their stage, delete with Sales → Delete.
-  const canLogActivity = me?.is_system || (!isClosed && (can('SALES_VIEW') || can('SALES_VIEW_OWN')) && (can('SALES_CREATE') || isHolder));
-  const canEditActivity = me?.is_system || can('SALES_ACTIVITY_EDIT');
-  const canDeleteActivity = me?.is_system || can('SALES_DELETE');
-  const owns = (item) => Boolean(me?.is_system || (me?.id != null && item?.created_by === me.id));
+  const canLogActivity = live && (me?.is_system || (!isClosed && (can('SALES_VIEW') || can('SALES_VIEW_OWN')) && (can('SALES_CREATE') || isHolder)));
+  const canEditActivity = live && (me?.is_system || can('SALES_ACTIVITY_EDIT'));
+  const canDeleteActivity = live && (me?.is_system || can('SALES_DELETE'));
+  const owns = (item) => live && Boolean(me?.is_system || (me?.id != null && item?.created_by === me.id));
   // Documents: their uploader — or anyone with Sales → Edit on an open enquiry.
   const ownsDocument = (item) => owns(item) || canEditAll;
   // An entry is edited only while the enquiry is still in the stage it was logged in.
@@ -526,6 +664,9 @@ export default function EnquiryDetailPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-mono text-xs text-gray-400">{enquiry.ref_no}</span>
               <StageBadge stage={enquiry.stage} />
+              {isArchived && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-gray-200 text-gray-700">Archived</span>
+              )}
               <span className="text-xs text-gray-500">{TYPE_LABEL[enquiry.enquiry_type] || enquiry.enquiry_type}</span>
               {enquiry.is_refurbishment && (
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-700"
@@ -578,12 +719,12 @@ export default function EnquiryDetailPage() {
                   <ValueBasis basis={enquiry.current_value_basis} label={enquiry.current_value_label} /></span>
               )}
             </div>
-            {enquiry.queue_department_id && !isClosed && (
+            {enquiry.queue_department_id && !isClosed && live && (
               <EnquiryQueueBanner enquiry={enquiry} me={me} onAssigned={() => load()} />
             )}
           </div>
-          {(canFlow || canReopen || canDelete || canReassign || canEditDetails) && (
-            <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+              <IssueRecordButton module="sales" entityType="Enquiry" entityId={enquiry.id} label={`${enquiry.ref_no} · ${enquiry.title}`} />
               {(canFlow || canReopen || canEditDetails) && (
                 <>
                   {canEditDetails && (
@@ -602,8 +743,12 @@ export default function EnquiryDetailPage() {
                   )}
                 </>
               )}
-              {canReassign && !isClosed && (
+              {canReassignHere && !isClosed && (
                 <button onClick={() => setModal('reassign')} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Reassign</button>
+              )}
+              {canArchive && live && enquiry.stage !== 'WON' && (
+                <button onClick={() => setModal('archive')} title="Archive — e.g. a duplicate enquiry"
+                  className="btn-secondary px-3 py-1.5 text-sm cursor-pointer">Archive</button>
               )}
               {canDelete && (
                 <button onClick={() => setModal('delete')} title="Delete enquiry"
@@ -615,11 +760,32 @@ export default function EnquiryDetailPage() {
                 </button>
               )}
             </div>
-          )}
         </div>
       </div>
 
       <div className="space-y-4 p-4">
+      {/* Archived banner */}
+      {isArchived && (
+        <div className="rounded-lg border border-gray-300 bg-gray-100 px-5 py-3 flex flex-wrap items-start gap-x-8 gap-y-2">
+          <Field label="Archived">
+            <span className="text-gray-800">{fmtDate(enquiry.archived_at)}{enquiry.archived_by?.name ? ` by ${enquiry.archived_by.name}` : ''}</span>
+          </Field>
+          <Field label="Reason">
+            <span className="text-gray-800">
+              {ARCHIVE_REASON_LABEL[enquiry.archive_reason] || enquiry.archive_reason}
+              {enquiry.duplicate_of && (
+                <> of <button onClick={() => nav(`/dashboard/sales/enquiries/${enquiry.duplicate_of.id}`)}
+                  className="text-blue-600 hover:underline cursor-pointer font-mono text-xs">{enquiry.duplicate_of.ref_no}</button> {enquiry.duplicate_of.title}</>
+              )}
+            </span>
+          </Field>
+          {enquiry.archive_note && <Field label="Note"><span className="whitespace-pre-wrap text-gray-800">{enquiry.archive_note}</span></Field>}
+          <p className="basis-full text-xs text-gray-500">Not counted in dashboards or reports, no reminders or flows — read-only until restored.</p>
+          {canArchive && (
+            <button onClick={() => setModal('restore')} className="btn-secondary px-3 py-1.5 text-sm cursor-pointer ml-auto">Restore</button>
+          )}
+        </div>
+      )}
       {/* Won / Lost banner */}
       {enquiry.stage === 'WON' && (
         <div className="rounded-lg border border-green-200 bg-green-50 px-5 py-3 space-y-3">
@@ -715,6 +881,8 @@ export default function EnquiryDetailPage() {
       {modal === 'reassign' && <ReassignModal enquiry={enquiry} users={users} onClose={() => setModal(null)} onDone={setEnquiry} />}
       {modal === 'win'   && <WinModal enquiryId={enquiry.id} currencyCode={enquiry.currency_code} onClose={() => setModal(null)} onDone={setEnquiry} />}
       {modal === 'lose'  && <LoseModal enquiryId={enquiry.id} onClose={() => setModal(null)} onDone={setEnquiry} />}
+      {modal === 'archive' && <ArchiveModal enquiry={enquiry} onClose={() => setModal(null)} onDone={() => load()} />}
+      {modal === 'restore' && <RestoreModal enquiry={enquiry} onClose={() => setModal(null)} onDone={() => load()} />}
       {modal === 'delete' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-sm bg-white rounded-lg shadow-xl p-6">

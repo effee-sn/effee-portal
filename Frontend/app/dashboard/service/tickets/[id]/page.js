@@ -9,6 +9,7 @@ import DepartmentTasks from '@/components/DepartmentTasks';
 import TicketComments from '@/components/TicketComments';
 import TicketBilling from '@/components/TicketBilling';
 import useNav from '@/lib/useNav';
+import IssueRecordButton from '@/components/issues/IssueRecordButton';
 import {
   SERVICE_LOCATIONS, TICKET_TYPES,
   SEVERITY_STYLE, STATUS_STYLE,
@@ -209,6 +210,7 @@ export default function TicketDetailPage() {
         {ticket.reopened_count > 0 && (
           <span className="text-xs font-semibold text-red-600" title="Times reopened">↻ {ticket.reopened_count}×</span>
         )}
+        <div className="ml-auto"><IssueRecordButton module="service" entityType="ServiceTicket" entityId={ticket.id} label={`${ticket.ticket_id} · ${ticket.issue_title}`} /></div>
       </div>
 
       {error && <div className="px-3 py-2.5 rounded bg-red-50 border border-red-200 text-red-600 text-sm">{error}</div>}

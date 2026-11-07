@@ -13,6 +13,27 @@ Each release is tagged in git (`v1.0.0`, …), so the VPS can be moved to an exa
 
 ---
 
+## [1.14.0] — 2026-11-08
+
+### Added — Issues (the issue logger)
+
+- An **Issues** button at the bottom right of every page opens a panel on the right, beside the page (split screen; full width on a phone). Its badge counts what waits on you: issues for you, your department's queue (heads), and resolved issues you raised to confirm.
+- **Raise an issue** — Question, Request, Problem or Portal bug — for **a person or a department**, with details, files (up to 5), priority, a needed-by date and people to keep informed. The record you are on comes with it ("About ENQ-2026-0142 · …", with a link back); enquiries, service tickets and customers have an **Issues** button with their open count.
+- **To a department:** it waits in the department's queue and the head is told; the head assigns it in the team, takes it, or moves it on. A department needs a head to receive issues.
+- **One owner at a time:** whoever has it starts and resolves it (saying how); only whoever raised it confirms and closes it, reopens it with a reason, or cancels it. Every step and reply is in the issue's conversation; everyone involved is notified (and emailed).
+- **Issues page:** For me / Raised by me / Watching / My department / All issues, by status and type.
+- New permissions **Issues → View** (see all issues) and **Issues → Edit** (manage any issue) — given to no role. Raising and working on your own issues needs none. A Portal bug with nobody chosen goes to the first Super Admin.
+
+### Added — Archive an enquiry
+
+- **Archive** on an enquiry (open or Lost, not Won), for duplicates and mistakes, with a **mandatory reason** — Duplicate (optionally of which enquiry), Created by mistake, Withdrawn by customer, or Other (with a note).
+- An archived enquiry is **not counted** in the dashboards, Sales analytics or MIS reports, is hidden from the enquiry list and Kanban (the list's stage filter has **Archived**), gets no reminders, and flows leave it alone. It is read-only for everyone until **restored** (with a note). The holder and the raiser are told; both steps are in the audit log.
+- New permission **Sales → Archive** (`SALES_ARCHIVE`) — given to no role.
+
+**Upgrade:** two migrations (`enquiry_archive`, `issues`). Pull; in Backend `npm ci`, `npx prisma migrate deploy` and `npx prisma generate`; in Frontend `npm ci` and `npm run build`; restart both. Then in Roles give **Sales → Archive** to whoever cleans up duplicates, and **Issues → View / Edit** to managers who follow everyone's issues.
+
+---
+
 ## [1.13.0] — 2026-11-05
 
 ### Added — two levels of Sales edit access

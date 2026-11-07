@@ -24,6 +24,7 @@ function createSalesReportsRepository(db) {
   /** @param {Filter} f */
   const base = (f) => ({
     deleted_at: null,
+    archived_at: null, // Archived enquiries are not counted.
     ...(f.ownerId ? { owner_id: f.ownerId } : {}),
     ...(f.type ? { enquiry_type: f.type } : {}),
     ...(f.applicationId ? { application_id: f.applicationId } : {}),

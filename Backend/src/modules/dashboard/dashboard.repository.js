@@ -20,6 +20,7 @@ function createDashboardRepository(db) {
   /** Enquiries the user currently holds (the handler baton; owner for legacy rows). */
   const heldBy = (userId) => ({
     deleted_at: null,
+    archived_at: null,
     stage: { notIn: CLOSED_STAGES },
     OR: [{ handler_id: userId }, { handler_id: null, owner_id: userId }],
   });
@@ -60,7 +61,7 @@ function createDashboardRepository(db) {
         follow_up_ended: false,
         follow_up_done_at: null,
         follow_up_at: { not: null, lt: endOfToday },
-        enquiry: { deleted_at: null, stage: { notIn: ['WON', 'LOST'] } },
+        enquiry: { deleted_at: null, archived_at: null, stage: { notIn: ['WON', 'LOST'] } },
         OR: [{ is_review: false }, { is_review: true, enquiry: { stage: 'REVIEW' } }],
       };
 
@@ -123,19 +124,19 @@ function createDashboardRepository(db) {
       const now = Date.now();
       const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
       const ninetyDaysAgo = new Date(now - 90 * DAY_MS);
-      const open = { deleted_at: null, stage: { notIn: CLOSED_STAGES } };
+      const open = { deleted_at: null, archived_at: null, stage: { notIn: CLOSED_STAGES } };
 
       const [rates, conv, byStage, wonMonth, lostMonth, won90, lost90, stalled, hot] = await Promise.all([
         loadRates(db),
         displayConverter(currency, db),
         db.enquiry.findMany({ where: open, select: { id: true, stage: true, expected_value: true, currency_code: true, order_value: true, order_fx_rate: true, won_at: true } }),
         db.enquiry.findMany({
-          where: { deleted_at: null, stage: 'WON', won_at: { gte: monthStart } },
+          where: { deleted_at: null, archived_at: null, stage: 'WON', won_at: { gte: monthStart } },
           select: { order_value: true, currency_code: true, order_fx_rate: true, won_at: true },
         }),
-        db.enquiry.count({ where: { deleted_at: null, stage: 'LOST', lost_at: { gte: monthStart } } }),
-        db.enquiry.count({ where: { deleted_at: null, stage: 'WON', won_at: { gte: ninetyDaysAgo } } }),
-        db.enquiry.count({ where: { deleted_at: null, stage: 'LOST', lost_at: { gte: ninetyDaysAgo } } }),
+        db.enquiry.count({ where: { deleted_at: null, archived_at: null, stage: 'LOST', lost_at: { gte: monthStart } } }),
+        db.enquiry.count({ where: { deleted_at: null, archived_at: null, stage: 'WON', won_at: { gte: ninetyDaysAgo } } }),
+        db.enquiry.count({ where: { deleted_at: null, archived_at: null, stage: 'LOST', lost_at: { gte: ninetyDaysAgo } } }),
         db.enquiry.count({ where: { AND: [open, stalledClause(now)] } }),
         db.enquiry.count({ where: { ...open, current_temperature: 'HOT' } }),
       ]);

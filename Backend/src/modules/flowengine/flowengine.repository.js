@@ -290,7 +290,8 @@ function createFlowEngineRepository(db) {
     pendingRequest({ entityType, entityId, action, keyPrefix }) {
       return db.approvalRequest.findFirst({
         where: {
-          entity_type: entityType, entity_id: String(entityId), action, status: 'PENDING',
+          // No action: any pending request on the record.
+          entity_type: entityType, entity_id: String(entityId), ...(action ? { action } : {}), status: 'PENDING',
           ...(keyPrefix ? { action_key: { startsWith: keyPrefix } } : {}),
         },
         orderBy: { id: 'desc' },

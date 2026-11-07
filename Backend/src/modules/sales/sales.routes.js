@@ -6,11 +6,11 @@ const { asyncHandler, validate } = require('../../core');
 
 const {
   listEnquiriesQuery, enquiryIdParam, createEnquiryBody, updateEnquiryBody,
-  winEnquiryBody, loseEnquiryBody, reassignEnquiryBody, assignFromQueueBody, finalCostBody,
+  winEnquiryBody, loseEnquiryBody, reassignEnquiryBody, archiveEnquiryBody, restoreEnquiryBody, assignFromQueueBody, finalCostBody,
 } = require('./enquiry.validation');
 const {
   getEnquiries, getEnquiryById, getEnquiryReadiness, createEnquiry, updateEnquiry,
-  winEnquiry, loseEnquiry, reopenEnquiry, reassignEnquiry, deleteEnquiry, getTeamQueue, assignFromQueue, getEnquiryFlows, setFinalCost,
+  winEnquiry, loseEnquiry, reopenEnquiry, archiveEnquiry, restoreEnquiry, reassignEnquiry, deleteEnquiry, getTeamQueue, assignFromQueue, getEnquiryFlows, setFinalCost,
 } = require('./enquiry.controller');
 
 const activityValidation = require('./activity.validation');
@@ -165,6 +165,21 @@ router.post(
   authorize('SALES_REASSIGN'),
   validate({ params: enquiryIdParam }),
   asyncHandler(reopenEnquiry)
+);
+
+// Archive / restore (duplicates, mistakes): their own permission, given per role.
+router.post(
+  '/enquiries/:id/archive',
+  authorize('SALES_ARCHIVE'),
+  validate({ params: enquiryIdParam, body: archiveEnquiryBody }),
+  asyncHandler(archiveEnquiry)
+);
+
+router.post(
+  '/enquiries/:id/restore',
+  authorize('SALES_ARCHIVE'),
+  validate({ params: enquiryIdParam, body: restoreEnquiryBody }),
+  asyncHandler(restoreEnquiry)
 );
 
 // The final costing value — the holder's work from Costing Review on (checked in the service).

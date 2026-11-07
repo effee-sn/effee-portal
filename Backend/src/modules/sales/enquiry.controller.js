@@ -12,7 +12,7 @@ const getEnquiries = async (req, res) => {
     defaultOrder: 'desc',
     filterable: enquiryService.FILTERABLE,
   });
-  const { items, total } = await enquiryService.list({ ...query, display_currency: req.query.display_currency }, requestContext(req));
+  const { items, total } = await enquiryService.list({ ...query, display_currency: req.query.display_currency, archived: req.query.archived }, requestContext(req));
   ApiResponse.paginated(res, items, { page: query.page, limit: query.limit, total });
 };
 
@@ -57,6 +57,16 @@ const reopenEnquiry = async (req, res) => {
   ApiResponse.ok(res, enquiry);
 };
 
+/** `POST /sales/enquiries/:id/archive` */
+const archiveEnquiry = async (req, res) => {
+  ApiResponse.ok(res, await enquiryService.archive(req.params.id, req.body, requestContext(req)));
+};
+
+/** `POST /sales/enquiries/:id/restore` */
+const restoreEnquiry = async (req, res) => {
+  ApiResponse.ok(res, await enquiryService.restore(req.params.id, req.body, requestContext(req)));
+};
+
 /** `POST /sales/enquiries/:id/reassign` */
 const reassignEnquiry = async (req, res) => {
   const enquiry = await enquiryService.reassign(req.params.id, req.body, requestContext(req));
@@ -98,6 +108,8 @@ module.exports = {
   winEnquiry,
   loseEnquiry,
   reopenEnquiry,
+  archiveEnquiry,
+  restoreEnquiry,
   reassignEnquiry,
   deleteEnquiry,
   getTeamQueue,

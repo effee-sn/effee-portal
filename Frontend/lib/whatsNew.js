@@ -12,6 +12,24 @@
 /** @type {Array<{ version: string, date: string, items: Array<{ icon: string, title: string, text: string, perm: string|string[]|null }> }>} */
 export const RELEASES = [
   {
+    version: '1.14.0',
+    date: '2026-11-08',
+    items: [
+      {
+        icon: 'spark',
+        title: 'Issues — ask a colleague from where you are',
+        text: 'Use the Issues button at the bottom right: raise a question, request or problem for a person or a department, tied to the enquiry or page you are on. It opens beside the page, keeps the whole conversation, and you close it once it is sorted.',
+        perm: null,
+      },
+      {
+        icon: 'lock',
+        title: 'Archive duplicate enquiries',
+        text: 'Archive a duplicate or mistaken enquiry with a reason — it stops counting in dashboards and reports and leaves the list (filter by Archived to see it). Restore it any time.',
+        perm: ['SALES_ARCHIVE', 'ROLE_EDIT'],
+      },
+    ],
+  },
+  {
     version: '1.13.0',
     date: '2026-11-05',
     items: [

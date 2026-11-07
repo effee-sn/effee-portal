@@ -62,6 +62,7 @@ const MODULES = [
   { name: 'BOM',        slug: 'bom',        description: 'Manufacturing — bills of materials' },
   { name: 'REPORT',     slug: 'report',     description: 'Reports (MIS) — view and export' },
   { name: 'SALES_CONFIG', slug: 'sales-config', description: 'Sales configuration — applications, stage probabilities' },
+  { name: 'ISSUE',      slug: 'issue',      description: "Issues — see and manage all issues" },
 ];
 
 /** Default departments, so the user form's dropdown is not empty on first run. */
@@ -102,6 +103,7 @@ const PERMISSIONS = [
   { module: 'sales', action: 'EDIT',   code: 'SALES_EDIT' },
   { module: 'sales', action: 'DELETE', code: 'SALES_DELETE' },
   { module: 'sales', action: 'REASSIGN', code: 'SALES_REASSIGN' },
+  { module: 'sales', action: 'ARCHIVE', code: 'SALES_ARCHIVE' },
   { module: 'sales-activity', action: 'EDIT', code: 'SALES_ACTIVITY_EDIT' },
   { module: 'sales-own', action: 'VIEW', code: 'SALES_VIEW_OWN' },
   // Sales → Edit edits all open enquiries; Sales own → Edit only your own, while with you.
@@ -147,6 +149,9 @@ const PERMISSIONS = [
 
   // Reports (MIS). Each report set also needs its module's view permission.
   { module: 'report', action: 'VIEW',   code: 'REPORT_VIEW' },
+  // Issues: raising and working on your own needs no permission; these see / manage everyone's.
+  { module: 'issue', action: 'VIEW', code: 'ISSUE_VIEW' },
+  { module: 'issue', action: 'EDIT', code: 'ISSUE_EDIT' },
   { module: 'report', action: 'EXPORT', code: 'REPORT_EXPORT' },
 
   // Sales configuration — applications list and stage probabilities.

@@ -93,6 +93,13 @@ model User {
   ownedCustomers   Customer[] @relation("CustomerOwner")
   ownedEnquiries   Enquiry[]  @relation("EnquiryOwner")
   handledEnquiries Enquiry[]  @relation("EnquiryHandler")
+  archivedEnquiries Enquiry[] @relation("EnquiryArchiver")
+
+  // Issues (the issue logger): raised, assigned, watched, commented.
+  raisedIssues   Issue[]        @relation("IssueRaisedBy")
+  assignedIssues Issue[]        @relation("IssueAssignee")
+  watchedIssues  IssueWatcher[]
+  issueComments  IssueComment[]
   salesWorkflows   SalesWorkflowConfig[] @relation("SalesWorkflowInternal")
   ownedProjects    Project[]  @relation("ProjectOwner")
 
@@ -134,6 +141,7 @@ model Department {
   workflowSteps      WorkflowStep[]  @relation("StepAssigneeDepartment")
   originatingTickets ServiceTicket[] @relation("OriginatingTickets")
   queuedEnquiries    Enquiry[]       @relation("EnquiryQueue")
+  queuedIssues       Issue[]         @relation("IssueDepartment")
 
   @@index([deleted_at])
   @@index([created_at])
@@ -225,6 +233,7 @@ enum PermissionAction {
   EXPORT
   REASSIGN
   PUBLISH
+  ARCHIVE
 }
 
 model RolePermission {
@@ -1015,6 +1024,18 @@ model Enquiry {
   // Who the deal went to (competitor / other supplier), when known.
   lost_to     String?
 
+  // Archived (Sales → Archive): out of every list, count, report, reminder and
+  // flow, read-only until restored. Reason DUPLICATE | MISTAKE | WITHDRAWN | OTHER.
+  archived_at     DateTime?
+  archived_by_id  Int?
+  archived_by     User?     @relation("EnquiryArchiver", fields: [archived_by_id], references: [id], onDelete: SetNull)
+  archive_reason  String?   @db.VarChar(20)
+  archive_note    String?   @db.Text
+  // For a duplicate: the enquiry it duplicates.
+  duplicate_of    Enquiry?  @relation("EnquiryDuplicates", fields: [duplicate_of_id], references: [id], onDelete: SetNull)
+  duplicate_of_id Int?
+  duplicates      Enquiry[] @relation("EnquiryDuplicates")
+
   activities  EnquiryActivity[]
   quotations  Quotation[]
   attachments EnquiryAttachment[]
@@ -1037,6 +1058,8 @@ model Enquiry {
   @@index([currency_code])
   @@index([deleted_at])
   @@index([created_at])
+  @@index([archived_at])
+  @@index([duplicate_of_id])
 }
 
 /// An application an enquiry is for (Annealing, Hardening, Brazing, …).
@@ -1553,4 +1576,105 @@ model ApprovalApprover {
 
   @@unique([request_id, user_id])
   @@index([user_id, decision])
+}
+
+// ── Issues (the issue logger) ────────────────────────────────────────────────
+/// An internal issue: a question, request or problem one person raises for
+/// another (or for a department) from wherever they are working — tied to the
+/// record they were on (an enquiry, a project…). It is with one person at a
+/// time, or waiting in one department's queue for its head to assign; only the
+/// person who raised it closes it.
+model Issue {
+  id          Int       @id @default(autoincrement())
+  ref_no      String    @unique @db.VarChar(20)
+  // QUESTION | REQUEST | PROBLEM | BUG (the portal itself)
+  type        String    @db.VarChar(20)
+  // LOW | NORMAL | HIGH | URGENT
+  priority    String    @default("NORMAL") @db.VarChar(10)
+  // OPEN | IN_PROGRESS | RESOLVED | CLOSED | CANCELLED
+  status      String    @default("OPEN") @db.VarChar(20)
+  title       String    @db.VarChar(191)
+  description String    @db.Text
+  due_date    DateTime? @db.Date
+
+  // Where it was raised: the module, the record and a label to show
+  // ("ENQ-2026-0142 · Induction heater"), and the page.
+  module       String? @db.VarChar(40)
+  entity_type  String? @db.VarChar(40)
+  entity_id    String? @db.VarChar(40)
+  entity_label String? @db.VarChar(255)
+  page_url     String? @db.VarChar(500)
+
+  raised_by    User        @relation("IssueRaisedBy", fields: [raised_by_id], references: [id])
+  raised_by_id Int
+  // With a person, or waiting in a department's queue (assignee empty).
+  assignee      User?       @relation("IssueAssignee", fields: [assignee_id], references: [id], onDelete: SetNull)
+  assignee_id   Int?
+  department    Department? @relation("IssueDepartment", fields: [department_id], references: [id], onDelete: SetNull)
+  department_id Int?
+  assigned_at   DateTime?
+
+  resolution     String?   @db.Text
+  resolved_at    DateTime?
+  closed_at      DateTime?
+  reopened_count Int       @default(0)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  watchers IssueWatcher[]
+  comments IssueComment[]
+  files    IssueFile[]
+
+  @@index([status])
+  @@index([assignee_id, status])
+  @@index([department_id, status])
+  @@index([raised_by_id, status])
+  @@index([entity_type, entity_id])
+  @@index([created_at])
+}
+
+/// Someone kept informed about an issue (added by the raiser or a participant).
+model IssueWatcher {
+  issue      Issue    @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+  issue_id   Int
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id    Int
+  created_at DateTime @default(now())
+
+  @@id([issue_id, user_id])
+  @@index([user_id])
+}
+
+/// The issue's conversation: replies (COMMENT) and what happened (EVENT —
+/// assigned, started, resolved, reopened, closed…), oldest first.
+model IssueComment {
+  id         Int         @id @default(autoincrement())
+  issue      Issue       @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+  issue_id   Int
+  author     User?       @relation(fields: [author_id], references: [id], onDelete: SetNull)
+  author_id  Int?
+  kind       String      @default("COMMENT") @db.VarChar(10)
+  body       String      @db.Text
+  created_at DateTime    @default(now())
+  files      IssueFile[]
+
+  @@index([issue_id, created_at])
+}
+
+/// A file on an issue (a screenshot, a document), with the reply it came with.
+model IssueFile {
+  id          Int           @id @default(autoincrement())
+  issue       Issue         @relation(fields: [issue_id], references: [id], onDelete: Cascade)
+  issue_id    Int
+  comment     IssueComment? @relation(fields: [comment_id], references: [id], onDelete: SetNull)
+  comment_id  Int?
+  file_name   String        @db.VarChar(255)
+  stored_name String        @db.VarChar(255)
+  mime_type   String        @db.VarChar(150)
+  size_bytes  Int
+  created_by  Int?
+  created_at  DateTime      @default(now())
+
+  @@index([issue_id])
 }

@@ -14,8 +14,16 @@ const { checkGuard } = require('../flowengine/guard');
 const { approvalsService } = require('../flowengine/approvals.service');
 const { NotFoundError, ConflictError, ValidationError, ForbiddenError, buildSearchClause } = require('../../core');
 const {
-  canReassign, assertFlowWork, assertDetailsEdit, assertCanWin, assertCanLose, enquiryScope, assertCanSeeEnquiry,
+  canReassign, canArchive, assertNotArchived, assertFlowWork, assertDetailsEdit, assertCanWin, assertCanLose, enquiryScope, assertCanSeeEnquiry,
 } = require('./access');
+
+/** Why an enquiry was archived — the reason is mandatory; OTHER needs a note. */
+const ARCHIVE_REASONS = Object.freeze({
+  DUPLICATE: 'Duplicate',
+  MISTAKE: 'Created by mistake',
+  WITHDRAWN: 'Withdrawn by customer',
+  OTHER: 'Other',
+});
 
 /** Human label for a stage enum, for notification text (`FOLLOW_UP` → `Follow up`). */
 function stageLabel(stage) {
@@ -87,6 +95,7 @@ function createEnquiryService(repository) {
    * @throws {ForbiddenError}
    */
   function assertCanUpdate(enquiry, dto, actor) {
+    assertNotArchived(enquiry);
     if (actor?.is_system) return;
     const details = Object.keys(dto).filter((k) => dto[k] !== undefined && k !== 'stage');
     const moving = dto.stage !== undefined && dto.stage !== enquiry.stage;
@@ -323,7 +332,9 @@ function createEnquiryService(repository) {
     async list(query, actor) {
       const search = buildSearchClause(query.search, [...SEARCHABLE_FIELDS]);
       const scope = enquiryScope(actor);
-      const base = { ...query.filters, ...(search || {}) };
+      // Archived enquiries are hidden; `archived=true` lists only them.
+      const archived = query.archived === true || query.archived === 'true';
+      const base = { ...query.filters, ...(search || {}), archived_at: archived ? { not: null } : null };
       const where = scope ? { AND: [base, scope] } : base;
       // Customer / field person sort by name; a stable tie-break keeps paging steady.
       const [[field, dir] = ['created_at', 'desc']] = Object.entries(query.orderBy || {});
@@ -567,7 +578,7 @@ function createEnquiryService(repository) {
     async setStageAuto(id, toStage, actor, { note } = {}) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Enquiry');
-      if (before.stage === toStage) return before;
+      if (before.stage === toStage || before.archived_at) return before; // archived: nothing moves it
 
       const hold = await holderFor(toStage, before.owner_id, before);
       const { handler_id } = hold;
@@ -715,6 +726,7 @@ function createEnquiryService(repository) {
     async reopen(id, actor) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Enquiry');
+      assertNotArchived(before);
       if (!canReassign(actor)) throw new ForbiddenError('You need the Sales reassign permission to reopen an enquiry');
       if (before.stage !== 'WON' && before.stage !== 'LOST') {
         throw new ConflictError('Only a won or lost enquiry can be reopened');
@@ -759,6 +771,7 @@ function createEnquiryService(repository) {
     async reassign(id, dto, actor) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Enquiry');
+      assertNotArchived(before);
 
       const data = { updated_by: actor?.id ?? null };
       if (dto.owner_id !== undefined && dto.owner_id !== before.owner_id) {
@@ -828,6 +841,7 @@ function createEnquiryService(repository) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Enquiry');
       if (before.stage === 'WON' || before.stage === 'LOST') throw new ConflictError('A closed enquiry is not moved');
+      if (before.archived_at) throw new ConflictError('An archived enquiry is not moved');
       const enquiry = await repository.update(id, {
         handler_id: userId,
         queue_department_id: departmentId || null,
@@ -867,6 +881,7 @@ function createEnquiryService(repository) {
     async assignFromQueue(id, dto, actor) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Enquiry');
+      assertNotArchived(before);
       const deptId = before.queue_department_id;
       if (!deptId) throw new ConflictError('This enquiry is not waiting to be assigned');
       const headed = actor?.is_system ? [deptId] : await repository.headedDepartmentIds(actor?.id);
@@ -917,6 +932,120 @@ function createEnquiryService(repository) {
       await auditService.record({
         action: auditService.Action.UPDATE, entity: 'Enquiry', entityId: id, actor,
         changes: { final_cost: { from: before.final_cost === null ? null : Number(before.final_cost), to: dto.final_cost } },
+      });
+      return withMoney(enquiry);
+    },
+
+    /**
+     * Archives an enquiry (Sales → Archive): a duplicate, a mistake, one the
+     * customer withdrew. It leaves every list, count, report, reminder and
+     * flow and is read-only until restored. Open or Lost — a Won enquiry has
+     * an order and stays. The reason is mandatory; a duplicate may name the
+     * enquiry it duplicates; OTHER needs a note.
+     * @param {number} id
+     * @param {{ reason: string, note?: string|null, duplicate_of_id?: number|null }} dto
+     * @param {import('../../core/http/requestContext').ActorContext} actor
+     */
+    async archive(id, dto, actor) {
+      const before = await repository.findById(id);
+      if (!before) throw new NotFoundError('Enquiry');
+      assertCanSeeEnquiry(before, actor);
+      if (!canArchive(actor)) throw new ForbiddenError('You need the Sales archive permission to archive an enquiry');
+      if (before.archived_at) throw new ConflictError('This enquiry is already archived');
+      if (before.stage === 'WON') throw new ConflictError('A won enquiry has an order and cannot be archived');
+      if (!ARCHIVE_REASONS[dto.reason]) {
+        throw new ValidationError('Validation failed', [{ field: 'reason', message: 'Choose why it is archived' }]);
+      }
+      const note = dto.note?.trim() || null;
+      if (dto.reason === 'OTHER' && !note) {
+        throw new ValidationError('Validation failed', [{ field: 'note', message: 'Say why it is archived' }]);
+      }
+      let duplicateOf = null;
+      if (dto.duplicate_of_id) {
+        if (dto.reason !== 'DUPLICATE') {
+          throw new ValidationError('Validation failed', [{ field: 'duplicate_of_id', message: 'Only a duplicate names the enquiry it duplicates' }]);
+        }
+        if (dto.duplicate_of_id === id) {
+          throw new ValidationError('Validation failed', [{ field: 'duplicate_of_id', message: 'An enquiry cannot duplicate itself' }]);
+        }
+        duplicateOf = await repository.findById(dto.duplicate_of_id);
+        if (!duplicateOf) {
+          throw new ValidationError('Validation failed', [{ field: 'duplicate_of_id', message: 'That enquiry does not exist' }]);
+        }
+        if (duplicateOf.archived_at) {
+          throw new ValidationError('Validation failed', [{ field: 'duplicate_of_id', message: `${duplicateOf.ref_no} is archived too — choose the enquiry being kept` }]);
+        }
+      }
+      // An approval waiting on it would be decided on a record nobody works on.
+      const waiting = await approvalsService.pendingFor({ entityType: 'Enquiry', entityId: id });
+      if (waiting) {
+        throw new ConflictError(`An approval is waiting on this enquiry (from ${waiting.waiting_for}) — withdraw it or let it be decided first`);
+      }
+
+      const enquiry = await repository.update(id, {
+        archived_at: new Date(),
+        archived_by_id: actor?.id ?? null,
+        archive_reason: dto.reason,
+        archive_note: note,
+        duplicate_of_id: duplicateOf?.id ?? null,
+        updated_by: actor?.id ?? null,
+      });
+      await activityRepository.closeFollowUpsOfEnquiry(id);
+
+      await auditService.record({
+        action: auditService.Action.UPDATE, entity: 'Enquiry', entityId: id, actor,
+        changes: { archived: true, archive_reason: dto.reason, archive_note: note, ...(duplicateOf ? { duplicate_of: duplicateOf.ref_no } : {}) },
+      });
+
+      // Whoever holds it and whoever raised it should know it has gone.
+      const why = `${ARCHIVE_REASONS[dto.reason]}${duplicateOf ? ` of ${duplicateOf.ref_no}` : ''}${note ? ` — ${note}` : ''}`;
+      const userIds = [...new Set([enquiry.handler_id, enquiry.owner_id, enquiry.created_by].filter((u) => u && u !== actor?.id))];
+      if (userIds.length) {
+        notificationService.notify({
+          userIds,
+          type: notificationService.Type.ENQUIRY_ARCHIVED,
+          title: `Enquiry archived: ${enquiry.ref_no}`,
+          body: `${enquiry.title} — ${why}`,
+          entityType: 'Enquiry',
+          entityId: String(id),
+          link: `/dashboard/sales/enquiries/${id}`,
+          actorId: actor?.id ?? null,
+          email: {
+            eyebrow: 'Sales · Archived',
+            intro: 'This enquiry has been archived. It is no longer counted, listed or reminded about, and is read-only until restored.',
+            details: enquiryRows(enquiry, [['Reason', why]]),
+          },
+        });
+      }
+      return withMoney(enquiry);
+    },
+
+    /**
+     * Restores an archived enquiry (Sales → Archive) to where it was, with
+     * a note saying why — it is counted, listed and worked on again.
+     * @param {number} id
+     * @param {{ note: string }} dto
+     * @param {import('../../core/http/requestContext').ActorContext} actor
+     */
+    async restore(id, dto, actor) {
+      const before = await repository.findById(id);
+      if (!before) throw new NotFoundError('Enquiry');
+      assertCanSeeEnquiry(before, actor);
+      if (!canArchive(actor)) throw new ForbiddenError('You need the Sales archive permission to restore an enquiry');
+      if (!before.archived_at) throw new ConflictError('This enquiry is not archived');
+      const note = dto.note?.trim();
+      if (!note) throw new ValidationError('Validation failed', [{ field: 'note', message: 'Say why it is restored' }]);
+
+      const enquiry = await repository.update(id, {
+        archived_at: null, archived_by_id: null, archive_reason: null, archive_note: null, duplicate_of_id: null,
+        updated_by: actor?.id ?? null,
+      });
+      await auditService.record({
+        action: auditService.Action.UPDATE, entity: 'Enquiry', entityId: id, actor,
+        changes: {
+          restored: true, note,
+          was: { archive_reason: before.archive_reason, archive_note: before.archive_note, duplicate_of: before.duplicate_of?.ref_no ?? null, archived_at: before.archived_at },
+        },
       });
       return withMoney(enquiry);
     },

@@ -87,6 +87,15 @@ export const AREAS = [
     ],
   },
   {
+    key: 'issues',
+    label: 'Issues',
+    subtitle: 'Raise and follow issues',
+    items: [
+      // Everyone: the issues for you, raised by you or watched; all of them with Issues → View.
+      { label: 'Issues', href: '/dashboard/issues', perm: null },
+    ],
+  },
+  {
     key: 'reports',
     label: 'Reports',
     subtitle: 'MIS reports',

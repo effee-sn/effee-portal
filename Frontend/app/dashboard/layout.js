@@ -16,6 +16,8 @@ import { compareVersions, releasesFor } from '@/lib/whatsNew';
 import useNav from '@/lib/useNav';
 import { APP_VERSION } from '@/lib/version';
 import { applyTheme, storedTheme } from '@/lib/theme';
+import { IssueProvider } from '@/lib/issues';
+import IssueLauncher from '@/components/issues/IssueLauncher';
 
 /** Multi-colour apps grid, the Odoo-style "switch app" affordance. */
 function WaffleIcon() {
@@ -129,6 +131,7 @@ export default function DashboardLayout({ children }) {
   };
 
   return (
+    <IssueProvider>
     <div className="h-screen flex flex-col overflow-hidden bg-white print:h-auto print:overflow-visible print:block">
       <header className="flex items-center px-2 py-3 shrink-0 z-40 print:hidden" style={{ backgroundColor: '#1f2330' }}>
         {/* App switcher — opens the left drawer */}
@@ -328,9 +331,14 @@ export default function DashboardLayout({ children }) {
         </div>
       )}
 
-      <main className="flex-1 overflow-y-auto bg-white print:overflow-visible">{children}</main>
+      {/* The page, and the issues panel beside it when open (split screen; full width on a phone). */}
+      <div className="flex-1 min-h-0 flex print:block">
+        <main className="flex-1 min-w-0 overflow-y-auto bg-white print:overflow-visible">{children}</main>
+        <IssueLauncher me={me} />
+      </div>
 
       {whatsNew && <WhatsNewModal releases={whatsNew.releases} history={whatsNew.history} onClose={closeWhatsNew} />}
     </div>
+    </IssueProvider>
   );
 }

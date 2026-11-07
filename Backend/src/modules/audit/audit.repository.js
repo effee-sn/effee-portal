@@ -40,6 +40,8 @@ function createAuditRepository(db) {
       .map((r) => [r.id, r.department_name]),
     EnquiryActivity: async (ids) => (await db.enquiryActivity.findMany({ where: { id: { in: ids } }, select: { id: true, subject: true } }))
       .map((r) => [r.id, r.subject]),
+    Issue: async (ids) => (await db.issue.findMany({ where: { id: { in: ids } }, select: { id: true, ref_no: true, title: true } }))
+      .map((r) => [r.id, `${r.ref_no} · ${r.title}`]),
     EnquiryAttachment: async (ids) => (await db.enquiryAttachment.findMany({ where: { id: { in: ids } }, select: { id: true, file_name: true } }))
       .map((r) => [r.id, r.file_name]),
   };

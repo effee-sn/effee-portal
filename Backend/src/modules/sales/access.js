@@ -28,6 +28,8 @@ const { ForbiddenError, NotFoundError } = require('../../core');
  *     activity → Edit, deleting them Sales → Delete.
  *   - **Sales → Reassign** (SALES_REASSIGN): reassign, change the owner,
  *     reopen a closed enquiry.
+ *   - **Archived** (Sales → Archive, SALES_ARCHIVE): read-only for everyone,
+ *     system users too, until someone with Sales → Archive restores it.
  *   - **Seeing enquiries:** Sales → View shows all of them. Sales own → View
  *     (SALES_VIEW_OWN) shows only your own — ones you raised, own, or that
  *     are with you now in the flow; others read as not found.
@@ -39,7 +41,19 @@ const hasEditAll = (actor) => Boolean(actor?.is_system || actor?.permissions?.in
 /** Sales own → Edit, or edit all. @param {{ is_system?: boolean, permissions?: string[] }} [actor] */
 const hasEdit = (actor) => hasEditAll(actor) || Boolean(actor?.permissions?.includes('SALES_EDIT_OWN'));
 /** Won and Lost enquiries are closed: reopen them to change anything. */
-const isOpen = (enquiry) => !['WON', 'LOST'].includes(enquiry?.stage);
+const isOpen = (enquiry) => !enquiry?.archived_at && !['WON', 'LOST'].includes(enquiry?.stage);
+
+/** May archive and restore enquiries: Sales → Archive (system users too). */
+const canArchive = (actor) => Boolean(actor?.is_system || actor?.permissions?.includes('SALES_ARCHIVE'));
+
+/**
+ * An archived enquiry is read-only for everyone until it is restored.
+ * @param {{ archived_at?: Date|string|null }|null} [enquiry]
+ * @throws {ForbiddenError}
+ */
+function assertNotArchived(enquiry) {
+  if (enquiry?.archived_at) throw new ForbiddenError('This enquiry is archived — restore it first');
+}
 /** Edit all applies here: Sales → Edit on an open enquiry. */
 const editsAll = (enquiry, actor) => hasEditAll(actor) && isOpen(enquiry);
 
@@ -59,6 +73,7 @@ const canReassign = (actor) => Boolean(actor?.is_system || actor?.permissions?.i
  * @throws {ForbiddenError}
  */
 function assertFlowWork(enquiry, actor, what = 'do that') {
+  assertNotArchived(enquiry);
   if (actor?.is_system) return;
   if (isHandler(enquiry, actor)) return;
   throw new ForbiddenError(`This enquiry is not with you right now, so you cannot ${what}`);
@@ -70,6 +85,7 @@ function assertFlowWork(enquiry, actor, what = 'do that') {
  * @throws {ForbiddenError}
  */
 function assertDocumentWork(enquiry, actor, what = 'do that') {
+  assertNotArchived(enquiry);
   if (editsAll(enquiry, actor)) return;
   assertFlowWork(enquiry, actor, what);
 }
@@ -80,6 +96,7 @@ function assertDocumentWork(enquiry, actor, what = 'do that') {
  * @throws {ForbiddenError}
  */
 function assertFullEdit(enquiry, actor, what = 'update this enquiry') {
+  assertNotArchived(enquiry);
   if (actor?.is_system || editsAll(enquiry, actor)) return;
   if (!hasEdit(actor)) throw new ForbiddenError(`You need Sales edit access to ${what}`);
   assertFlowWork(enquiry, actor, what);
@@ -91,6 +108,7 @@ function assertFullEdit(enquiry, actor, what = 'update this enquiry') {
  * @throws {ForbiddenError}
  */
 function assertDetailsEdit(enquiry, actor) {
+  assertNotArchived(enquiry);
   if (actor?.is_system || editsAll(enquiry, actor)) return;
   assertFullEdit(enquiry, actor, 'edit this enquiry');
   if (!isCreator(enquiry, actor)) {
@@ -112,12 +130,14 @@ function assertOwnItem(item, actor, what) {
 
 /** A document: its uploader — or anyone with Sales → Edit on an open enquiry. @throws {ForbiddenError} */
 function assertOwnDocument(item, enquiry, actor, what) {
+  assertNotArchived(enquiry);
   if (editsAll(enquiry, actor)) return;
   assertOwnItem(item, actor, what);
 }
 
 /** Won: the person who raised it, while it is with them. @throws {ForbiddenError} */
 function assertCanWin(enquiry, actor) {
+  assertNotArchived(enquiry);
   if (actor?.is_system) return;
   assertFlowWork(enquiry, actor, 'mark it won');
   if (!isCreator(enquiry, actor)) throw new ForbiddenError('Only the person who raised this enquiry can mark it won');
@@ -177,6 +197,7 @@ const hasPerm = (actor, code) => Boolean(actor?.is_system || actor?.permissions?
  * @throws {ForbiddenError}
  */
 function assertActivityAccess(action, actor, item = null, enquiry = null) {
+  assertNotArchived(enquiry);
   if (actor?.is_system) return;
   if (action === 'log') {
     if (enquiry && CLOSED_STAGES.includes(enquiry.stage)) {
@@ -205,7 +226,7 @@ const stageName = (s) => (s === 'OFFER_RELEASED' ? 'Offer' : s.charAt(0) + s.sli
 
 module.exports = {
   assertActivityAccess, enquiryScope, canSeeEnquiry, assertCanSeeEnquiry,
-  hasEdit, hasEditAll, isHandler, isCreator, canReassign,
+  hasEdit, hasEditAll, isHandler, isCreator, canReassign, canArchive, assertNotArchived,
   assertFlowWork, assertDocumentWork, assertFullEdit, assertDetailsEdit, assertOwnItem, assertOwnDocument, assertCanWin, assertCanLose,
   // Earlier name for the flow check, still used by callers.
   assertCreatorWork: assertFlowWork,

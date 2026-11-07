@@ -239,7 +239,7 @@ function createActivityService(repository) {
       const before = await repository.findById(id);
       if (!before) throw new NotFoundError('Activity');
       const enquiry = await loadEnquiry(before.enquiry_id);
-      assertActivityAccess('delete', actor, before);
+      assertActivityAccess('delete', actor, before, enquiry);
 
       await repository.softDelete(id, actor?.id ?? null);
       await repository.reopenFollowUpsDoneBy(id);
